@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Binary-Safe QR Code Slideshow</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body {
+            max-width: 800px;
+            margin: 20px auto;
+            font-family: sans-serif;
+            padding: 20px;
+            text-align: center;
+        }
+
+        #slideContainer {
+            position: relative;
+            width: 300px;
+            height: 350px;
+            margin: 20px auto;
+        }
+
+        .qr-slide {
+            display: none;
+            position: absolute;
+            width: 100%;
+            left: 0;
+            top: 0;
+        }
+
+        .qr-slide.active {
+            display: block;
+        }
+
+        .qr-label {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        .controls {
+            margin: 20px 0;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+
+        #counter {
+            margin: 10px 0;
+            font-size: 1.2em;
+        }
+
+        .marker {
+            color: #ff4444;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <input type="file" id="fileInput" />
+    <button onclick="generateQR()" id="generateBtn">Generate QR Codes</button>
+    <div id="slideContainer"></div>
+
+    <div id="status"></div>
+    <div class="controls">
+        <button onclick="prevSlide()">Previous</button>
+        <button onclick="togglePlay()" id="playPauseBtn">Pause</button>
+        <button onclick="nextSlide()">Next</button>
+    </div>
+    <div id="counter"></div>
+    <pre id="debug"></pre>
+
+    <script>
+        const CHUNK_SIZE = 460;  // Adjusted for base64 overhead
+        const SLIDE_INTERVAL = 1600;
+        const TOTAL_COUNTDOWN = 5;
+        const START_MARKER = "###QRSTART###";
+        const END_MARKER = "###QREND###";
+        const DATA_MARKER = "#DATA#"
+
+        let currentSlide = 0;
+        let slideInterval = null;
+        let countDownInterval = null;
+        let isPlaying = false;
+        let totalSlides = 0;
+        let totalCountDown = TOTAL_COUNTDOWN;
+        let debugLog = [];
+
+        function log(msg) {
+            debugLog.push(msg);
+            document.getElementById('debug').textContent = debugLog.join('\n');
+        }
+        const fileInput = document.getElementById('fileInput');
+        const generateBtn = document.getElementById('generateBtn');
+        const status = document.getElementById('status');
+        const slideContainer = document.getElementById('slideContainer');
+        const counter = document.getElementById('counter');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        let fileContent = null;
+
+        function showStatus(message) {
+            status.textContent = message;
+        }
+
+        function updateCounter() {
+            counter.textContent = `Slide ${currentSlide + 1} of ${totalSlides}`;
+        }
+
+        function showSlide(index) {
+            const slides = document.querySelectorAll('.qr-slide');
+            slides.forEach(slide => slide.classList.remove('active'));
+            slides[index].classList.add('active');
+            currentSlide = index;
+            updateCounter();
+        }
+
+        function nextSlide() {
+            currentSlide = (currentSlide + 1) % totalSlides;
+            showSlide(currentSlide);
+        }
+
+        function prevSlide() {
+            currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
+            showSlide(currentSlide);
+        }
+
+        function startSlideshow() {
+            if (!isPlaying) {
+                isPlaying = true;
+                playPauseBtn.textContent = 'Pause';
+                slideInterval = setInterval(nextSlide, SLIDE_INTERVAL);
+            }
+        }
+
+
+        function nextCountDown() {
+            currentCountDown = (currentCountDown - 1) % totalCountDown;
+            if (currentCountDown == 0) {
+                clearInterval(countDownInterval);
+                showSlide(0);
+                log(`StartSlides show: ${totalCountDown}`);
+
+                startSlideshow();
+            } else {
+                showStatus(`countdown ${currentCountDown}`);
+            }
+
+        }
+
+        function startCountDown() {
+            countDownInterval = setInterval(nextCountDown, SLIDE_INTERVAL);
+        }
+
+        function pauseSlideshow() {
+            if (isPlaying) {
+                isPlaying = false;
+                playPauseBtn.textContent = 'Play';
+                clearInterval(slideInterval);
+            }
+        }
+
+        function togglePlay() {
+            if (isPlaying) {
+                pauseSlideshow();
+            } else {
+                startSlideshow();
+            }
+        }
+
+        function chunkString(str, size) {
+            const chunks = [];
+            for (let i = 0; i < str.length; i += size) {
+                chunks.push(str.slice(i, i + size));
+            }
+            return chunks;
+        }
+
+        function createQRSlide(text, label) {
+            return new Promise((resolve) => {
+                const slideDiv = document.createElement('div');
+                slideDiv.className = 'qr-slide';
+
+                console.debug(text);
+                
+                new QRCode(slideDiv, {
+                    text: text,
+                    width: 256,
+                    height: 256,
+                    correctLevel: QRCode.CorrectLevel.L
+                });
+
+                const labelElement = document.createElement('div');
+                labelElement.className = 'qr-label';
+                labelElement.textContent = label;
+                slideDiv.appendChild(labelElement);
+                slideContainer.appendChild(slideDiv);
+                resolve();
+            });
+        }
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) {
+                generateBtn.disabled = true;
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                fileContent = e.target.result;
+                generateBtn.disabled = false;
+                showStatus('File loaded! Click generate.');
+            };
+            reader.onerror = function () {
+                showStatus('Error reading file');
+                generateBtn.disabled = true;
+            };
+            // Use readAsArrayBuffer instead of readAsDataURL
+            reader.readAsArrayBuffer(file);
+        });
+        async function generateQR() {
+            if (!fileContent) {
+                showStatus('Please select a file first');
+                return;
+            }
+
+            debugLog = []; // Clear debug log
+            pauseSlideshow();
+            slideContainer.innerHTML = '';
+            currentSlide = 0;
+            showStatus("Generating")
+            // Convert ArrayBuffer to Base64
+            const bytes = new Uint8Array(fileContent);
+            log(`Original file size: ${bytes.length} bytes`);
+
+            // Convert to base64 string
+            const base64Content = btoa(String.fromCharCode.apply(null, bytes));
+            log(`Base64 encoded length: ${base64Content.length} characters`);
+            showStatus(`Read file ${base64Content.length} characters`)
+
+            // Split into chunks
+            const chunks = chunkString(base64Content, CHUNK_SIZE);
+            showStatus(`Number of chunks: ${chunks.length}`)
+
+            log(`Number of chunks: ${chunks.length}`);
+            log('\nChunk sizes:');
+            chunks.forEach((chunk, i) => {
+                showStatus(`Chunk ${i + 1}: ${chunk.length} chars`);
+                log(`Chunk ${i + 1}: ${chunk.length} chars`);
+            });
+
+            // Verify total chunk size matches original base64 length
+            const totalChunkSize = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+            log(`\nTotal chunk size: ${totalChunkSize} chars`);
+            log(`Matches base64 length: ${totalChunkSize === base64Content.length}`);
+
+            // Test decode a sample chunk
+            const sampleChunk = chunks[0];
+            const decodedSample = atob(sampleChunk);
+            log(`\nSample chunk (first chunk):`);
+            log(`Original length: ${sampleChunk.length}`);
+            log(`Decoded length: ${decodedSample.length}`);
+
+            const originalFilename = fileInput.files[0].name;
+            const outputFilename = originalFilename + ".b64";
+
+            // Start frame
+            const startData = {
+                marker: START_MARKER,
+                frames: chunks.length,
+                file: outputFilename,
+                size: bytes.length
+            };
+            const startFrame = JSON.stringify(startData);
+            log(`\nStart frame length: ${startFrame.length} chars`);
+            await createQRSlide(startFrame, 'Start Frame');
+
+            // Data frames
+            for (let i = 0; i < chunks.length; i++) {
+                const currentData = {
+                    marker: DATA_MARKER,
+                    current: i+1,
+                    frames: chunks.length ,
+                    contents: chunks[i]
+                };
+                const currentFrame = JSON.stringify(currentData);
+
+                await createQRSlide(currentFrame, `Frame ${i + 1} of ${chunks.length}`);
+                showStatus(`Generating frame ${i + 1} of ${chunks.length}`);
+            }
+
+            // End frame
+            const endData = {
+                marker: END_MARKER,
+                command: `decode base64 "${outputFilename}"`
+            };
+            const endFrame = JSON.stringify(endData);
+            log(`\nEnd frame length: ${endFrame.length} chars`);
+            await createQRSlide(endFrame, 'End Frame');
+
+            totalSlides = chunks.length + 2;
+            showStatus(`Generated ${totalSlides} QR codes`);
+
+            // Verification calculation
+            const expectedDecodedSize = Math.floor((totalChunkSize * 3) / 4); // Base64 to binary ratio
+            log(`\nExpected decoded size: ${expectedDecodedSize} bytes`);
+            log(`Original size: ${bytes.length} bytes`);
+            log(`Size match: ${expectedDecodedSize === bytes.length}`);
+
+            currentCountDown = TOTAL_COUNTDOWN;
+            log(`StartCount: ${totalCountDown}`);
+            startCountDown();
+
+        }
+
+
+    </script>
+</body>
+
+</html>
