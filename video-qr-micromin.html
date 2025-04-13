@@ -19,7 +19,7 @@ button:disabled{background:#555}
 #i{flex:1;display:flex;justify-content:center;align-items:center}
 #e{max-width:100%;max-height:100%}
 .g{height:5px;width:100%;background:#333}
-.r{height:100%;width:0%;background:#07f}
+.r{height:100%;width:0%;background:#07f;display:flex;align-items:center;justify-content:center;overflow:hidden}
 .s{display:flex;justify-content:space-around;background:#222;color:#fff;padding:2px 0}
 #l{position:fixed;bottom:40px;left:0;right:0;padding:5px;background:rgba(0,0,0,.8);color:#fff;max-height:100px;overflow-y:auto;z-index:1000;display:none}
 #z{position:absolute;top:5px;right:5px;background:rgba(0,0,0,.5);color:red;padding:5px;border-radius:3px;z-index:10;display:none}
@@ -122,7 +122,14 @@ function fmt(ms){
   return`${m.toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
 }
 
-function upd(c,t){o.style.width=`${Math.min(100,(c/t*100)||0)}%`;}
+function upd(c,t){
+  const p=Math.min(100,(c/t*100)||0);
+  o.style.width=`${p}%`;
+  o.textContent=`${Math.round(p)}%`;
+  o.style.textAlign='center';
+  o.style.color='#fff';
+  o.style.fontSize='10px';
+}
 
 function clean(){
   if(X){X.pause();X.removeAttribute('src');X.load();X=null;}
@@ -264,6 +271,10 @@ function reset(){
   o.style.width='0';
 }
 
+// Smart search variables
+let useSmartSearch = false;
+let foundTimeRanges = [];
+
 function startProc(){
   if(!U||P)return;
   P=true;
@@ -279,6 +290,10 @@ function startProc(){
   X.src=U;
   X.muted=true;
   
+  // Reset state and tracking
+  reset();
+  foundTimeRanges = [];
+  
   X.onloadedmetadata=()=>{
     const max=1280,s=Math.min(1,max/Math.max(X.videoWidth,X.videoHeight));
     k.width=X.videoWidth*s;
@@ -288,32 +303,127 @@ function startProc(){
     
     X.play();
     
-    const du=X.duration,
-    fps=du>180?3:du>60?5:10,
-    tf=Math.floor(du*fps),
-    fi=du*1000/tf,
-    bs=Math.min(100,tf);
+    const du=X.duration;
     
-    log(`${tf} frames @ ${fps}fps`);
-    upd(0,tf);
+    // Determine if we should use smart search (for videos > 30 seconds)
+    useSmartSearch = du > 30 && isFinite(du);
     
-    function batch(s,end){
-      let i=s;
-      Y=setInterval(()=>{
-        if(M)return;
-        if(i>=end||i>=tf||X.currentTime>=du){
-          clearInterval(Y);
-          if(i<tf&&X.currentTime<du){
-            setTimeout(()=>{batch(i,Math.min(i+bs,tf));},300);
-          }else{finishProc();}
-          return;
-        }
-        const t=(i*du)/tf;
-        X.currentTime=t;
-        setTimeout(()=>{proc(i,tf);i++;},100);
-      },fi);
+    // Handle Infinity duration specially
+    if (!isFinite(du) || du <= 0) {
+      log("Video has Infinity duration. Using time-based processing.");
+      // Set up special time-based processing for videos with Infinity duration
+      useSmartSearch = false;
+      
+      // Add time display to UI
+      const timeDisplay = document.createElement('div');
+      timeDisplay.id = 'timeDisplay';
+      timeDisplay.style.position = 'absolute';
+      timeDisplay.style.top = '10px';
+      timeDisplay.style.left = '10px';
+      timeDisplay.style.background = 'rgba(0,0,0,0.7)';
+      timeDisplay.style.color = 'lime';
+      timeDisplay.style.padding = '5px 10px';
+      timeDisplay.style.borderRadius = '3px';
+      timeDisplay.style.zIndex = '100';
+      timeDisplay.textContent = '0.0s';
+      p.appendChild(timeDisplay);
+      
+      // Update time display when video plays
+      X.addEventListener('timeupdate', () => {
+        timeDisplay.textContent = X.currentTime.toFixed(1) + 's';
+      });
     }
-    batch(0,bs);
+    
+    if (useSmartSearch) {
+        log(`Using smart search for ${du.toFixed(1)}s video`);
+        
+        // First do sparse sampling (check every n seconds based on video length)
+        const interval = du > 300 ? 10 : du > 120 ? 7 : 5;
+        const samples = [];
+        let t = 0;
+        
+        // Limit total samples to prevent memory issues
+        const MAX_SAMPLES = 500;
+        const adjustedInterval = Math.max(interval, du / MAX_SAMPLES);
+        
+        while (t < du && samples.length < MAX_SAMPLES) {
+          samples.push(t);
+          t += adjustedInterval;
+        }
+      
+        // Add end frame if not included
+        if (samples.length > 0 && samples.length < MAX_SAMPLES && samples[samples.length-1] < du - 1) {
+          samples.push(du - 1);
+        }
+        
+        const sampleCount = samples.length;
+        log(`Initial scan: ${sampleCount} samples`);
+        upd(0, sampleCount);
+        
+        // Process sparse samples first
+        processSmartSamples(samples, 0, du);
+      }
+    } 
+    
+    if (!useSmartSearch) {
+      // Regular sequential processing for shorter videos
+      const fps=du>180?3:du>60?5:10,
+      tf=Math.floor(du*fps),
+      fi=du*1000/tf,
+      bs=Math.min(100,tf);
+      
+      log(`${tf} frames @ ${fps}fps`);
+      upd(0,tf);
+      
+      // Track seeking status
+      let isWaitingForSeek = false;
+      let lastSeekTime = 0;
+    
+      function batch(s,end){
+        let i=s;
+        Y=setInterval(()=>{
+          if(M)return;
+          if(i>=end||i>=tf||X.currentTime>=du){
+            clearInterval(Y);
+            if(i<tf&&X.currentTime<du){
+              setTimeout(()=>{batch(i,Math.min(i+bs,tf));},300);
+            }else{finishProc();}
+            return;
+          }
+          
+          // Add random jitter to avoid getting stuck on the same frame
+          const jitter = Math.random() * 0.05;
+          const t=(i*du)/tf + jitter;
+          
+          if(isFinite(t) && t>=0 && t<=du) {
+            isWaitingForSeek = true;
+            lastSeekTime = Date.now();
+            X.currentTime=t;
+            
+            // Safety check for seek timeout
+            setTimeout(() => {
+              if (isWaitingForSeek && Date.now() - lastSeekTime > 2000) {
+                console.warn(`Seek timeout at frame ${i}, forcing continue`);
+                isWaitingForSeek = false;
+                i++; // Force to next frame
+              }
+            }, 2000);
+            
+            setTimeout(()=>{
+              isWaitingForSeek = false;
+              proc(i,tf);
+              i++;
+            },100);
+          } else {
+            console.warn(`Bad time: ${t}, using 0`);
+            X.currentTime=0;
+            setTimeout(()=>{proc(i,tf);i++;},100);
+          }
+        },fi);
+      }
+      
+      batch(0,bs);
+    }
   };
   
   X.onerror=()=>{
@@ -325,16 +435,356 @@ function startProc(){
   };
 }
 
+function processSmartSamples(samples, startIndex, totalDuration) {
+  if (startIndex >= samples.length || !P) {
+    // Done with sparse samples, decide next steps
+    analyzeSmartResults(totalDuration);
+    return;
+  }
+  
+  const currentTime = samples[startIndex];
+  X.currentTime = currentTime;
+  
+  X.onseeked = () => {
+    // Process this frame
+    processSmartFrame(currentTime);
+    
+    // Update progress
+    upd(startIndex + 1, samples.length);
+    
+    // Move to next sample
+    setTimeout(() => {
+      processSmartSamples(samples, startIndex + 1, totalDuration);
+    }, 50);
+  };
+}
+
+function processSmartFrame(timePosition) {
+  try {
+    ctx.drawImage(X, 0, 0, k.width, k.height);
+    const img = ctx.getImageData(0, 0, k.width, k.height);
+    
+    // Update preview
+    e.src = k.toDataURL('image/jpeg', 0.7);
+    
+    // Process for QR code
+    const q = jsQR(img.data, k.width, k.height, {inversionAttempts: "dontInvert"});
+    
+    if (q) {
+      // Track this time position
+      foundTimeRanges.push({
+        time: timePosition,
+        hasMetadata: false
+      });
+      
+      // Draw marker and update visuals
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = k.width;
+      tempCanvas.height = k.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.drawImage(X, 0, 0, k.width, k.height);
+      
+      tempCtx.strokeStyle = 'lime';
+      tempCtx.lineWidth = 3;
+      tempCtx.beginPath();
+      tempCtx.moveTo(q.location.topLeftCorner.x, q.location.topLeftCorner.y);
+      tempCtx.lineTo(q.location.topRightCorner.x, q.location.topRightCorner.y);
+      tempCtx.lineTo(q.location.bottomRightCorner.x, q.location.bottomRightCorner.y);
+      tempCtx.lineTo(q.location.bottomLeftCorner.x, q.location.bottomLeftCorner.y);
+      tempCtx.lineTo(q.location.topLeftCorner.x, q.location.topLeftCorner.y);
+      tempCtx.stroke();
+      
+      e.src = tempCanvas.toDataURL('image/jpeg', 0.7);
+      
+      // Process QR data
+      pQR(q.data);
+      b++;
+      qc.textContent = b;
+      
+      // Check if this is a metadata QR
+      try {
+        const json = JSON.parse(q.data);
+        if (json.type === "metadata" || json.marker === "###QRSTART###") {
+          // Mark this as containing metadata
+          foundTimeRanges[foundTimeRanges.length - 1].hasMetadata = true;
+        }
+      } catch (e) {}
+    }
+    
+    // Increment frame counter
+    a++;
+    fc.textContent = a;
+  } catch (err) {
+    console.error("Frame processing error:", err);
+  }
+}
+
+function analyzeSmartResults(duration) {
+  // If we've found metadata and chunks, focus on those areas
+  if (Z && Object.keys(K).length > 0) {
+    log(`Found metadata and ${Object.keys(K).length} chunks during initial scan`);
+    processFocusedAreas(duration);
+    return;
+  }
+  
+  // If we've found QR codes but no metadata yet
+  if (foundTimeRanges.length > 0) {
+    const metadataRanges = foundTimeRanges.filter(r => r.hasMetadata);
+    
+    if (metadataRanges.length > 0) {
+      log(`Found ${metadataRanges.length} metadata QR codes`);
+      processFocusedAreas(duration);
+    } else {
+      log(`Found ${foundTimeRanges.length} QR codes, searching for metadata...`);
+      // Search around found QR codes with higher density
+      processAroundFoundCodes(duration);
+    }
+  } else {
+    // No QR codes found in sparse sampling, fallback to full scan
+    log("No QR codes found in sparse sampling, switching to full scan");
+    processFullScan(duration);
+  }
+}
+
+function processFocusedAreas(duration) {
+  // Create time ranges from found QR positions
+  if (foundTimeRanges.length === 0) {
+    processFullScan(duration);
+    return;
+  }
+  
+  // Sort by time
+  foundTimeRanges.sort((a, b) => a.time - b.time);
+  
+  // Create merged ranges with buffers
+  const mergedRanges = [];
+  let currentRange = {
+    start: Math.max(0, foundTimeRanges[0].time - 5),
+    end: Math.min(duration, foundTimeRanges[0].time + 5)
+  };
+  
+  for (let i = 1; i < foundTimeRanges.length; i++) {
+    const currentTime = foundTimeRanges[i].time;
+    
+    // If this time is within or close to current range, extend it
+    if (currentTime <= currentRange.end + 10) { // 10 second merge buffer
+      currentRange.end = Math.min(duration, currentTime + 5);
+    } else {
+      // Save current range and start a new one
+      mergedRanges.push(currentRange);
+      currentRange = {
+        start: Math.max(0, currentTime - 5),
+        end: Math.min(duration, currentTime + 5)
+      };
+    }
+  }
+  
+  // Add the last range
+  mergedRanges.push(currentRange);
+  
+  log(`Processing ${mergedRanges.length} focused time ranges`);
+  
+  // Process these ranges with higher framerate
+  processFocusedRanges(mergedRanges, duration);
+}
+
+function processFocusedRanges(ranges, duration) {
+  if (!ranges || ranges.length === 0) {
+    processFullScan(duration);
+    return;
+  }
+  
+  // Process each range sequentially
+  const range = ranges.shift();
+  const rangeDuration = range.end - range.start;
+  
+  // Use higher framerate for focused areas
+  const fps = 15; 
+  const frames = Math.ceil(rangeDuration * fps);
+  const timeStep = rangeDuration / frames;
+  
+  log(`Processing range ${range.start.toFixed(1)}s - ${range.end.toFixed(1)}s (${frames} frames)`);
+  
+  const timePoints = [];
+  for (let i = 0; i < frames; i++) {
+    timePoints.push(range.start + i * timeStep);
+  }
+  
+  // Define a function to process each point
+  let currentIndex = 0;
+  
+  function processNextPoint() {
+    if (currentIndex >= timePoints.length || !P) {
+      // Done with this range
+      if (ranges.length > 0) {
+        // Process next range
+        processFocusedRanges(ranges, duration);
+      } else {
+        // Check if we've found all chunks
+        const tc = Z ? Z.total_chunks || 0 : 0;
+        const rc = Object.keys(K).length;
+        
+        if (Z && rc === tc) {
+          log(`All ${tc} chunks found! Processing complete.`);
+          finishProc();
+        } else {
+          log(`Found ${rc}/${tc || '?'} chunks. Proceeding to full scan.`);
+          processFullScan(duration);
+        }
+      }
+      return;
+    }
+    
+    // Process this time point
+    X.currentTime = timePoints[currentIndex];
+    
+    X.onseeked = () => {
+      // Process this frame
+      processSmartFrame(timePoints[currentIndex]);
+      
+      // Update progress (scale to show overall progress through the ranges)
+      const rangeProgress = (currentIndex / timePoints.length) * 100;
+      const overallProgress = Math.min(75, 50 + (rangeProgress / 100) * 25); // 50-75%
+      o.style.width = `${overallProgress}%`;
+      o.textContent = `${Math.round(overallProgress)}%`;
+      
+      // Move to next point
+      currentIndex++;
+      setTimeout(processNextPoint, 30);
+    };
+  }
+  
+  // Start processing
+  processNextPoint();
+}
+
+function processAroundFoundCodes(duration) {
+  // Expand areas around found QR codes to look for metadata
+  if (foundTimeRanges.length === 0) {
+    processFullScan(duration);
+    return;
+  }
+  
+  // Create expanded ranges - look before each QR code as metadata often comes first
+  const expandedRanges = foundTimeRanges.map(r => ({
+    start: Math.max(0, r.time - 15), // Look 15 seconds before
+    end: Math.min(duration, r.time + 5)  // And 5 seconds after
+  }));
+  
+  log(`Searching around ${expandedRanges.length} QR codes for metadata`);
+  processFocusedRanges(expandedRanges, duration);
+}
+
+function processFullScan(duration) {
+  // Final fallback - scan the entire video
+  const fps = duration > 180 ? 3 : duration > 60 ? 5 : 10;
+  const tf = Math.floor(duration * fps);
+  const fi = duration * 1000 / tf;
+  const bs = Math.min(100, tf);
+  
+  log(`Full scan: ${tf} frames @ ${fps}fps`);
+  
+  // Set up regular batch processing
+  X.play();
+  
+  // Track seeking status
+  let isWaitingForSeek = false;
+  let lastSeekTime = 0;
+  
+  function batch(s, end) {
+    let i = s;
+    Y = setInterval(() => {
+      if (M) return;
+      if (i >= end || i >= tf || X.currentTime >= duration) {
+        clearInterval(Y);
+        if (i < tf && X.currentTime < duration) {
+          setTimeout(() => { batch(i, Math.min(i + bs, tf)); }, 300);
+        } else {
+          finishProc();
+        }
+        return;
+      }
+      
+      // Add random jitter to avoid getting stuck
+      const jitter = Math.random() * 0.05;
+      const t = (i * duration / tf) + jitter;
+      
+      if (isFinite(t) && t >= 0 && t <= duration) {
+        isWaitingForSeek = true;
+        lastSeekTime = Date.now();
+        X.currentTime = t;
+        
+        // Safety check for seek timeout
+        setTimeout(() => {
+          if (isWaitingForSeek && Date.now() - lastSeekTime > 2000) {
+            console.warn(`Seek timeout at frame ${i}, forcing continue`);
+            isWaitingForSeek = false;
+            i++; // Force to next frame
+          }
+        }, 2000);
+        
+        setTimeout(() => {
+          isWaitingForSeek = false;
+          proc(i, tf);
+          i++;
+        }, 100);
+      } else {
+        console.warn(`Bad time: ${t}, using 0`);
+        X.currentTime = 0;
+        setTimeout(() => { proc(i, tf); i++; }, 100);
+      }
+    }, fi);
+  }
+  
+  batch(0, bs);
+}
+
 function proc(i,t){
-  ctx.drawImage(X,0,0,k.width,k.height);
-  const img=ctx.getImageData(0,0,k.width,k.height);
-  
-  i%5===0&&(e.src=k.toDataURL('image/jpeg',0.5));
-  
-  try{
-    const q=jsQR(img.data,k.width,k.height,{inversionAttempts:"dontInvert"});
-    if(q){pQR(q.data);b++;qc.textContent=b;}
-  }catch(e){}
+  try {
+    ctx.drawImage(X,0,0,k.width,k.height);
+    const img=ctx.getImageData(0,0,k.width,k.height);
+    
+    // Always update preview frame for better visibility
+    e.src=k.toDataURL('image/jpeg',0.7);
+    
+    // Draw a crosshair on the preview to help identify QR codes
+    const img2 = new Image();
+    img2.onload = function() {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = k.width;
+      tempCanvas.height = k.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.drawImage(img2, 0, 0);
+      
+      // Attempt QR detection
+      try{
+        const q=jsQR(img.data,k.width,k.height,{inversionAttempts:"dontInvert"});
+        if(q){
+          // Draw marker if QR found
+          tempCtx.strokeStyle = 'lime';
+          tempCtx.lineWidth = 3;
+          tempCtx.beginPath();
+          tempCtx.moveTo(q.location.topLeftCorner.x, q.location.topLeftCorner.y);
+          tempCtx.lineTo(q.location.topRightCorner.x, q.location.topRightCorner.y);
+          tempCtx.lineTo(q.location.bottomRightCorner.x, q.location.bottomRightCorner.y);
+          tempCtx.lineTo(q.location.bottomLeftCorner.x, q.location.bottomLeftCorner.y);
+          tempCtx.lineTo(q.location.topLeftCorner.x, q.location.topLeftCorner.y);
+          tempCtx.stroke();
+          
+          // Process QR data
+          pQR(q.data);
+          b++;
+          qc.textContent=b;
+          
+          // Update preview with QR marker
+          e.src = tempCanvas.toDataURL('image/jpeg', 0.7);
+        }
+      }catch(err){}
+    };
+    img2.src = e.src;
+  } catch(err) {
+    console.error("Frame processing error:", err);
+  }
   
   a++;fc.textContent=a;upd(a,t);
 }
@@ -390,7 +840,15 @@ function checkDone(){
   const tc=Z.total_chunks||Object.keys(L).reduce((a,k)=>a+L[k].chunks_expected,0),
   rc=Object.keys(K).length;
   
-  if(rc>0){J.disabled=false;}
+  if(rc>0){
+    J.disabled=false;
+    
+    // Log progress every 5 chunks or when we reach multiples of 25%
+    if(rc % 5 === 0 || rc/tc >= 0.25 && rc/tc <= 0.26 || rc/tc >= 0.5 && rc/tc <= 0.51 || 
+       rc/tc >= 0.75 && rc/tc <= 0.76 || rc/tc === 1) {
+      log(`Progress: ${rc}/${tc} chunks (${Math.round(rc/tc*100)}%)`);
+    }
+  }
   
   if(rc===tc){
     log('All chunks received!');
@@ -418,7 +876,22 @@ function finishProc(){
   const tc=Z?Z.total_chunks:0,
   rc=Object.keys(K).length;
   
-  rc>0&&(log(`Got ${rc}/${tc} chunks`),J.disabled=false);
+  if(rc>0){
+    log(`Processed ${a} frames, found ${b} QR codes`);
+    log(`Got ${rc}/${tc} chunks (${Math.round(rc/tc*100)}%)`);
+    J.disabled=false;
+    
+    // If we didn't get all chunks and have a file to process, offer to continue
+    if(rc < tc && U) {
+      log(`Missing ${tc-rc} chunks. Try different sections of the video.`);
+      setTimeout(() => {
+        if(confirm(`Missing ${tc-rc} chunks. Continue processing?`)) {
+          startProc();
+        }
+      }, 500);
+    }
+  }
+  
   clean();
 }
 

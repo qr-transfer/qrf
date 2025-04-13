@@ -678,8 +678,14 @@ function startProcessing() {
         }
         
         // Set video to the frame we want to process
+        // Check for valid time to avoid "non-finite" errors
         const time = (i * duration) / totalFrames;
-        processingVideo.currentTime = time;
+        if (isFinite(time) && time >= 0 && time <= duration) {
+            processingVideo.currentTime = time;
+        } else {
+            console.log(`Invalid time value: ${time}, using 0 instead`);
+            processingVideo.currentTime = 0;
+        }
         
         // Extract and process the frame after a short delay
         setTimeout(() => {
@@ -705,28 +711,60 @@ function startProcessing() {
 }
 
 function processVideoFrame(index, total) {
-  // Draw the current video frame to the canvas
-  ctx.drawImage(processingVideo, 0, 0, canvas.width, canvas.height);
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  
-  // Update preview image occasionally (to save CPU)
-  if (index % 5 === 0) {
-    framePreview.src = canvas.toDataURL('image/jpeg', 0.5);
-  }
-  
-  // Try to detect QR codes in the frame
   try {
-    const qr = jsQR(imageData.data, canvas.width, canvas.height, {
-      inversionAttempts: "dontInvert"
-    });
+    // Draw the current video frame to the canvas
+    ctx.drawImage(processingVideo, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     
-    if (qr) {
-      processQRData(qr.data);
-      detectedQRs++;
-      qrCount.textContent = detectedQRs;
-    }
+    // Always update preview for better visibility
+    framePreview.src = canvas.toDataURL('image/jpeg', 0.7);
+    
+    // Set up a second canvas to draw markers on found QR codes
+    const img = new Image();
+    img.onload = function() {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.drawImage(img, 0, 0);
+      
+      // Try to detect QR codes in the frame
+      try {
+        const qr = jsQR(imageData.data, canvas.width, canvas.height, {
+          inversionAttempts: "dontInvert"
+        });
+        
+        if (qr) {
+          // Draw a marker around found QR code
+          tempCtx.strokeStyle = 'lime';
+          tempCtx.lineWidth = 3;
+          tempCtx.beginPath();
+          tempCtx.moveTo(qr.location.topLeftCorner.x, qr.location.topLeftCorner.y);
+          tempCtx.lineTo(qr.location.topRightCorner.x, qr.location.topRightCorner.y);
+          tempCtx.lineTo(qr.location.bottomRightCorner.x, qr.location.bottomRightCorner.y);
+          tempCtx.lineTo(qr.location.bottomLeftCorner.x, qr.location.bottomLeftCorner.y);
+          tempCtx.lineTo(qr.location.topLeftCorner.x, qr.location.topLeftCorner.y);
+          tempCtx.stroke();
+          
+          // Process QR data
+          processQRData(qr.data);
+          detectedQRs++;
+          qrCount.textContent = detectedQRs;
+          
+          // Update preview with the QR marker
+          framePreview.src = tempCanvas.toDataURL('image/jpeg', 0.7);
+          
+          // Add QR detection text overlay
+          showLog(`QR detected at frame ${index + 1}`);
+        }
+      } catch (error) {
+        // Log QR detection errors to console
+        console.log("QR detection error:", error);
+      }
+    };
+    img.src = framePreview.src;
   } catch (error) {
-    // Silently ignore QR detection errors
+    console.error("Frame processing error:", error);
   }
   
   // Update frame counter and progress

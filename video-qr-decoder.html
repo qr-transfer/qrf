@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <title>Video QR Code Decoder</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+
     <style>
         * {
             margin: 0;
@@ -16,241 +17,27 @@
         body {
             width: 100%;
             height: 100%;
-            font-family: system-ui, -apple-system, sans-serif;
-            line-height: 1.5;
-        }
-
-        body {
-            display: flex;
-            flex-direction: column;
-            padding: 20px;
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-
-        h1 {
-            margin-bottom: 20px;
+            overflow: hidden;
+            font-family: sans-serif;
         }
 
         .container {
             display: flex;
-            gap: 20px;
-            height: calc(100vh - 130px);
-        }
-        
-        /* Responsive styles for mobile */
-        @media (max-width: 768px) {
-            body {
-                padding: 10px;
-            }
-            
-            h1 {
-                font-size: 1.5rem;
-                text-align: center;
-            }
-            
-            .container {
-                flex-direction: column;
-                height: auto;
-            }
-            
-            .capture-container {
-                flex: none !important;
-            }
-            
-            .info-container {
-                flex: none !important;
-            }
-            
-            .camera-view {
-                height: 60vh !important;
-            }
-            
-            .video-controls {
-                flex-wrap: wrap;
-                justify-content: center;
-            }
-            
-            button {
-                padding: 8px 12px !important;
-                font-size: 0.9rem !important;
-            }
-        }
-
-        .capture-container {
-            flex: 6;
-            background: #f5f5f5;
-            border-radius: 8px;
-            padding: 20px;
-            display: flex;
             flex-direction: column;
-            gap: 15px;
-        }
-
-        .info-container {
-            flex: 4;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .panel {
-            background: #f5f5f5;
-            border-radius: 8px;
-            padding: 20px;
-        }
-
-        .camera-view {
-            position: relative;
-            background: #000;
-            flex: 1;
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            border-radius: 4px;
-        }
-
-        #video {
             width: 100%;
             height: 100%;
-            object-fit: contain;
-        }
-
-        .detection-box {
-            position: absolute;
-            border: 3px solid red;
-            width: 200px;
-            height: 200px;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            pointer-events: none;
-        }
-
-        .video-controls {
-            display: flex;
-            gap: 10px;
-        }
-
-        button {
-            padding: 12px 20px;
-            background: #007bff;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: background 0.2s;
-            white-space: nowrap;
-        }
-
-        button:hover {
-            background: #0056b3;
-        }
-
-        button:disabled {
-            background: #cccccc;
-            cursor: not-allowed;
-        }
-
-        .progress-container {
-            width: 100%;
-            background: #f0f0f0;
-            border-radius: 4px;
-            overflow: hidden;
-            height: 20px;
-            position: relative;
-            margin-top: 10px;
-        }
-
-        .progress-bar {
-            height: 100%;
-            background: #007bff;
-            width: 0;
-            transition: width 0.3s;
-        }
-
-        .progress-text {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #000;
-            font-weight: bold;
-            text-shadow: 0 0 3px rgba(255, 255, 255, 0.5);
-        }
-
-        .info-panel {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 5px;
-            margin-top: 10px;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        .grid-cell {
-            background: #ddd;
-            border-radius: 3px;
-            padding: 5px;
-            text-align: center;
-            font-size: 12px;
-        }
-
-        .grid-cell.received {
-            background: #a3e4a3;
-        }
-
-        .grid-cell.current {
-            background: #f8e07e;
-        }
-
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .info-label {
-            font-weight: bold;
-        }
-
-        #logPanel {
-            background: #222;
-            color: #a3e4a3;
-            font-family: monospace;
-            padding: 10px;
-            font-size: 12px;
-            min-height: 100px;
-            flex: 1;
-            overflow-y: auto;
-            white-space: pre-wrap;
-            border-radius: 4px;
         }
 
         .tabs {
             display: flex;
-            margin-bottom: 5px;
+            background: #f0f0f0;
+            border-bottom: 1px solid #ddd;
         }
 
         .tab {
-            padding: 8px 15px;
-            background: #eee;
+            padding: 12px 20px;
             cursor: pointer;
-            border-radius: 4px 4px 0 0;
-            border: 1px solid #ddd;
-            border-bottom: none;
-            font-size: 14px;
+            border-right: 1px solid #ddd;
         }
 
         .tab.active {
@@ -260,306 +47,1815 @@
 
         .tab-content {
             display: none;
-            height: 100%;
-            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
         }
 
         .tab-content.active {
             display: flex;
         }
 
-        .recording-timer {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            color: red;
-            font-size: 18px;
-            font-weight: bold;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 5px 10px;
-            border-radius: 4px;
-            display: none;
+        .panel {
+            display: flex;
+            width: 100%;
+            height: 100%;
         }
 
-        canvas {
-            display: none;
+        .left-panel {
+            width: 60%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #222;
+            position: relative;
+            padding: 10px;
         }
 
-        .frame-container {
+        .controls {
+            margin-bottom: 10px;
+            z-index: 10;
+        }
+
+        button {
+            margin: 5px;
+            padding: 8px 15px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .video-container {
             position: relative;
             width: 100%;
-            display: flex;
-            justify-content: center;
-            background: #000;
             flex: 1;
-            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             overflow: hidden;
         }
 
-        .frame-overlay {
+        #liveVideo, #processingVideo {
+            max-width: 100%;
+            max-height: 100%;
+            background: black;
+            z-index: 5;
+        }
+
+        .scan-region {
             position: absolute;
-            top: 10px;
-            right: 10px;
-            color: white;
-            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid red;
+            width: 200px;
+            height: 200px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 6;
+        }
+
+        .right-panel {
+            width: 40%;
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            background: #f0f0f0;
+        }
+
+        .grid {
+            --cell-size: 20px;
+            display: grid;
+            gap: 1px;
+            height: auto;
+            max-height: 30%;
+            width: 100%;
+            place-items: center;
+            margin-bottom: 10px;
+            padding: 8px;
+            background: #1a1a1a;
+            border-radius: 4px;
+            overflow-y: auto;
+            position: relative;
+        }
+        
+        /* Improve performance for large grids */
+        @media (min-width: 768px) {
+            .grid {
+                grid-template-columns: repeat(auto-fill, minmax(12px, 1fr)) !important;
+            }
+        }
+        
+        /* For very large frame counts */
+        .grid.large-count {
+            --cell-size: 10px;
+            gap: 1px;
+            grid-template-columns: repeat(auto-fill, minmax(8px, 1fr)) !important;
+        }
+        
+        .status-container {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-family: monospace;
+            background: #333;
+            color: #fff;
             padding: 5px 10px;
             border-radius: 4px;
-            font-size: 14px;
+        }
+        
+        .counter-box {
+            display: inline-block;
+            padding: 3px 8px;
+            margin-right: 5px;
+            background: #222;
+            border-radius: 3px;
+            color: lime;
+        }
+
+        .progress-container {
+            height: 20px;
+            background: #2a2a2a;
+            border-radius: 4px;
+            margin: 10px 0;
+            overflow: hidden;
+            border: 1px solid #333;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(to right, #4CAF50, #8BC34A);
+            width: 0%;
+            text-align: center;
+            color: white;
+            font-size: 12px;
+            line-height: 20px;
+            transition: width 0.3s;
+            box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+        }
+
+        .grid-cell {
+            background: darkred;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 10px;
+            text-align: center;
+            transition: background 0.2s, transform 0.1s;
+            width: var(--cell-size);
+            height: var(--cell-size);
+            position: relative;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .grid-cell:hover {
+            transform: scale(1.1);
+            z-index: 2;
+        }
+
+        .grid-cell.received {
+            background: #4CAF50;
+            box-shadow: 0 0 2px rgba(76, 175, 80, 0.8);
+        }
+
+        .grid-cell.blinking {
+            background: yellow !important;
+            color: black;
+            animation: pulse 0.4s;
+            transform: scale(1.2);
+            z-index: 10;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1.2); }
+        }
+        
+        .grid-stats {
+            grid-column: 1 / -1;
+            width: 100%;
+            padding: 8px;
+            margin-top: 10px;
+            background: #333;
+            border-radius: 4px;
+            text-align: center;
+            font-family: monospace;
+            color: white;
+        }
+        
+        .grid-stats-received {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        
+        .grid-stats-missing {
+            color: #f44336;
             font-weight: bold;
         }
 
-        #currentFrame {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-        }
-
-        .stats-row {
-            display: flex;
-            gap: 20px;
+        .log {
+            flex: 1;
+            background: black;
+            color: lime;
+            padding: 10px;
+            overflow-y: auto;
+            white-space: pre;
+            font-family: monospace;
             margin-top: 10px;
         }
 
-        .stat-box {
-            background: #e9ecef;
-            padding: 10px;
-            border-radius: 4px;
-            flex: 1;
-            text-align: center;
+        .hidden {
+            display: none;
         }
 
-        .stat-value {
-            font-size: 20px;
-            font-weight: bold;
-            margin-top: 5px;
+        #canvas {
+            display: none;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .dropzone {
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+            padding: 25px;
+            text-align: center;
+            margin: 15px 0;
+            background: #f9f9f9;
+            cursor: pointer;
+        }
+
+        .dropzone:hover {
+            background: #f0f0f0;
         }
     </style>
 </head>
 
 <body>
-    <h1>Video QR Code Decoder</h1>
+    <div class="container">
+        <div class="tabs">
+            <div class="tab active" data-tab="live">Live Camera</div>
+            <div class="tab" data-tab="video">Video File</div>
+        </div>
 
-    <div class="container" id="mainContainer">
-        <div class="capture-container">
-            <div class="tabs">
-                <div class="tab active" data-tab="capture">Capture</div>
-                <div class="tab" data-tab="process">Process</div>
-            </div>
-
-            <div class="tab-content active" data-tab-content="capture">
-                <div class="camera-view">
-                    <video id="video" autoplay playsinline muted></video>
-                    <div class="detection-box" id="detectionBox"></div>
-                    <div class="recording-timer" id="recordingTimer">00:00</div>
-                </div>
-                <div class="video-controls">
-                    <button id="startCameraBtn">Start Camera</button>
-                    <button id="startRecordingBtn" disabled>Start Recording</button>
-                    <button id="stopRecordingBtn" disabled>Stop Recording</button>
-                    <button id="downloadBtn" disabled>Download Recording</button>
-                </div>
-            </div>
-
-            <div class="tab-content" data-tab-content="process">
-                <div class="frame-container">
-                    <canvas id="frameCanvas"></canvas>
-                    <canvas id="workCanvas"></canvas>
-                    <img id="currentFrame" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=" />
-                    <div class="frame-overlay" id="frameOverlay">Frame: 0 / 0</div>
-                </div>
-                <div class="video-controls">
-                    <button id="loadVideoBtn">Load Local Video</button>
-                    <button id="loadUrlBtn">Load URL Video</button>
-                    <button id="startProcessingBtn" disabled>Start Processing</button>
-                    <button id="pauseProcessingBtn" disabled>Pause</button>
-                    <button id="saveFileBtn" disabled>Save File</button>
-                </div>
-                <div id="urlInputContainer" style="margin-top: 10px; display: none;">
-                    <input type="text" id="videoUrlInput" placeholder="Enter video URL (MP4/WebM format)" style="width: 80%; padding: 8px; margin-right: 10px;" />
-                    <button id="fetchUrlBtn">Fetch</button>
-                </div>
-                <div class="progress-container">
-                    <div class="progress-bar" id="processingProgress"></div>
-                    <div class="progress-text" id="processingProgressText">0%</div>
-                </div>
-                <div class="stats-row">
-                    <div class="stat-box">
-                        <div>Frames Processed</div>
-                        <div class="stat-value" id="framesProcessed">0</div>
+        <!-- Live Camera Tab -->
+        <div class="tab-content active" id="live-tab">
+            <div class="panel">
+                <div class="left-panel">
+                    <div class="controls">
+                        <button id="startLiveBtn">Start Camera</button>
+                        <button id="stopLiveBtn" disabled>Stop Camera</button>
                     </div>
-                    <div class="stat-box">
-                        <div>QR Codes Found</div>
-                        <div class="stat-value" id="qrCodesFound">0</div>
-                    </div>
-                    <div class="stat-box">
-                        <div>Chunks Retrieved</div>
-                        <div class="stat-value" id="chunksRetrieved">0</div>
+                    <div class="video-container">
+                        <video id="liveVideo" playsinline></video>
+                        <div class="scan-region"></div>
                     </div>
                 </div>
-                <input type="file" id="videoFileInput" accept="video/*" style="display: none;" />
+                <div class="right-panel">
+                    <div class="status-container">
+                        <div>Frames: <span class="counter-box" id="liveFramesCounter">0</span></div>
+                        <div>QR detected: <span class="counter-box" id="liveQrCounter">0</span></div>
+                    </div>
+                    <div class="grid" id="liveGrid"></div>
+                    <div class="log" id="liveLog"></div>
+                </div>
             </div>
         </div>
 
-        <div class="info-container">
-            <div class="panel info-panel">
-                <h3>File Information</h3>
-                <div class="info-row">
-                    <span class="info-label">File Name:</span>
-                    <span id="fileNameInfo">None</span>
+        <!-- Video File Tab -->
+        <div class="tab-content" id="video-tab">
+            <div class="panel">
+                <div class="left-panel">
+                    <div class="controls">
+                        <button id="openVideoBtn">Open Video</button>
+                        <button id="processVideoBtn" disabled>Process Video</button>
+                        <button id="stopProcessingBtn" disabled>Stop Processing</button>
+                    </div>
+                    <div class="video-container">
+                        <video id="processingVideo" controls></video>
+                    </div>
+                    <div class="progress-container">
+                        <div class="progress-bar" id="progressBar"></div>
+                    </div>
+                    <input type="file" id="fileInput" accept="video/*" />
+                    <div class="dropzone">
+                        <p>Drop video file here or click to select</p>
+                    </div>
                 </div>
-                <div class="info-row">
-                    <span class="info-label">File Size:</span>
-                    <span id="fileSizeInfo">0 bytes</span>
+                <div class="right-panel">
+                    <div class="status-container">
+                        <div>Frames: <span class="counter-box" id="videoFramesCounter">0</span></div>
+                        <div>QR detected: <span class="counter-box" id="videoQrCounter">0</span></div>
+                        <div>Time: <span class="counter-box" id="videoTimeDisplay">0.0s</span></div>
+                    </div>
+                    <div class="grid" id="videoGrid"></div>
+                    <div class="log" id="videoLog"></div>
                 </div>
-                <div class="info-row">
-                    <span class="info-label">Total Sets:</span>
-                    <span id="totalSetsInfo">0</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Total Chunks:</span>
-                    <span id="totalChunksInfo">0</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Recovery Status:</span>
-                    <span id="recoveryStatusInfo">Not started</span>
-                </div>
-                <h4>Set Status</h4>
-                <div class="info-grid" id="setGrid"></div>
             </div>
-
-            <div id="logPanel"></div>
         </div>
     </div>
 
+    <canvas id="canvas"></canvas>
+
     <script>
         // DOM Elements
-        const video = document.getElementById('video');
-        const frameCanvas = document.getElementById('frameCanvas');
-        const workCanvas = document.getElementById('workCanvas');
-        const currentFrameImg = document.getElementById('currentFrame');
-        const frameOverlay = document.getElementById('frameOverlay');
-        const detectionBox = document.getElementById('detectionBox');
-        const recordingTimer = document.getElementById('recordingTimer');
-        const logPanel = document.getElementById('logPanel');
-        const setGrid = document.getElementById('setGrid');
-        const videoFileInput = document.getElementById('videoFileInput');
-        const processingProgress = document.getElementById('processingProgress');
-        const processingProgressText = document.getElementById('processingProgressText');
-        const urlInputContainer = document.getElementById('urlInputContainer');
-        const videoUrlInput = document.getElementById('videoUrlInput');
-        const fetchUrlBtn = document.getElementById('fetchUrlBtn');
-
-        // Info elements
-        const fileNameInfo = document.getElementById('fileNameInfo');
-        const fileSizeInfo = document.getElementById('fileSizeInfo');
-        const totalSetsInfo = document.getElementById('totalSetsInfo');
-        const totalChunksInfo = document.getElementById('totalChunksInfo');
-        const recoveryStatusInfo = document.getElementById('recoveryStatusInfo');
-        const framesProcessed = document.getElementById('framesProcessed');
-        const qrCodesFound = document.getElementById('qrCodesFound');
-        const chunksRetrieved = document.getElementById('chunksRetrieved');
-
-        // Buttons
-        const startCameraBtn = document.getElementById('startCameraBtn');
-        const startRecordingBtn = document.getElementById('startRecordingBtn');
-        const stopRecordingBtn = document.getElementById('stopRecordingBtn');
-        const downloadBtn = document.getElementById('downloadBtn');
-        const loadVideoBtn = document.getElementById('loadVideoBtn');
-        const loadUrlBtn = document.getElementById('loadUrlBtn');
-        const startProcessingBtn = document.getElementById('startProcessingBtn');
-        const pauseProcessingBtn = document.getElementById('pauseProcessingBtn');
-        const saveFileBtn = document.getElementById('saveFileBtn');
-
-        // Tab functionality
         const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+        const canvas = document.getElementById('canvas');
+        // Initialize canvas with willReadFrequently to avoid warnings
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        canvas.willReadFrequently = true;
+        
+        // Live tab elements
+        const liveVideo = document.getElementById('liveVideo');
+        const startLiveBtn = document.getElementById('startLiveBtn');
+        const stopLiveBtn = document.getElementById('stopLiveBtn');
+        const liveGrid = document.getElementById('liveGrid');
+        const liveLog = document.getElementById('liveLog');
+        const liveFramesCounter = document.getElementById('liveFramesCounter');
+        const liveQrCounter = document.getElementById('liveQrCounter');
+        
+        // Video tab elements
+        const processingVideo = document.getElementById('processingVideo');
+        const openVideoBtn = document.getElementById('openVideoBtn');
+        const processVideoBtn = document.getElementById('processVideoBtn');
+        const stopProcessingBtn = document.getElementById('stopProcessingBtn');
+        const fileInput = document.getElementById('fileInput');
+        const dropzone = document.querySelector('.dropzone');
+        const videoGrid = document.getElementById('videoGrid');
+        const videoLog = document.getElementById('videoLog');
+        const progressBar = document.getElementById('progressBar');
+        const videoFramesCounter = document.getElementById('videoFramesCounter');
+        const videoQrCounter = document.getElementById('videoQrCounter');
+        const videoTimeDisplay = document.getElementById('videoTimeDisplay');
+
+        // State variables
+        let liveStream = null;
+        let isLiveScanning = false;
+        let isProcessingVideo = false;
+        let currentProcessingFrame = 0;
+        let totalFrames = 0;
+        let capturedFramesCount = 0;
+        let framesCapturedWithQR = 0;
+        let isWaitingForSeek = false;
+        let lastSeekTime = 0;
+        
+        // Data storage
+        let startReceived = false;
+        let totalFramesExpected = 0;
+        let fileName = '';
+        let fileSize = 0;
+        let framesData = [];
+        let framesReceived = [];
+        let lastQrData = null;
+        let lastQrTime = 0;
+        let logMessages = {
+            live: [],
+            video: []
+        };
+
+        // Tab switching
         tabs.forEach(tab => {
             tab.addEventListener('click', () => {
-                const previousTab = document.querySelector('.tab.active').dataset.tab;
-                const newTab = tab.dataset.tab;
+                const tabName = tab.dataset.tab;
                 
+                // Update active tab
                 tabs.forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
-
-                const tabContents = document.querySelectorAll('.tab-content');
-                tabContents.forEach(content => {
-                    content.classList.remove('active');
-                });
-
-                const targetContent = document.querySelector(`.tab-content[data-tab-content="${tab.dataset.tab}"]`);
-                targetContent.classList.add('active');
                 
-                // Clean up resources when switching tabs - important for memory management
-                if (previousTab === 'capture' && newTab === 'process') {
-                    // Switching from capture to process - stop camera to free resources
-                    if (mediaStream) {
-                        stopRecording();
-                        mediaStream.getTracks().forEach(track => track.stop());
-                        mediaStream = null;
-                        log('Camera stopped to free resources');
-                    }
-                } else if (previousTab === 'process' && newTab === 'capture') {
-                    // Switching from process to capture - clean up video resources
-                    if (isProcessing) {
-                        togglePauseProcessing(); // Pause processing
-                    }
-                    cleanupVideoResources();
+                // Update active content
+                tabContents.forEach(content => content.classList.remove('active'));
+                document.getElementById(`${tabName}-tab`).classList.add('active');
+                
+                // Stop any active processes when switching tabs
+                if (tabName === 'live' && isProcessingVideo) {
+                    stopVideoProcessing();
+                } else if (tabName === 'video' && isLiveScanning) {
+                    stopLiveScanning();
                 }
             });
         });
 
-        // State variables
-        let mediaStream = null;
-        let mediaRecorder = null;
-        let recordedChunks = [];
-        let recordingStartTime = 0;
-        let timerInterval = null;  // Renamed from recordingTimer to avoid conflict
-        let videoBlob = null;
-        let videoObjectURL = null;
-        let isProcessing = false;
-        let processingPaused = false;
-        let videoElement = null;
-        let captureInterval = null;
-
-        // File recovery state
-        let fileMetadata = null;
-        let chunks = {};
-        let sets = {};
-        let processedFrameCount = 0;
-        let detectedQRCount = 0;
-        let retrievedChunkCount = 0;
-
-        // Initialize canvas contexts
-        const frameCtx = frameCanvas.getContext('2d');
-        const workCtx = workCanvas.getContext('2d');
-
-        // Event listeners
-        startCameraBtn.addEventListener('click', startCamera);
-        startRecordingBtn.addEventListener('click', startRecording);
-        stopRecordingBtn.addEventListener('click', stopRecording);
-        downloadBtn.addEventListener('click', downloadRecording);
-        loadVideoBtn.addEventListener('click', () => videoFileInput.click());
-        loadUrlBtn.addEventListener('click', () => {
-            urlInputContainer.style.display = urlInputContainer.style.display === 'none' ? 'block' : 'none';
-        });
-        fetchUrlBtn.addEventListener('click', handleVideoUrlFetch);
-        videoFileInput.addEventListener('change', handleVideoFileSelect);
-        startProcessingBtn.addEventListener('click', startProcessing);
-        pauseProcessingBtn.addEventListener('click', togglePauseProcessing);
-        saveFileBtn.addEventListener('click', saveRecoveredFile);
-
-        // Logging function
-        function log(message) {
-            const timestamp = new Date().toLocaleTimeString();
-            logPanel.textContent += `[${timestamp}] ${message}\n`;
-            logPanel.scrollTop = logPanel.scrollHeight;
+        // Logging functions
+        function showLog(message, type = 'live') {
+            logMessages[type].push(message);
+            const logElement = type === 'live' ? liveLog : videoLog;
+            logElement.textContent = logMessages[type].join('\n');
+            logElement.scrollTop = logElement.scrollHeight;
         }
 
-        function updateProgress(current, total) {
-            const percent = Math.round((current / total) * 100) || 0;
-            processingProgress.style.width = `${percent}%`;
-            processingProgressText.textContent = `${percent}%`;
+        function resetState(type = 'live') {
+            startReceived = false;
+            totalFramesExpected = 0;
+            fileName = '';
+            fileSize = 0;
+            framesData = [];
+            framesReceived = [];
+            lastQrData = null;
+            lastQrTime = 0;
+            
+            if (type === 'live') {
+                stopLiveBtn.disabled = true;
+                startLiveBtn.disabled = false;
+                liveVideo.style.display = 'none';
+                isLiveScanning = false;
+                logMessages.live = [];
+                liveLog.textContent = '';
+                liveGrid.innerHTML = '';
+                capturedFramesCount = 0;
+                framesCapturedWithQR = 0;
+                liveFramesCounter.textContent = '0';
+                liveQrCounter.textContent = '0';
+            } else {
+                processVideoBtn.disabled = true;
+                stopProcessingBtn.disabled = true;
+                currentProcessingFrame = 0;
+                totalFrames = 0;
+                isProcessingVideo = false;
+                progressBar.style.width = '0%';
+                progressBar.textContent = '';
+                logMessages.video = [];
+                videoLog.textContent = '';
+                videoGrid.innerHTML = '';
+                capturedFramesCount = 0;
+                framesCapturedWithQR = 0;
+                videoFramesCounter.textContent = '0';
+                videoQrCounter.textContent = '0';
+            }
         }
 
+        function updateGrid(type = 'live') {
+            const grid = type === 'live' ? liveGrid : videoGrid;
+            grid.innerHTML = '';
+            
+            if (totalFramesExpected <= 0) return;
+            
+            // Add class for very large frame counts
+            if (totalFramesExpected > 1000) {
+                grid.classList.add('large-count');
+            } else {
+                grid.classList.remove('large-count');
+            }
+            
+            // Calculate optimal grid layout based on screen size and frame count
+            const gridWidth = grid.clientWidth;
+            
+            // Adjust cell size based on number of frames
+            let cellSize;
+            if (totalFramesExpected > 5000) {
+                cellSize = 8;  // Tiny cells for massive frame counts
+            } else if (totalFramesExpected > 1000) {
+                cellSize = 10; // Very small cells for large frame counts
+            } else if (totalFramesExpected > 500) {
+                cellSize = 15; // Small cells
+            } else {
+                cellSize = Math.min(30, Math.max(15, Math.floor(gridWidth / 20))); // Dynamic cell size
+            }
+            
+            const columns = Math.floor(gridWidth / cellSize);
+            
+            grid.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
+            grid.style.setProperty('--cell-size', `${cellSize}px`);
+            
+            // Create a document fragment for better performance
+            const fragment = document.createDocumentFragment();
+            
+            // For very large numbers, create group indicators rather than individual cells
+            if (totalFramesExpected > 2000) {
+                // Use a grouped approach for better performance
+                const groupSize = Math.ceil(totalFramesExpected / 500); // About 500 visual elements
+                
+                for (let i = 0; i < totalFramesExpected; i += groupSize) {
+                    const endIdx = Math.min(i + groupSize - 1, totalFramesExpected - 1);
+                    
+                    // Calculate how many frames are received in this group
+                    let receivedInGroup = 0;
+                    for (let j = i; j <= endIdx; j++) {
+                        if (framesReceived[j]) receivedInGroup++;
+                    }
+                    
+                    // Create a group cell
+                    const cell = document.createElement('div');
+                    cell.className = 'grid-cell';
+                    cell.setAttribute('data-start', i + 1);
+                    cell.setAttribute('data-end', endIdx + 1);
+                    
+                    // Calculate completion percentage
+                    const groupCompletionPct = Math.round((receivedInGroup / (endIdx - i + 1)) * 100);
+                    
+                    // Visual styling based on completion
+                    if (receivedInGroup === endIdx - i + 1) {
+                        // Fully complete
+                        cell.classList.add('received');
+                    } else if (receivedInGroup > 0) {
+                        // Partially complete - create a gradient or pattern
+                        cell.style.background = `linear-gradient(to right, #4CAF50 ${groupCompletionPct}%, darkred ${groupCompletionPct}%)`;
+                    }
+                    
+                    // Tooltip shows frame range and completion
+                    cell.setAttribute('title', `Frames ${i+1}-${endIdx+1}: ${receivedInGroup}/${endIdx-i+1} received (${groupCompletionPct}%)`);
+                    
+                    fragment.appendChild(cell);
+                }
+            } else {
+                // Standard approach for reasonable numbers of frames
+                for (let i = 0; i < totalFramesExpected; i++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'grid-cell';
+                    cell.setAttribute('data-index', i + 1);
+                    
+                    // For smaller cells, use a color-only approach
+                    if (cellSize < 20) {
+                        cell.textContent = '';
+                    } else {
+                        cell.textContent = i + 1;
+                    }
+                    
+                    if (framesReceived[i]) {
+                        cell.classList.add('received');
+                    }
+                    
+                    // Add tooltip with frame number
+                    cell.setAttribute('title', `Frame ${i + 1}`);
+                    
+                    // Store cell reference for faster blinking
+                    const cellId = `cell-${type}-${i}`;
+                    cell.id = cellId;
+                    
+                    fragment.appendChild(cell);
+                }
+            }
+            
+            // Append all cells at once
+            grid.appendChild(fragment);
+            
+            // Add counter for missing frames
+            const missingCount = framesReceived.filter(received => !received).length;
+            const statsDiv = document.createElement('div');
+            statsDiv.className = 'grid-stats';
+            
+            // Calculate progress percentage
+            const progressPct = totalFramesExpected > 0 ? 
+                Math.round(((totalFramesExpected - missingCount) / totalFramesExpected) * 100) : 0;
+                
+            statsDiv.innerHTML = `<span class="grid-stats-received">${totalFramesExpected - missingCount}</span>/<span class="grid-stats-total">${totalFramesExpected}</span> frames received (${progressPct}%)`;
+            
+            if (missingCount > 0) {
+                statsDiv.innerHTML += ` <span class="grid-stats-missing">(${missingCount} missing)</span>`;
+            }
+            
+            grid.appendChild(statsDiv);
+        }
+
+        function blinkCell(index, type = 'live') {
+            const grid = type === 'live' ? liveGrid : videoGrid;
+            
+            // Handle grouped cells for large frame counts
+            if (totalFramesExpected > 2000) {
+                // Need to find which group contains this index
+                const groupSize = Math.ceil(totalFramesExpected / 500);
+                const groupIndex = Math.floor(index / groupSize);
+                const groupStartIndex = groupIndex * groupSize;
+                
+                // Find cell by data attributes
+                const cells = grid.querySelectorAll('.grid-cell');
+                let targetCell = null;
+                
+                for (let i = 0; i < cells.length; i++) {
+                    const start = parseInt(cells[i].getAttribute('data-start') || '-1');
+                    const end = parseInt(cells[i].getAttribute('data-end') || '-1');
+                    
+                    if (start <= index + 1 && index + 1 <= end) {
+                        targetCell = cells[i];
+                        break;
+                    }
+                }
+                
+                // If found the group cell, highlight it
+                if (targetCell) {
+                    targetCell.classList.add('blinking');
+                    
+                    // Calculate updated completion for the group
+                    const start = parseInt(targetCell.getAttribute('data-start')) - 1;
+                    const end = parseInt(targetCell.getAttribute('data-end')) - 1;
+                    
+                    // Count received frames in this group
+                    let receivedInGroup = 0;
+                    for (let i = start; i <= end; i++) {
+                        if (framesReceived[i]) receivedInGroup++;
+                    }
+                    
+                    // Calculate completion percentage
+                    const groupCompletionPct = Math.round((receivedInGroup / (end - start + 1)) * 100);
+                    
+                    // Use requestAnimationFrame for better performance
+                    requestAnimationFrame(() => {
+                        setTimeout(() => {
+                            targetCell.classList.remove('blinking');
+                            
+                            // Update cell appearance based on completion
+                            if (receivedInGroup === end - start + 1) {
+                                // Fully complete
+                                targetCell.classList.add('received');
+                                targetCell.style.background = ''; // Remove gradient if exists
+                            } else if (receivedInGroup > 0) {
+                                // Partially complete - update gradient
+                                targetCell.style.background = `linear-gradient(to right, #4CAF50 ${groupCompletionPct}%, darkred ${groupCompletionPct}%)`;
+                            }
+                            
+                            // Update tooltip
+                            targetCell.setAttribute('title', 
+                                `Frames ${start+1}-${end+1}: ${receivedInGroup}/${end-start+1} received (${groupCompletionPct}%)`);
+                                
+                            // Update stats
+                            updateGridStats(type);
+                        }, 200);
+                    });
+                }
+            } else {
+                // Normal individual cell handling
+                const cellId = `cell-${type}-${index}`;
+                const cell = document.getElementById(cellId);
+                
+                if (cell) {
+                    cell.classList.add('blinking');
+                    
+                    // Use requestAnimationFrame for better performance
+                    requestAnimationFrame(() => {
+                        // Add a small delay to make the blink visible
+                        setTimeout(() => {
+                            cell.classList.remove('blinking');
+                            if (framesReceived[index]) {
+                                cell.classList.add('received');
+                            }
+                            
+                            // Update stats
+                            updateGridStats(type);
+                        }, 200);
+                    });
+                }
+            }
+        }
+        
+        // Separate function to update grid stats for better performance
+        function updateGridStats(type) {
+            const grid = type === 'live' ? liveGrid : videoGrid;
+            const statsDiv = grid.querySelector('.grid-stats');
+            
+            if (statsDiv && totalFramesExpected > 0) {
+                const missingCount = framesReceived.filter(received => !received).length;
+                const receivedCount = totalFramesExpected - missingCount;
+                const progressPct = Math.round((receivedCount / totalFramesExpected) * 100);
+                
+                // Update stats with new information
+                const receivedSpan = statsDiv.querySelector('.grid-stats-received');
+                const totalSpan = statsDiv.querySelector('.grid-stats-total');
+                const missingSpan = statsDiv.querySelector('.grid-stats-missing');
+                
+                if (receivedSpan) receivedSpan.textContent = receivedCount;
+                if (totalSpan) totalSpan.textContent = totalFramesExpected;
+                
+                // Update or add progress percentage
+                let pctSpan = statsDiv.querySelector('.progress-pct');
+                if (!pctSpan) {
+                    // First create pct element if it doesn't exist
+                    pctSpan = document.createElement('span');
+                    pctSpan.className = 'progress-pct';
+                    statsDiv.appendChild(pctSpan);
+                }
+                pctSpan.textContent = ` (${progressPct}%)`;
+                
+                // Update missing count
+                if (missingSpan) {
+                    if (missingCount > 0) {
+                        missingSpan.textContent = `(${missingCount} missing)`;
+                        missingSpan.style.display = 'inline';
+                    } else {
+                        missingSpan.style.display = 'none';
+                    }
+                } else if (missingCount > 0) {
+                    const newMissingSpan = document.createElement('span');
+                    newMissingSpan.className = 'grid-stats-missing';
+                    newMissingSpan.textContent = ` (${missingCount} missing)`;
+                    statsDiv.appendChild(newMissingSpan);
+                }
+            }
+        }
+
+        function updateProgressBar(current, total) {
+            if (total <= 0) return;
+            
+            const percent = Math.min(100, Math.round((current / total) * 100));
+            progressBar.style.width = `${percent}%`;
+            progressBar.textContent = `${percent}%`;
+        }
+
+        // Live scanning functions
+        async function startLiveScanning() {
+            try {
+                liveStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' }
+                });
+                
+                liveVideo.srcObject = liveStream;
+                liveVideo.setAttribute('playsinline', 'true');
+                
+                try {
+                    await liveVideo.play();
+                    showLog('Camera started');
+                } catch (err) {
+                    showLog('Play error: ' + err.message + ' - Try tapping screen');
+                    
+                    // Add tap-to-play handler
+                    liveVideo.addEventListener('click', () => {
+                        liveVideo.play().catch(e => showLog('Play failed: ' + e.message));
+                    });
+                }
+                
+                liveVideo.style.display = 'block';
+                isLiveScanning = true;
+                startLiveBtn.disabled = true;
+                stopLiveBtn.disabled = false;
+                
+                showLog('Camera ready, scanning for QR codes...');
+                requestAnimationFrame(scanLiveFrame);
+            } catch (err) {
+                showLog('Error starting camera: ' + err.message);
+            }
+        }
+
+        function stopLiveScanning() {
+            if (liveStream) {
+                liveStream.getTracks().forEach(track => track.stop());
+                liveStream = null;
+            }
+            
+            isLiveScanning = false;
+            showLog('Camera stopped');
+            resetState('live');
+        }
+
+        function scanLiveFrame() {
+            if (!isLiveScanning) return;
+            
+            if (liveVideo.readyState === liveVideo.HAVE_ENOUGH_DATA) {
+                canvas.width = liveVideo.videoWidth;
+                canvas.height = liveVideo.videoHeight;
+                ctx.drawImage(liveVideo, 0, 0);
+                
+                capturedFramesCount++;
+                liveFramesCounter.textContent = capturedFramesCount;
+                
+                try {
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
+                        inversionAttempts: 'attemptBoth', // Try both non-inverted and inverted for better detection
+                        canOverwriteImage: true, // Allow overwriting the image data for performance
+                        maxModuleCount: 177  // Support high capacity QR codes (version 40)
+                    });
+                    
+                    if (qrCode) {
+                        framesCapturedWithQR++;
+                        liveQrCounter.textContent = framesCapturedWithQR;
+                        processQrData(qrCode.data, 'live');
+                    }
+                } catch (err) {
+                    // Silent catch - continue scanning
+                }
+            }
+            
+            requestAnimationFrame(scanLiveFrame);
+        }
+
+        // Video file processing
+        function handleFileInput(file) {
+            if (!file || !file.type.startsWith('video/')) {
+                showLog('Please select a valid video file', 'video');
+                return;
+            }
+            
+            const videoUrl = URL.createObjectURL(file);
+            processingVideo.src = videoUrl;
+            
+            processingVideo.onloadedmetadata = () => {
+                showLog(`Video loaded: ${file.name} (${Math.round(processingVideo.duration)}s)`, 'video');
+                processVideoBtn.disabled = false;
+                dropzone.textContent = file.name;
+            };
+            
+            processingVideo.onerror = () => {
+                showLog(`Error loading video: ${processingVideo.error.message}`, 'video');
+                URL.revokeObjectURL(videoUrl);
+            };
+        }
+
+        // Smart search strategy for finding QR codes in videos
+        let searchPhase = 'initial'; // 'initial', 'binary', 'sequential', 'completion'
+        let binarySearchRanges = []; // Tracks ranges for binary search
+        let foundQRTimeRanges = []; // Track time ranges where QR codes were found
+        let fastForwardMode = false; // Skip ahead when QR codes found
+        let initialSampleRate = 4; // Initial sparse sampling rate (1 frame per x seconds)
+        
+        function startVideoProcessing() {
+            if (!processingVideo.src) {
+                showLog('No video loaded', 'video');
+                return;
+            }
+            
+            resetState('video');
+            isProcessingVideo = true;
+            processVideoBtn.disabled = true;
+            stopProcessingBtn.disabled = false;
+            
+            const duration = processingVideo.duration;
+            
+            // Handle invalid duration more gracefully
+            const validDuration = isFinite(duration) && duration > 0;
+            if (!validDuration) {
+                showLog('Warning: Video has invalid duration (Infinity). Will use time-based processing instead.', 'video');
+                // Don't stop - continue with a default duration for processing
+                const assumedDuration = 3600; // Assume 60 minutes for processing
+                
+                searchPhase = 'sequential';
+                let fps = 15; // Higher frame rate to catch more QR codes
+                totalFrames = 5000; // Process much more frames to ensure we catch all QR codes
+                showLog(`Using time-based processing with ${totalFrames} frames for high density QR code detection`, 'video');
+                currentProcessingFrame = 0;
+                
+                // Set up our own time tracking
+                processingVideo.addEventListener('timeupdate', function() {
+                    videoTimeDisplay.textContent = processingVideo.currentTime.toFixed(1) + 's';
+                });
+                
+                processNextFrameBatch();
+                return;
+            }
+            
+            // Set up search strategy based on video length
+            if (duration > 10 && isFinite(duration)) {
+                // For longer videos, use smart search
+                showLog(`Using smart search strategy for ${duration.toFixed(1)}s video`, 'video');
+                searchPhase = 'initial';
+                
+                // First, do an intensive scan of the first few seconds
+                // This is critical for finding metadata frames which are usually at the start
+                showLog("First performing intensive scan of video beginning to find metadata frames...", 'video');
+                
+                // Create a list of time points focused heavily on the first few seconds
+                const earlyTimePoints = [];
+                
+                // First 10 seconds at very high density (every ~100ms)
+                for (let t = 0; t < Math.min(10, duration); t += 0.1) {
+                    earlyTimePoints.push(t);
+                }
+                
+                // Process these points first
+                processSpecificFrames(earlyTimePoints, () => {
+                    // If we found metadata, skip to processing that region
+                    if (startReceived) {
+                        showLog("Found metadata frame in video beginning! Now searching for all chunks...", 'video');
+                        processFocusedAreas();
+                        return;
+                    }
+                    
+                    // If we didn't find metadata in the beginning, continue with regular search
+                    showLog("No metadata found in video beginning, continuing with full video scan...", 'video');
+                    
+                    // Adjust initial sample rate based on video length
+                    if (duration > 300) { // > 5 minutes
+                        initialSampleRate = 5; // Check every 5 seconds initially (doubled density)
+                    } else if (duration > 120) { // > 2 minutes
+                        initialSampleRate = 3; // Check every 3 seconds initially
+                    } else if (duration > 60) { // > 1 minute
+                        initialSampleRate = 1; // Check every 1 second initially
+                    } else {
+                        initialSampleRate = 0.5; // Check every 0.5 seconds for shorter videos
+                    }
+                    
+                    // Safety check - set upper limit on samples
+                    const MAX_SAMPLES = 5000; // Increased from 1000
+                    const safeInitialSampleRate = Math.max(initialSampleRate, duration / MAX_SAMPLES);
+                    
+                    // Calculate initial sparse sampling
+                    const initialSampleCount = Math.min(MAX_SAMPLES, Math.ceil(duration / safeInitialSampleRate));
+                    totalFrames = initialSampleCount;
+                    
+                    showLog(`Initial scan: ${initialSampleCount} samples at ${safeInitialSampleRate.toFixed(1)}s intervals`, 'video');
+                    
+                    // Set up frames for the initial sparse sampling
+                    currentProcessingFrame = 0;
+                    
+                    // Start with initial sparse sampling to find QR code clusters
+                    processSmartSearch();
+                });
+            } else {
+                // For short videos, use sequential processing
+                searchPhase = 'sequential';
+                let fps = 10; // Default for short videos
+                
+                // Safety check for very long videos
+                if (duration > 3600) { // > 1 hour
+                    fps = 1; // Very sparse sampling for extremely long videos
+                } else if (duration > 600) { // > 10 minutes
+                    fps = 2;
+                }
+                
+                const maxFrames = 10000; // Safety limit
+                totalFrames = Math.min(maxFrames, Math.ceil(duration * fps));
+                
+                showLog(`Sequential processing: ${totalFrames} frames from ${duration.toFixed(1)}s video`, 'video');
+                currentProcessingFrame = 0;
+                processNextFrameBatch();
+            }
+        }
+        
+        // Smart search with adaptive strategy
+        function processSmartSearch() {
+            const duration = processingVideo.duration;
+            
+            // Double-check duration validity
+            if (!isFinite(duration) || duration <= 0) {
+                showLog('Invalid video duration detected in smart search. Switching to sequential processing.', 'video');
+                searchPhase = 'sequential';
+                let fps = 2; // Very conservative framerate
+                totalFrames = 100; // Just process a small number of frames
+                currentProcessingFrame = 0;
+                processNextFrameBatch();
+                return;
+            }
+            
+            if (searchPhase === 'initial') {
+                showLog(`Starting initial sparse sampling phase...`, 'video');
+                
+                // Create a list of frames at reasonable intervals (with safety check for duration)
+                const samples = [];
+                const maxSamples = 1000; // Prevent extremely large arrays
+                const effectiveRate = Math.max(initialSampleRate, duration / maxSamples);
+                
+                for (let time = 0; time < duration; time += effectiveRate) {
+                    samples.push(time);
+                }
+                
+                // Last frame if not included
+                if (samples[samples.length-1] < duration - 1) {
+                    samples.push(duration - 1);
+                }
+                
+                // Process these sample frames
+                processSpecificFrames(samples, () => {
+                    // After initial phase completes
+                    if (startReceived) {
+                        // We found metadata! Move to sequential processing around found areas
+                        searchPhase = 'sequential';
+                        showLog(`Found QR metadata! Switching to sequential processing.`, 'video');
+                        
+                        // If we haven't found all frames yet, determine processing range
+                        const missingFrames = framesReceived.filter(received => !received).length;
+                        
+                        if (missingFrames > 0) {
+                            // Focus on processing promising areas
+                            let minTime = duration;
+                            let maxTime = 0;
+                            
+                            // Find time range where QR codes were detected
+                            foundQRTimeRanges.forEach(range => {
+                                minTime = Math.min(minTime, range.start);
+                                maxTime = Math.max(maxTime, range.end);
+                            });
+                            
+                            // Add buffer zones (10% of duration on either side)
+                            const buffer = Math.min(10, duration * 0.1);
+                            minTime = Math.max(0, minTime - buffer);
+                            maxTime = Math.min(duration, maxTime + buffer);
+                            
+                            showLog(`Processing focused time range: ${minTime.toFixed(1)}s to ${maxTime.toFixed(1)}s`, 'video');
+                            processTimeRange(minTime, maxTime);
+                        }
+                    } else {
+                        // No metadata found yet, switch to binary search
+                        searchPhase = 'binary';
+                        showLog(`No QR metadata found in sparse sampling. Switching to binary search.`, 'video');
+                        
+                        // Set up binary search on the entire video
+                        binarySearchRanges = [{start: 0, end: duration, depth: 0}];
+                        processBinarySearchRanges();
+                    }
+                });
+            } else if (searchPhase === 'binary') {
+                processBinarySearchRanges();
+            }
+        }
+        
+        // Process a specific list of timestamps with batch processing for large arrays
+        function processSpecificFrames(timePoints, onComplete) {
+            // Process in smaller batches to avoid stack overflow
+            const BATCH_SIZE = 100;
+            let currentBatch = 0;
+            const totalBatches = Math.ceil(timePoints.length / BATCH_SIZE);
+            
+            function processBatch(batchIndex) {
+                if (batchIndex >= totalBatches || !isProcessingVideo) {
+                    if (onComplete) onComplete();
+                    return;
+                }
+                
+                const startIndex = batchIndex * BATCH_SIZE;
+                const endIndex = Math.min((batchIndex + 1) * BATCH_SIZE, timePoints.length);
+                const currentBatchPoints = timePoints.slice(startIndex, endIndex);
+                
+                // Process this batch of points
+                let pointIndex = 0;
+                
+                function processNextPoint() {
+                    if (pointIndex >= currentBatchPoints.length || !isProcessingVideo) {
+                        // This batch is done, move to next batch
+                        setTimeout(() => {
+                            processBatch(batchIndex + 1);
+                        }, 50);
+                        return;
+                    }
+                    
+                    const time = currentBatchPoints[pointIndex];
+                    processingVideo.currentTime = time;
+                    
+                    processingVideo.onseeked = () => {
+                        try {
+                            // Process the current frame
+                            captureAndProcessFrame(time);
+                            
+                            // Update progress based on overall position
+                            const overallIndex = startIndex + pointIndex;
+                            updateProgressBar(overallIndex + 1, timePoints.length);
+                            
+                            // Check if we should fast-forward based on QR detection
+                            if (startReceived && fastForwardMode) {
+                                // Check if we've found all frames
+                                const missingFrames = framesReceived.filter(received => !received).length;
+                                if (missingFrames === 0) {
+                                    showLog(`All frames found! Completing processing.`, 'video');
+                                    if (onComplete) onComplete();
+                                    return;
+                                }
+                            }
+                            
+                            // Move to next point
+                            pointIndex++;
+                            
+                            // Continue to next frame with slight delay
+                            setTimeout(processNextPoint, 30);
+                        } catch (err) {
+                            showLog(`Error processing frame at ${time}s: ${err.message}`, 'video');
+                            // Move to next point even if there's an error
+                            pointIndex++;
+                            setTimeout(processNextPoint, 30);
+                        }
+                    };
+                }
+                
+                // Start processing this batch
+                processNextPoint();
+            }
+            
+            // Start with the first batch
+            processBatch(0);
+        }
+        
+        // Process a specific time range with a given frames per second
+        function processTimeRange(startTime, endTime, fps = 10) {
+            const duration = endTime - startTime;
+            const framesToProcess = Math.ceil(duration * fps);
+            
+            const timePoints = [];
+            for (let i = 0; i < framesToProcess; i++) {
+                const time = startTime + (i * duration) / framesToProcess;
+                timePoints.push(time);
+            }
+            
+            showLog(`Processing ${framesToProcess} frames in time range ${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s`, 'video');
+            processSpecificFrames(timePoints, () => {
+                // Check if we've found all frames
+                if (startReceived) {
+                    const missingFrames = framesReceived.filter(received => !received).length;
+                    
+                    if (missingFrames === 0) {
+                        showLog(`All frames found! Processing complete.`, 'video');
+                        assembleAndDownloadFile('video');
+                    } else {
+                        showLog(`Still missing ${missingFrames} frames after focused processing.`, 'video');
+                        // Try processing the entire video at a lower frame rate
+                        processEntireVideoAtLowerRate();
+                    }
+                } else {
+                    showLog(`No QR metadata found in focused processing.`, 'video');
+                    // Try processing the entire video at a lower frame rate
+                    processEntireVideoAtLowerRate();
+                }
+            });
+        }
+        
+        // Process binary search ranges
+        function processBinarySearchRanges() {
+            if (binarySearchRanges.length === 0 || !isProcessingVideo) {
+                // No more ranges to process - move to sequential processing
+                searchPhase = 'sequential';
+                showLog(`Binary search complete. Processing entire video.`, 'video');
+                processEntireVideoAtLowerRate();
+                return;
+            }
+            
+            // Sort ranges by depth (process shallow depths first)
+            binarySearchRanges.sort((a, b) => a.depth - b.depth);
+            
+            // Get next range to process
+            const range = binarySearchRanges.shift();
+            const midPoint = (range.start + range.end) / 2;
+            
+            // Sample points within this range (start, mid, end)
+            const samplePoints = [
+                range.start, 
+                midPoint - (range.end - range.start) / 4,
+                midPoint,
+                midPoint + (range.end - range.start) / 4,
+                range.end
+            ].filter((value, index, self) => {
+                // Remove duplicates and ensure all points are within video duration
+                return self.indexOf(value) === index && value >= 0 && value <= processingVideo.duration;
+            });
+            
+            showLog(`Binary search at depth ${range.depth}: ${range.start.toFixed(1)}s - ${range.end.toFixed(1)}s`, 'video');
+            
+            processSpecificFrames(samplePoints, () => {
+                if (startReceived) {
+                    // We found metadata! Move to sequential processing
+                    searchPhase = 'sequential';
+                    showLog(`Found QR metadata! Switching to sequential processing.`, 'video');
+                    
+                    // Focus on found areas
+                    processFocusedAreas();
+                } else if (range.end - range.start > 10 && range.depth < 3) {
+                    // If range is still large and we're not too deep, create sub-ranges
+                    const newDepth = range.depth + 1;
+                    binarySearchRanges.push(
+                        {start: range.start, end: midPoint, depth: newDepth},
+                        {start: midPoint, end: range.end, depth: newDepth}
+                    );
+                    processBinarySearchRanges();
+                } else {
+                    // Continue with the next range
+                    processBinarySearchRanges();
+                }
+            });
+        }
+        
+        // Process focused areas where QR codes were found
+        function processFocusedAreas() {
+            if (foundQRTimeRanges.length === 0) {
+                // No focused areas found, process the entire video
+                processEntireVideoAtLowerRate();
+                return;
+            }
+            
+            // Merge overlapping ranges
+            foundQRTimeRanges.sort((a, b) => a.start - b.start);
+            const mergedRanges = [foundQRTimeRanges[0]];
+            
+            for (let i = 1; i < foundQRTimeRanges.length; i++) {
+                const currentRange = foundQRTimeRanges[i];
+                const lastRange = mergedRanges[mergedRanges.length - 1];
+                
+                // Add buffer for merging (2 second buffer)
+                if (currentRange.start <= lastRange.end + 2) {
+                    // Merge ranges
+                    lastRange.end = Math.max(lastRange.end, currentRange.end);
+                } else {
+                    // Add as new range
+                    mergedRanges.push(currentRange);
+                }
+            }
+            
+            // Process each merged range with a higher frame rate
+            let rangeIndex = 0;
+            
+            function processNextRange() {
+                if (rangeIndex >= mergedRanges.length || !isProcessingVideo) {
+                    // All ranges processed
+                    if (startReceived) {
+                        const missingFrames = framesReceived.filter(received => !received).length;
+                        if (missingFrames === 0) {
+                            showLog(`All frames found! Processing complete.`, 'video');
+                            assembleAndDownloadFile('video');
+                        } else {
+                            showLog(`Still missing ${missingFrames} frames after focused processing.`, 'video');
+                            processEntireVideoAtLowerRate();
+                        }
+                    } else {
+                        processEntireVideoAtLowerRate();
+                    }
+                    return;
+                }
+                
+                const range = mergedRanges[rangeIndex];
+                showLog(`Processing focused range ${rangeIndex+1}/${mergedRanges.length}: ${range.start.toFixed(1)}s - ${range.end.toFixed(1)}s`, 'video');
+                
+                // Process this range with a higher frame rate (15fps)
+                processTimeRange(range.start, range.end, 15);
+                rangeIndex++;
+                processNextRange();
+            }
+            
+            processNextRange();
+        }
+        
+        // Process the entire video at an appropriate frame rate
+        function processEntireVideoAtLowerRate() {
+            const duration = processingVideo.duration;
+            
+            // Use higher frame rates for dense QR code videos
+            // Dynamically adjust based on what we already found
+            let fps;
+            
+            if (framesCapturedWithQR > 0 && capturedFramesCount > 0) {
+                // Calculate QR density from what we've seen so far
+                const qrDensity = framesCapturedWithQR / capturedFramesCount;
+                
+                if (qrDensity > 0.3) {
+                    // Many QR codes found - high density video (likely 30fps QR transmission)
+                    fps = Math.min(25, Math.max(20, Math.floor(qrDensity * 50)));
+                    showLog(`High QR density detected (${Math.round(qrDensity*100)}%), using ${fps} fps processing rate`, 'video');
+                } else if (qrDensity > 0.1) {
+                    // Medium density
+                    fps = 15;
+                } else {
+                    // Low density, but still found some QR codes
+                    fps = 8;
+                }
+            } else {
+                // Default if we don't have data yet
+                fps = duration > 300 ? 5 : duration > 60 ? 10 : 15;
+            }
+            
+            // Calculate frames but avoid extreme values
+            const maxFrames = 50000; // Allow up to 50,000 frames for very dense videos
+            totalFrames = Math.min(maxFrames, Math.ceil(duration * fps));
+            currentProcessingFrame = 0;
+            
+            showLog(`Processing entire video at ${fps} fps (${totalFrames} total frames) to find all QR codes`, 'video');
+            processNextFrameBatch();
+        }
+        
+        // Capture and process a single frame at the current time position
+        function captureAndProcessFrame(timePosition) {
+            canvas.width = processingVideo.videoWidth;
+            canvas.height = processingVideo.videoHeight;
+            ctx.drawImage(processingVideo, 0, 0);
+            
+            capturedFramesCount++;
+            videoFramesCounter.textContent = capturedFramesCount;
+            
+            try {
+                // Fix for "Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true"
+                if (!canvas.willReadFrequently) {
+                    canvas.willReadFrequently = true;
+                    // Re-create the context with the new attribute
+                    ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    // Redraw the current frame after updating context
+                    ctx.drawImage(processingVideo, 0, 0);
+                }
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                
+                // Use optimized parameters for QR detection based on size
+                // For larger QRs coming from the encoder at maximum size (500px)
+                const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
+                    inversionAttempts: 'attemptBoth', // Try both non-inverted and inverted for better detection
+                    canOverwriteImage: true, // Allow overwriting the image data for performance
+                    maxModuleCount: 177  // Support high capacity QR codes (version 40)
+                });
+                
+                if (qrCode) {
+                    // Mark this frame on the video preview
+                    ctx.strokeStyle = 'lime';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(qrCode.location.topLeftCorner.x, qrCode.location.topLeftCorner.y);
+                    ctx.lineTo(qrCode.location.topRightCorner.x, qrCode.location.topRightCorner.y);
+                    ctx.lineTo(qrCode.location.bottomRightCorner.x, qrCode.location.bottomRightCorner.y);
+                    ctx.lineTo(qrCode.location.bottomLeftCorner.x, qrCode.location.bottomLeftCorner.y);
+                    ctx.lineTo(qrCode.location.topLeftCorner.x, qrCode.location.topLeftCorner.y);
+                    ctx.stroke();
+                    
+                    // Process the QR data
+                    framesCapturedWithQR++;
+                    videoQrCounter.textContent = framesCapturedWithQR;
+                    
+                    // Store time position where QR was found (with safe handling)
+                    try {
+                        foundQRTimeRanges.push({
+                            start: Math.max(0, timePosition - 2), // 2 sec buffer before
+                            end: Math.min(processingVideo.duration, timePosition + 2) // 2 sec buffer after
+                        });
+                    } catch (e) {
+                        showLog(`Warning: Could not store QR time range: ${e.message}`, 'video');
+                        // If array is getting too large, consolidate ranges to avoid errors
+                        if (foundQRTimeRanges.length > 500) {
+                            const mergedRanges = [];
+                            let lastRange = null;
+                            
+                            // Simple consolidation by merging adjacent ranges
+                            foundQRTimeRanges.sort((a, b) => a.start - b.start).forEach(range => {
+                                if (!lastRange) {
+                                    lastRange = {...range};
+                                    mergedRanges.push(lastRange);
+                                } else if (range.start <= lastRange.end + 4) {
+                                    // Merge with previous range
+                                    lastRange.end = Math.max(lastRange.end, range.end);
+                                } else {
+                                    // New separate range
+                                    lastRange = {...range};
+                                    mergedRanges.push(lastRange);
+                                }
+                            });
+                            
+                            foundQRTimeRanges = mergedRanges;
+                            showLog(`Consolidated ${foundQRTimeRanges.length} time ranges to avoid memory issues`, 'video');
+                        }
+                    }
+                    
+                    processQrData(qrCode.data, 'video');
+                }
+            } catch (err) {
+                // Silent catch - continue processing
+            }
+        }
+
+        function stopVideoProcessing() {
+            isProcessingVideo = false;
+            processVideoBtn.disabled = false;
+            stopProcessingBtn.disabled = true;
+            showLog('Processing stopped', 'video');
+        }
+
+        function processNextFrameBatch() {
+            if (!isProcessingVideo) return;
+            
+            // Calculate dynamic batch size based on performance and video characteristics
+            // Use larger batches for videos with fewer found QRs to speed up processing
+            let batchSize;
+            if (capturedFramesCount > 0) {
+                const qrRatio = framesCapturedWithQR / capturedFramesCount;
+                if (qrRatio > 0.5) {
+                    // High QR density - use smaller batches to process more carefully
+                    batchSize = 10;
+                } else if (qrRatio > 0.1) {
+                    // Medium QR density - moderate batch size
+                    batchSize = 20;
+                } else {
+                    // Low QR density - process more frames at once
+                    batchSize = 50;
+                }
+            } else {
+                // No data yet - start with moderate batch size
+                batchSize = 25;
+            }
+            
+            // Handle very large videos by ensuring reasonable progress
+            if (totalFrames > 10000) {
+                batchSize = Math.max(batchSize, Math.floor(totalFrames / 500)); // At least 500 batches
+            }
+            
+            const startFrame = currentProcessingFrame;
+            const endFrame = Math.min(startFrame + batchSize, totalFrames);
+            
+            if (startFrame % 20 === 0 || startFrame === 0) {
+                showLog(`Processing frames ${startFrame+1} to ${endFrame} of ${totalFrames}`, 'video');
+            }
+            
+            // For videos with Infinity duration, use time-based increments
+            if (!isFinite(processingVideo.duration) || processingVideo.duration <= 0) {
+                // Update time display
+                videoTimeDisplay.textContent = processingVideo.currentTime.toFixed(1) + 's';
+                
+                // For Infinity duration, use time increments instead of duration-based calculations
+                processingVideo.currentTime += 1; // Move forward 1 second
+                
+                // Use requestAnimationFrame instead of nested setTimeout
+                requestAnimationFrame(() => {
+                    captureAndProcessFrame(processingVideo.currentTime);
+                    currentProcessingFrame++;
+                    updateProgressBar(currentProcessingFrame, totalFrames);
+                    requestAnimationFrame(processNextFrameBatch);
+                });
+                return;
+            }
+            
+            processingVideo.onseeked = () => {
+                isWaitingForSeek = false; // Clear the seek waiting flag
+                
+                // Create and initialize context with willReadFrequently only once
+                if (!canvas.willReadFrequently) {
+                    // Set canvas size
+                    canvas.width = processingVideo.videoWidth;
+                    canvas.height = processingVideo.videoHeight;
+                    // Create optimized context for frequent pixel reading
+                    ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    canvas.willReadFrequently = true;
+                }
+                
+                // Process the current frame
+                ctx.drawImage(processingVideo, 0, 0);
+                
+                capturedFramesCount++;
+                videoFramesCounter.textContent = capturedFramesCount;
+                
+                try {
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    
+                    // Use a Web Worker for QR detection if supported
+                    // This is a fallback using direct detection when workers aren't available
+                    const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
+                        inversionAttempts: 'dontInvert'
+                    });
+                    
+                    if (qrCode) {
+                        // Mark this frame on the video preview
+                        ctx.strokeStyle = 'lime';
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        ctx.moveTo(qrCode.location.topLeftCorner.x, qrCode.location.topLeftCorner.y);
+                        ctx.lineTo(qrCode.location.topRightCorner.x, qrCode.location.topRightCorner.y);
+                        ctx.lineTo(qrCode.location.bottomRightCorner.x, qrCode.location.bottomRightCorner.y);
+                        ctx.lineTo(qrCode.location.bottomLeftCorner.x, qrCode.location.bottomLeftCorner.y);
+                        ctx.lineTo(qrCode.location.topLeftCorner.x, qrCode.location.topLeftCorner.y);
+                        ctx.stroke();
+                        
+                        // Process the QR data
+                        framesCapturedWithQR++;
+                        videoQrCounter.textContent = framesCapturedWithQR;
+                        processQrData(qrCode.data, 'video');
+                        
+                        // Store time range where QR was found for better future processing
+                        try {
+                            foundQRTimeRanges.push({
+                                start: Math.max(0, processingVideo.currentTime - 0.5),
+                                end: Math.min(processingVideo.duration, processingVideo.currentTime + 0.5)
+                            });
+                        } catch(e) {
+                            console.error("Error storing QR time range:", e);
+                        }
+                    }
+                } catch (err) {
+                    // Log error but continue processing
+                    console.error("Error processing frame:", err);
+                }
+                
+                // Move to next frame
+                currentProcessingFrame++;
+                updateProgressBar(currentProcessingFrame, totalFrames);
+                
+                // Use requestAnimationFrame for better performance and to avoid setTimeout violations
+                if (currentProcessingFrame < endFrame && isProcessingVideo) {
+                    // Process next frame in the current batch using requestAnimationFrame
+                    requestAnimationFrame(() => seekToFrame(currentProcessingFrame));
+                } else if (currentProcessingFrame < totalFrames && isProcessingVideo) {
+                    // Process next batch
+                    requestAnimationFrame(processNextFrameBatch);
+                } else {
+                    // Done processing
+                    if (isProcessingVideo) {
+                        showLog('Video processing complete', 'video');
+                        stopVideoProcessing();
+                        
+                        // Update completion stats
+                        showLog(`Processed ${capturedFramesCount} frames, found QR codes in ${framesCapturedWithQR} frames`, 'video');
+                        
+                        // Check if we found all frames
+                        if (startReceived && framesReceived.every(Boolean)) {
+                            assembleAndDownloadFile('video');
+                        } else if (startReceived) {
+                            const missingFrames = framesReceived
+                                .map((received, i) => received ? null : i + 1)
+                                .filter(Boolean);
+                            
+                            if (missingFrames.length > 20) {
+                                showLog(`Missing ${missingFrames.length} frames`, 'video');
+                            } else {
+                                showLog(`Missing frames: ${missingFrames.join(', ')}`, 'video');
+                            }
+                            
+                            // Offer to continue processing if we haven't processed the whole video
+                            if (currentProcessingFrame < totalFrames - 1) {
+                                showLog('Continuing to process more frames to find missing QR codes...', 'video');
+                                requestAnimationFrame(() => {
+                                    if (isProcessingVideo) return; // Already restarted
+                                    startVideoProcessing();
+                                });
+                            } else {
+                                showLog('Processed all frames but still missing some QR codes.', 'video');
+                                showLog('Try playing the video manually to catch missing frames.', 'video');
+                            }
+                        }
+                    }
+                }
+            };
+            
+            // Start processing by seeking to the first frame in the batch
+            isWaitingForSeek = true;
+            lastSeekTime = Date.now();
+            seekToFrame(startFrame);
+            
+            // Safety check to prevent getting stuck
+            // If seek operation doesn't complete within 2 seconds, force continue
+            setTimeout(() => {
+                if (isWaitingForSeek && Date.now() - lastSeekTime > 2000) {
+                    showLog(`Seek timeout at frame ${currentProcessingFrame}, forcing continue`, 'video');
+                    isWaitingForSeek = false;
+                    currentProcessingFrame++;
+                    
+                    if (currentProcessingFrame < totalFrames && isProcessingVideo) {
+                        setTimeout(processNextFrameBatch, 10);
+                    } else {
+                        showLog('Video processing complete (with timeouts)', 'video');
+                        stopVideoProcessing();
+                    }
+                }
+            }, 2000);
+        }
+
+        function seekToFrame(frameIndex) {
+            // Check if we need to prioritize areas where QR codes were already found
+            if (foundQRTimeRanges.length > 0 && frameIndex > totalFrames * 0.3) {
+                // After processing 30% of the video normally, start focusing on promising areas
+                
+                // Check if we're in a batch that should prioritize QR areas
+                if (frameIndex % 20 === 0) { // Every 20 frames
+                    // Find closest QR range to current position
+                    const currentTime = (frameIndex * processingVideo.duration) / totalFrames;
+                    let bestRange = null;
+                    let bestDistance = Infinity;
+                    
+                    for (const range of foundQRTimeRanges) {
+                        const midpoint = (range.start + range.end) / 2;
+                        const distance = Math.abs(midpoint - currentTime);
+                        
+                        if (distance < bestDistance) {
+                            bestDistance = distance;
+                            bestRange = range;
+                        }
+                    }
+                    
+                    // If we found a close range, bias our next several frames toward it
+                    if (bestRange && bestDistance < processingVideo.duration / 4) {
+                        // Calculate a time within this range
+                        const rangeWidth = bestRange.end - bestRange.start;
+                        const positionInRange = (frameIndex % 10) / 10; // Position 0-1 within range
+                        const targetTime = bestRange.start + (rangeWidth * positionInRange);
+                        
+                        // Use this target time with small jitter
+                        const jitter = Math.random() * 0.03;
+                        processingVideo.currentTime = Math.min(
+                            targetTime + jitter, 
+                            processingVideo.duration - 0.1
+                        );
+                        
+                        if (frameIndex % 10 === 0) {
+                            showLog(`Focusing on QR region at ${processingVideo.currentTime.toFixed(2)}s`, 'video');
+                        }
+                        return;
+                    }
+                }
+            }
+            
+            // Normal timestamp calculation with adaptive frame rate
+            let time;
+            
+            // Use smart distribution of frames - more at the beginning, fewer later
+            if (frameIndex < totalFrames * 0.5) {
+                // First half of frames: normal distribution
+                time = (frameIndex * processingVideo.duration) / totalFrames;
+            } else {
+                // Second half: exponential distribution to focus more on beginning
+                const factor = 1 + (frameIndex / totalFrames) * 2;
+                time = (frameIndex * processingVideo.duration) / (totalFrames * factor);
+            }
+            
+            // Add a small random offset to avoid getting stuck on the same frame
+            const randomOffset = Math.random() * 0.05; // Up to 50ms jitter
+            
+            // Validate the time to prevent non-finite error
+            if (isFinite(time) && time >= 0 && time <= processingVideo.duration) {
+                // Ensure we don't exceed video duration
+                const safeTime = Math.min(time + randomOffset, processingVideo.duration - 0.1);
+                processingVideo.currentTime = safeTime;
+                
+                // Log frame position for debugging
+                if (frameIndex % 50 === 0) {
+                    showLog(`Seeking to frame ${frameIndex}: ${safeTime.toFixed(2)}s`, 'video');
+                }
+            } else {
+                console.warn(`Invalid time value: ${time}, using 0 instead`);
+                processingVideo.currentTime = 0;
+            }
+        }
+
+        // QR code data processing
+        function processQrData(data, type = 'live') {
+            const now = Date.now();
+            
+            // More intelligent debounce for QR processing
+            // Allow re-processing of the same code after a longer time
+            // but immediately accept new codes
+            let isRepeat = false;
+            if (data === lastQrData) {
+                // For very short intervals, always debounce
+                if (now - lastQrTime < 300) {
+                    return;
+                }
+                // For medium intervals, only accept critical frames (metadata/set headers) 
+                if (now - lastQrTime < 2000) {
+                    try {
+                        const temp = JSON.parse(data);
+                        if (temp.type !== "metadata" && temp.type !== "set_header") {
+                            isRepeat = true;
+                        }
+                    } catch(e) {
+                        // If we can't parse, treat as duplicate
+                        isRepeat = true;
+                    }
+                    
+                    if (isRepeat) {
+                        return;
+                    }
+                }
+                // After 2 seconds, always process even if repeated
+            }
+            
+            lastQrData = data;
+            lastQrTime = now;
+            
+            try {
+                let jsonData;
+                try {
+                    jsonData = JSON.parse(data);
+                } catch (err) {
+                    // Attempt to extract JSON from any wrapping text
+                    const jsonMatch = data.match(/\{.*\}/);
+                    if (jsonMatch) {
+                        try {
+                            jsonData = JSON.parse(jsonMatch[0]);
+                        } catch (e) {
+                            return; // Still not valid JSON, ignore
+                        }
+                    } else {
+                        return; // Not valid JSON, ignore
+                    }
+                }
+                
+                // Process different QR data formats
+                
+                // Modern format (metadata, set_header, chunk, end)
+                if (jsonData.type) {
+                    if (jsonData.type === "metadata") {
+                        // Log this important event prominently
+                        showLog(`🎯 METADATA FRAME DETECTED! File: ${jsonData.file_name || "unknown"}`, type);
+                        
+                        startReceived = true;
+                        
+                        // Calculate total chunks from various possible formats
+                        let totalChunks = 0;
+                        
+                        if (jsonData.total_chunks) {
+                            // Direct total chunks field
+                            totalChunks = jsonData.total_chunks;
+                        } else if (jsonData.total_sets && jsonData.chunks_per_set) {
+                            // Calculate from sets and chunks per set
+                            totalChunks = jsonData.total_sets * jsonData.chunks_per_set;
+                        } else if (jsonData.file_size && (jsonData.chunk_size || jsonData.bytes_per_chunk)) {
+                            // Calculate from file size and chunk size
+                            const chunkSize = jsonData.chunk_size || jsonData.bytes_per_chunk || 500;
+                            totalChunks = Math.ceil(jsonData.file_size / (chunkSize * 0.75)); // Approximate for base64 expansion
+                        }
+                        
+                        totalFramesExpected = totalChunks || 0;
+                        fileName = jsonData.file_name || "file.dat";
+                        fileSize = jsonData.file_size || 0;
+                        
+                        // Initialize data structures with the correct size
+                        framesData = Array(totalFramesExpected).fill('');
+                        framesReceived = Array(totalFramesExpected).fill(false);
+                        
+                        // Detailed log with all available information
+                        showLog(`Metadata details: ${fileName}, ${totalFramesExpected} chunks, size: ${formatFileSize(fileSize)}`, type);
+                        if (jsonData.total_sets) {
+                            showLog(`Organization: ${jsonData.total_sets} sets with ${jsonData.chunks_per_set} chunks per set`, type);
+                        }
+                        
+                        // Update visual display
+                        updateGrid(type);
+                    }
+                    else if (jsonData.type === "chunk" && startReceived) {
+                        // Calculate global chunk index
+                        let chunkIndex = -1;
+                        
+                        if (jsonData.chunk_index && jsonData.set_index) {
+                            // Format with set_index and chunk_index
+                            const setIndex = jsonData.set_index - 1; // 1-indexed to 0-indexed
+                            const localChunkIndex = jsonData.chunk_index - 1; // 1-indexed to 0-indexed
+                            const chunksPerSet = jsonData.chunks_in_set || 50; // Default from encoder
+                            
+                            chunkIndex = (setIndex * chunksPerSet) + localChunkIndex;
+                        } else if (jsonData.chunk_index) {
+                            // Simple format with just chunk_index
+                            chunkIndex = jsonData.chunk_index - 1; // 1-indexed to 0-indexed
+                        }
+                        
+                        // Process the chunk if valid index
+                        if (chunkIndex >= 0 && chunkIndex < totalFramesExpected) {
+                            blinkCell(chunkIndex, type);
+                            
+                            if (!framesReceived[chunkIndex]) {
+                                framesData[chunkIndex] = jsonData.data || '';
+                                framesReceived[chunkIndex] = true;
+                                
+                                const chunkSize = jsonData.data ? jsonData.data.length : 0;
+                                showLog(`Chunk ${chunkIndex + 1}/${totalFramesExpected} received (${chunkSize} chars)`, type);
+                                
+                                // Only update grid occasionally for performance
+                                if (chunkIndex % 5 === 0) {
+                                    updateGrid(type);
+                                }
+                                
+                                // Check if all frames received
+                                const missingCount = framesReceived.filter(received => !received).length;
+                                const receivedCount = totalFramesExpected - missingCount;
+                                
+                                if (receivedCount === totalFramesExpected) {
+                                    showLog('💯 All chunks received!', type);
+                                    updateGrid(type); // Final update
+                                    
+                                    if (type === 'live') {
+                                        assembleAndDownloadFile(type);
+                                    }
+                                } else if (receivedCount % 10 === 0) {
+                                    // Log progress at regular intervals
+                                    showLog(`Progress: ${receivedCount}/${totalFramesExpected} chunks (${Math.round(receivedCount/totalFramesExpected*100)}%)`, type);
+                                }
+                            }
+                        }
+                    }
+                }
+                // Legacy/old format (marker-based)
+                else if (jsonData.marker) {
+                    // Process start marker
+                    if (jsonData.marker === "###QRSTART###" && !startReceived) {
+                        startReceived = true;
+                        totalFramesExpected = jsonData.frames;
+                        fileName = jsonData.file;
+                        fileSize = jsonData.size || 0;
+                        
+                        framesData = Array(totalFramesExpected).fill('');
+                        framesReceived = Array(totalFramesExpected).fill(false);
+                        
+                        showLog(`Start marker: ${fileName}, ${totalFramesExpected} frames, size: ${fileSize}`, type);
+                        updateGrid(type);
+                    }
+                    // Process data marker
+                    else if (jsonData.marker === "#DATA#" && startReceived) {
+                        const frameIndex = jsonData.current - 1;
+                        
+                        blinkCell(frameIndex, type);
+                        
+                        if (frameIndex < framesData.length && !framesReceived[frameIndex]) {
+                            framesData[frameIndex] = jsonData.contents;
+                            framesReceived[frameIndex] = true;
+                            
+                            showLog(`Frame ${frameIndex + 1}/${totalFramesExpected} received (${jsonData.contents.length} chars)`, type);
+                            updateGrid(type);
+                            
+                            // Check if all frames received
+                            if (framesReceived.every(Boolean)) {
+                                showLog('All frames received!', type);
+                                if (type === 'live') {
+                                    assembleAndDownloadFile(type);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("Error processing QR data:", err);
+                if (err.message !== lastQrError) {
+                    // Only log new errors to avoid spam
+                    showLog(`Error processing QR data: ${err.message}`, type);
+                    lastQrError = err.message;
+                }
+            }
+        }
+        
+        // Variable to track last error message
+        let lastQrError = '';
+        
+        // Format file size for display
         function formatFileSize(bytes) {
             if (bytes < 1024) return bytes + ' bytes';
             else if (bytes < 1048576) return (bytes / 1024).toFixed(2) + ' KB';
@@ -567,672 +1863,137 @@
             else return (bytes / 1073741824).toFixed(2) + ' GB';
         }
 
-        function formatTime(milliseconds) {
-            const totalSeconds = Math.floor(milliseconds / 1000);
-            const minutes = Math.floor(totalSeconds / 60);
-            const seconds = totalSeconds % 60;
-            return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        }
-
-        // Camera and Recording Functions
-        async function startCamera() {
+        function assembleAndDownloadFile(type) {
             try {
-                mediaStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: "environment" }
-                });
-                video.srcObject = mediaStream;
-                detectionBox.style.display = 'block';
-                startCameraBtn.disabled = true;
-                startRecordingBtn.disabled = false;
-                log('Camera started successfully');
-            } catch (error) {
-                log(`Error starting camera: ${error.message}`);
-                console.error('Camera error:', error);
-            }
-        }
-
-        function startRecording() {
-            if (!mediaStream) {
-                log('No camera available for recording');
-                return;
-            }
-
-            try {
-                mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'video/webm' });
-                recordedChunks = [];
-
-                mediaRecorder.ondataavailable = (e) => {
-                    if (e.data.size > 0) {
-                        recordedChunks.push(e.data);
-                    }
-                };
-
-                mediaRecorder.onstop = () => {
-                    videoBlob = new Blob(recordedChunks, { type: 'video/webm' });
-                    downloadBtn.disabled = false;
-                    clearInterval(timerInterval);
-                    log(`Recording stopped. Size: ${formatFileSize(videoBlob.size)}`);
-                };
-
-                mediaRecorder.start(1000); // Collect data every second
-                recordingStartTime = Date.now();
-                recordingTimer.style.display = 'block';
-
-                timerInterval = setInterval(() => {
-                    const elapsed = Date.now() - recordingStartTime;
-                    document.getElementById('recordingTimer').textContent = formatTime(elapsed);
-                }, 1000);
-
-                startRecordingBtn.disabled = true;
-                stopRecordingBtn.disabled = false;
-                log('Recording started');
-            } catch (error) {
-                log(`Error starting recording: ${error.message}`);
-                console.error('Recording error:', error);
-            }
-        }
-
-        function stopRecording() {
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-                startRecordingBtn.disabled = false;
-                stopRecordingBtn.disabled = true;
-                recordingTimer.style.display = 'none';
+                // Combine all data chunks
+                const base64Data = framesData.join('');
+                showLog(`Combined base64 data: ${base64Data.length} chars`, type);
                 
-                if (timerInterval) {
-                    clearInterval(timerInterval);
-                    timerInterval = null;
-                }
-            }
-        }
-
-        function downloadRecording() {
-            if (!videoBlob) {
-                log('No recording available to download');
-                return;
-            }
-
-            const url = URL.createObjectURL(videoBlob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `qr-recording-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.webm`;
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => {
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }, 100);
-        }
-
-        // Video Processing Functions
-        function handleVideoFileSelect(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            if (videoObjectURL) {
-                URL.revokeObjectURL(videoObjectURL);
-            }
-
-            videoBlob = file;
-            videoObjectURL = URL.createObjectURL(file);
-            log(`Video loaded: ${file.name} (${formatFileSize(file.size)})`);
-            startProcessingBtn.disabled = false;
-
-            // Reset processing state
-            resetProcessingState();
-        }
-        
-        async function handleVideoUrlFetch() {
-            const url = videoUrlInput.value.trim();
-            if (!url) {
-                log('Please enter a valid URL', true);
-                return;
-            }
-            
-            log(`Fetching video from URL: ${url}...`);
-            
-            try {
-                // Show loading indicator
-                fetchUrlBtn.disabled = true;
-                fetchUrlBtn.textContent = 'Fetching...';
+                // Convert base64 to binary
+                const rawData = atob(base64Data);
+                showLog(`Decoded data length: ${rawData.length} bytes`, type);
                 
-                // Check if it's a valid URL
-                try {
-                    new URL(url);
-                } catch (e) {
-                    throw new Error('Invalid URL format');
+                // Create typed array
+                const bytes = new Uint8Array(rawData.length);
+                for (let i = 0; i < rawData.length; i++) {
+                    bytes[i] = rawData.charCodeAt(i);
                 }
                 
-                // Fetch the video
-                const response = await fetch(url);
-                
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch video: ${response.status} ${response.statusText}`);
-                }
-                
-                // Get the content type to verify it's a video
-                const contentType = response.headers.get('content-type');
-                if (!contentType || !contentType.includes('video/')) {
-                    log(`Warning: Resource might not be a video (${contentType})`);
-                }
-                
-                // Get the blob
-                const blob = await response.blob();
-                
-                // Revoke previous URL if exists
-                if (videoObjectURL) {
-                    URL.revokeObjectURL(videoObjectURL);
-                }
-                
-                // Create a new video object URL
-                videoBlob = blob;
-                videoObjectURL = URL.createObjectURL(blob);
-                
-                const fileName = url.split('/').pop() || 'video-from-url';
-                log(`Video loaded from URL: ${fileName} (${formatFileSize(blob.size)})`);
-                startProcessingBtn.disabled = false;
-                
-                // Hide the URL input container
-                urlInputContainer.style.display = 'none';
-                
-                // Reset processing state
-                resetProcessingState();
-                
-            } catch (error) {
-                log(`Error fetching video: ${error.message}`, true);
-                console.error('Fetch error:', error);
-            } finally {
-                // Reset button
-                fetchUrlBtn.disabled = false;
-                fetchUrlBtn.textContent = 'Fetch';
-            }
-        }
-
-        function resetProcessingState() {
-            fileMetadata = null;
-            chunks = {};
-            sets = {};
-            processedFrameCount = 0;
-            detectedQRCount = 0;
-            retrievedChunkCount = 0;
-            framesProcessed.textContent = '0';
-            qrCodesFound.textContent = '0';
-            chunksRetrieved.textContent = '0';
-            fileNameInfo.textContent = 'None';
-            fileSizeInfo.textContent = '0 bytes';
-            totalSetsInfo.textContent = '0';
-            totalChunksInfo.textContent = '0';
-            recoveryStatusInfo.textContent = 'Not started';
-            setGrid.innerHTML = '';
-            updateProgress(0, 100);
-            isProcessing = false;
-            processingPaused = false;
-            saveFileBtn.disabled = true;
-        }
-
-        function startProcessing() {
-            if (!videoObjectURL || isProcessing) return;
-
-            isProcessing = true;
-            processingPaused = false;
-            startProcessingBtn.disabled = true;
-            pauseProcessingBtn.disabled = false;
-            pauseProcessingBtn.textContent = 'Pause';
-            recoveryStatusInfo.textContent = 'Processing...';
-
-            log('Starting video processing...');
-
-            // Create video element for processing
-            if (videoElement) {
-                videoElement.remove();
-            }
-
-            videoElement = document.createElement('video');
-            videoElement.src = videoObjectURL;
-            videoElement.muted = true;
-
-            videoElement.onloadedmetadata = () => {
-                // Setup canvas dimensions
-                const videoWidth = videoElement.videoWidth;
-                const videoHeight = videoElement.videoHeight;
-                
-                // Detect very high resolution videos and scale down to prevent memory issues
-                const MAX_DIMENSION = 1280; // Limit dimensions for memory reasons
-                let scaleFactor = 1;
-                
-                if (videoWidth > MAX_DIMENSION || videoHeight > MAX_DIMENSION) {
-                    scaleFactor = Math.min(MAX_DIMENSION / videoWidth, MAX_DIMENSION / videoHeight);
-                    log(`Scaling down video by ${scaleFactor.toFixed(2)} to save memory`);
-                }
-                
-                // Apply the scale factor to canvas
-                frameCanvas.width = videoWidth * scaleFactor;
-                frameCanvas.height = videoHeight * scaleFactor;
-                workCanvas.width = videoWidth * scaleFactor;
-                workCanvas.height = videoHeight * scaleFactor;
-
-                // Start video and begin frame capture
-                videoElement.play();
-                log(`Video dimensions: ${videoWidth}x${videoHeight}, duration: ${videoElement.duration.toFixed(2)}s`);
-
-                // Determine processing strategy based on video length
-                const videoLengthSeconds = videoElement.duration;
-                let framesPerSecond = 10; // Default capture rate
-                
-                // For long videos, reduce the frame rate to save memory
-                if (videoLengthSeconds > 60) {
-                    framesPerSecond = 5;
-                    log('Long video detected, reducing processing rate to 5fps to save memory');
-                } else if (videoLengthSeconds > 180) {
-                    framesPerSecond = 3;
-                    log('Very long video detected, reducing processing rate to 3fps to save memory');
-                }
-                
-                const totalFrames = Math.floor(videoLengthSeconds * framesPerSecond);
-                const captureIntervalTime = videoLengthSeconds * 1000 / totalFrames;
-
-                updateProgress(0, totalFrames);
-                log(`Processing ${totalFrames} frames at ${framesPerSecond}fps`);
-
-                let frameIndex = 0;
-                memoryCleanupCounter = 0; // Reset memory cleanup counter
-                
-                // Process video in smaller chunks to manage memory
-                const FRAMES_PER_BATCH = 100;
-                
-                function processBatch(startIndex, endIndex) {
-                    log(`Processing batch of frames ${startIndex} to ${endIndex}`);
-                    
-                    let currentIndex = startIndex;
-                    captureInterval = setInterval(() => {
-                        if (processingPaused) return;
-                        
-                        if (currentIndex >= endIndex || currentIndex >= totalFrames || videoElement.currentTime >= videoElement.duration) {
-                            clearInterval(captureInterval);
-                            
-                            // Schedule next batch or finish
-                            if (currentIndex < totalFrames && videoElement.currentTime < videoElement.duration) {
-                                setTimeout(() => {
-                                    // Force garbage collection between batches
-                                    if (window.gc) window.gc();
-                                    
-                                    // Process next batch
-                                    processBatch(currentIndex, Math.min(currentIndex + FRAMES_PER_BATCH, totalFrames));
-                                }, 500); // Brief pause between batches
-                            } else {
-                                finishProcessing();
-                            }
-                            return;
-                        }
-                        
-                        const targetTime = (currentIndex * videoElement.duration) / totalFrames;
-                        videoElement.currentTime = targetTime;
-                        
-                        setTimeout(() => {
-                            captureAndProcessFrame(currentIndex, totalFrames);
-                            currentIndex++;
-                        }, 100); // Wait for the currentTime to update
-                    }, captureIntervalTime);
-                }
-                
-                // Start processing the first batch
-                processBatch(0, Math.min(FRAMES_PER_BATCH, totalFrames));
-            };
-
-            videoElement.onerror = (error) => {
-                log(`Error loading video: ${error}`);
-                if (captureInterval) clearInterval(captureInterval);
-                isProcessing = false;
-                startProcessingBtn.disabled = false;
-                pauseProcessingBtn.disabled = true;
-            };
-        }
-
-        // Track memory usage with these variables
-        let memoryCleanupCounter = 0;
-        const MEMORY_CLEANUP_INTERVAL = 50; // Clean up every 50 frames
-
-        function captureAndProcessFrame(frameIndex, totalFrames) {
-            // Draw current video frame to canvas
-            frameCtx.drawImage(videoElement, 0, 0, frameCanvas.width, frameCanvas.height);
-            
-            // Get image data from canvas
-            const imageData = frameCtx.getImageData(0, 0, frameCanvas.width, frameCanvas.height);
-            
-            // Update current frame display - with memory optimizations
-            // Only update display every few frames to reduce memory pressure
-            if (frameIndex % 3 === 0) {
-                currentFrameImg.src = frameCanvas.toDataURL('image/jpeg', 0.6); // Lower quality for memory savings
-            }
-            frameOverlay.textContent = `Frame: ${frameIndex + 1} / ${totalFrames}`;
-            
-            // Process frame to find QR codes
-            try {
-                const code = jsQR(imageData.data, frameCanvas.width, frameCanvas.height, {
-                    inversionAttempts: "dontInvert"
-                });
-                
-                if (code) {
-                    processQRCode(code.data);
-                    detectedQRCount++;
-                    qrCodesFound.textContent = detectedQRCount;
-                    
-                    // Log the type of QR code found (helps verify sync with encoder)
-                    try {
-                        const data = JSON.parse(code.data);
-                        if (data.type === "metadata" || data.type === "set_header" || data.type === "end") {
-                            log(`Found ${data.type} QR code`);
-                        }
-                    } catch (e) {}
-                }
-            } catch (error) {
-                console.error('QR processing error:', error);
-            }
-            
-            // Update progress
-            processedFrameCount++;
-            framesProcessed.textContent = processedFrameCount;
-            updateProgress(processedFrameCount, totalFrames);
-            
-            // Memory management: periodically clean up resources
-            memoryCleanupCounter++;
-            if (memoryCleanupCounter >= MEMORY_CLEANUP_INTERVAL) {
-                // Force garbage collection of unused image data by removing references
-                // (let the local variable go out of scope in next frame)
-                
-                if (window.gc) window.gc(); // Explicit GC if available (Chrome with flag)
-                
-                // Reset counter
-                memoryCleanupCounter = 0;
-                
-                log(`Memory cleanup at frame ${frameIndex + 1}`);
-            }
-        }
-
-        function processQRCode(qrData) {
-            try {
-                const data = JSON.parse(qrData);
-                
-                if (data.type === "metadata") {
-                    // Process metadata frame
-                    fileMetadata = data;
-                    log(`Detected file metadata: ${data.file_name} (${formatFileSize(data.file_size)})`);
-                    
-                    fileNameInfo.textContent = data.file_name;
-                    fileSizeInfo.textContent = formatFileSize(data.file_size);
-                    totalSetsInfo.textContent = data.total_sets;
-                    totalChunksInfo.textContent = data.total_chunks;
-                    
-                    // Initialize set tracking grid
-                    updateSetGrid();
-                    
-                } else if (data.type === "set_header") {
-                    // Process set header
-                    if (!sets[data.set_index]) {
-                        sets[data.set_index] = {
-                            chunks_expected: data.chunks_in_set,
-                            chunks_received: 0,
-                            chunks: {}
-                        };
-                    }
-                    
-                } else if (data.type === "chunk") {
-                    // Process data chunk
-                    if (!fileMetadata) {
-                        log('Received chunk before metadata, skipping');
-                        return;
-                    }
-                    
-                    const setId = data.set_index;
-                    const chunkId = data.chunk_index;
-                    const chunkKey = `${setId}_${chunkId}`;
-                    
-                    // Skip if we already have this chunk
-                    if (chunks[chunkKey]) {
-                        return;
-                    }
-                    
-                    // Store the chunk
-                    chunks[chunkKey] = data.data;
-                    retrievedChunkCount++;
-                    chunksRetrieved.textContent = retrievedChunkCount;
-                    
-                    // Update set tracking
-                    if (!sets[setId]) {
-                        sets[setId] = {
-                            chunks_expected: fileMetadata.chunks_per_set,
-                            chunks_received: 0,
-                            chunks: {}
-                        };
-                    }
-                    
-                    sets[setId].chunks[chunkId] = true;
-                    sets[setId].chunks_received = Object.keys(sets[setId].chunks).length;
-                    
-                    // Update UI
-                    updateSetGrid();
-                    
-                    // Check if we have all chunks
-                    checkCompletion();
-                }
-                
-            } catch (error) {
-                // Not valid JSON or processing error
-                console.error('QR data processing error:', error);
-            }
-        }
-
-        function updateSetGrid() {
-            if (!fileMetadata) return;
-            
-            setGrid.innerHTML = '';
-            
-            for (let i = 1; i <= fileMetadata.total_sets; i++) {
-                const setCell = document.createElement('div');
-                setCell.className = 'grid-cell';
-                
-                if (sets[i] && sets[i].chunks_received === sets[i].chunks_expected) {
-                    setCell.classList.add('received');
-                }
-                
-                setCell.textContent = `Set ${i}`;
-                setGrid.appendChild(setCell);
-            }
-        }
-
-        function checkCompletion() {
-            if (!fileMetadata) return;
-            
-            const expectedTotalChunks = fileMetadata.total_chunks;
-            const receivedChunks = Object.keys(chunks).length;
-            
-            recoveryStatusInfo.textContent = `${receivedChunks} / ${expectedTotalChunks} chunks`;
-            
-            // Check if file is complete
-            if (receivedChunks === expectedTotalChunks) {
-                log('All chunks received! File is ready for reconstruction.');
-                recoveryStatusInfo.textContent = 'Complete';
-                saveFileBtn.disabled = false;
-                
-                if (captureInterval) {
-                    clearInterval(captureInterval);
-                    isProcessing = false;
-                    startProcessingBtn.disabled = !videoObjectURL;
-                    pauseProcessingBtn.disabled = true;
-                }
-            }
-        }
-
-        function togglePauseProcessing() {
-            processingPaused = !processingPaused;
-            pauseProcessingBtn.textContent = processingPaused ? 'Resume' : 'Pause';
-            
-            if (processingPaused) {
-                log('Processing paused');
-                recoveryStatusInfo.textContent = 'Paused';
-            } else {
-                log('Processing resumed');
-                recoveryStatusInfo.textContent = 'Processing...';
-            }
-        }
-
-        // Function to clean up video resources and release memory
-        function cleanupVideoResources() {
-            // Stop and remove the video element
-            if (videoElement) {
-                videoElement.pause();
-                videoElement.removeAttribute('src');
-                videoElement.load(); // Forces release of media resources
-                videoElement = null;
-            }
-            
-            // Clear canvas contexts
-            if (frameCtx) {
-                frameCtx.clearRect(0, 0, frameCanvas.width, frameCanvas.height);
-            }
-            if (workCtx) {
-                workCtx.clearRect(0, 0, workCanvas.width, workCanvas.height);
-            }
-            
-            // Reset current frame image
-            currentFrameImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
-            
-            // Suggest garbage collection
-            setTimeout(() => {
-                if (window.gc) window.gc();
-            }, 100);
-            
-            log('Video resources released');
-        }
-
-        function finishProcessing() {
-            if (captureInterval) {
-                clearInterval(captureInterval);
-                captureInterval = null;
-            }
-            
-            isProcessing = false;
-            
-            log('Video processing complete');
-            startProcessingBtn.disabled = !videoObjectURL;
-            pauseProcessingBtn.disabled = true;
-            
-            const totalChunks = fileMetadata ? fileMetadata.total_chunks : 0;
-            const receivedChunks = Object.keys(chunks).length;
-            
-            if (receivedChunks === totalChunks && totalChunks > 0) {
-                log('All chunks received successfully!');
-                recoveryStatusInfo.textContent = 'Complete';
-                saveFileBtn.disabled = false;
-            } else if (receivedChunks > 0) {
-                log(`Processing finished with ${receivedChunks}/${totalChunks} chunks`);
-                recoveryStatusInfo.textContent = `Incomplete (${receivedChunks}/${totalChunks})`;
-                saveFileBtn.disabled = false; // Allow saving even if incomplete
-            } else {
-                log('Processing completed but no valid data was found');
-                recoveryStatusInfo.textContent = 'Failed - No data';
-            }
-            
-            // Clean up resources to free memory
-            cleanupVideoResources();
-        }
-
-        function saveRecoveredFile() {
-            if (!fileMetadata || Object.keys(chunks).length === 0) {
-                log('No file data available to save');
-                return;
-            }
-            
-            try {
-                // Sort chunks in correct order
-                const sortedChunks = [];
-                const expectedTotalChunks = fileMetadata.total_chunks;
-                
-                for (let setIdx = 1; setIdx <= fileMetadata.total_sets; setIdx++) {
-                    const set = sets[setIdx];
-                    if (!set) continue;
-                    
-                    for (let chunkIdx = 1; chunkIdx <= set.chunks_expected; chunkIdx++) {
-                        const chunkKey = `${setIdx}_${chunkIdx}`;
-                        if (chunks[chunkKey]) {
-                            sortedChunks.push(chunks[chunkKey]);
-                        }
-                    }
-                }
-                
-                // Combine all chunks and convert from base64
-                const base64Data = sortedChunks.join('');
-                const binaryData = atob(base64Data);
-                
-                // Convert to Uint8Array
-                const bytes = new Uint8Array(binaryData.length);
-                for (let i = 0; i < binaryData.length; i++) {
-                    bytes[i] = binaryData.charCodeAt(i);
+                // Verify size if provided
+                if (fileSize > 0 && bytes.length !== fileSize) {
+                    showLog(`Size mismatch: got ${bytes.length}, expected ${fileSize}`, type);
                 }
                 
                 // Create blob and download
                 const blob = new Blob([bytes], { type: 'application/octet-stream' });
                 const url = URL.createObjectURL(blob);
+                
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = fileMetadata.file_name;
-                document.body.appendChild(a);
+                a.download = fileName.replace(/\.b64$/, '');
                 a.click();
                 
-                setTimeout(() => {
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                }, 100);
+                URL.revokeObjectURL(url);
+                showLog(`File downloaded: ${fileName}`, type);
                 
-                log(`File saved: ${fileMetadata.file_name} (${formatFileSize(blob.size)})`);
-                
-            } catch (error) {
-                log(`Error saving file: ${error.message}`);
-                console.error('File save error:', error);
+                if (type === 'live') {
+                    stopLiveScanning();
+                }
+            } catch (err) {
+                showLog(`Error assembling file: ${err.message}`, type);
             }
         }
 
-        // Initialization function
-        function initializeApp() {
-            // Make sure tabs work correctly
-            const activateTab = (tabName) => {
-                const tab = document.querySelector(`.tab[data-tab="${tabName}"]`);
-                if (tab) {
-                    tabs.forEach(t => t.classList.remove('active'));
-                    tab.classList.add('active');
-                    
-                    const tabContents = document.querySelectorAll('.tab-content');
-                    tabContents.forEach(content => {
-                        content.classList.remove('active');
-                    });
-                    
-                    const targetContent = document.querySelector(`.tab-content[data-tab-content="${tabName}"]`);
-                    if (targetContent) {
-                        targetContent.classList.add('active');
-                    }
-                }
-            };
-            
-            // Ensure the capture tab is active by default
-            activateTab('capture');
-            
-            // Ensure URL container is initially hidden
-            urlInputContainer.style.display = 'none';
-            
-            // Make sure video element is properly initialized
-            video.setAttribute('autoplay', true);
-            video.setAttribute('playsinline', true);
-            video.setAttribute('muted', true);
-            
-            // Set up grid for set display
-            updateSetGrid();
-            
-            log('QR Video Decoder ready');
-            log('Click "Start Camera" to begin, or use the Process tab to load a video');
-        }
+        // Event listeners
+        startLiveBtn.addEventListener('click', startLiveScanning);
+        stopLiveBtn.addEventListener('click', stopLiveScanning);
         
-        // Run initialization when page loads
-        window.addEventListener('DOMContentLoaded', initializeApp);
+        openVideoBtn.addEventListener('click', () => fileInput.click());
+        processVideoBtn.addEventListener('click', startVideoProcessing);
+        stopProcessingBtn.addEventListener('click', stopVideoProcessing);
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileInput(e.target.files[0]);
+            }
+        });
+
+        // Drag and drop support
+        dropzone.addEventListener('click', () => fileInput.click());
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+        });
+        
+        dropzone.addEventListener('dragover', () => {
+            dropzone.style.backgroundColor = '#e6e6e6';
+        });
+        
+        dropzone.addEventListener('dragleave', () => {
+            dropzone.style.backgroundColor = '#f9f9f9';
+        });
+        
+        dropzone.addEventListener('drop', (e) => {
+            dropzone.style.backgroundColor = '#f9f9f9';
+            
+            if (e.dataTransfer.files.length > 0) {
+                handleFileInput(e.dataTransfer.files[0]);
+            }
+        });
+
+        // Add manual frame capture from video playback
+        processingVideo.addEventListener('play', () => {
+            // Only activate when not actively processing
+            if (!isProcessingVideo && processingVideo.src) {
+                const captureInterval = setInterval(() => {
+                    if (processingVideo.paused || processingVideo.ended || isProcessingVideo) {
+                        clearInterval(captureInterval);
+                        return;
+                    }
+                    
+                    // Capture the current frame during normal playback
+                    canvas.width = processingVideo.videoWidth;
+                    canvas.height = processingVideo.videoHeight;
+                    ctx.drawImage(processingVideo, 0, 0);
+                    
+                    capturedFramesCount++;
+                    videoFramesCounter.textContent = capturedFramesCount;
+                    
+                    try {
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
+                            inversionAttempts: 'dontInvert'
+                        });
+                        
+                        if (qrCode) {
+                            framesCapturedWithQR++;
+                            videoQrCounter.textContent = framesCapturedWithQR;
+                            processQrData(qrCode.data, 'video');
+                            
+                            // Visual feedback
+                            ctx.strokeStyle = 'lime';
+                            ctx.lineWidth = 3;
+                            ctx.beginPath();
+                            ctx.moveTo(qrCode.location.topLeftCorner.x, qrCode.location.topLeftCorner.y);
+                            ctx.lineTo(qrCode.location.topRightCorner.x, qrCode.location.topRightCorner.y);
+                            ctx.lineTo(qrCode.location.bottomRightCorner.x, qrCode.location.bottomRightCorner.y);
+                            ctx.lineTo(qrCode.location.bottomLeftCorner.x, qrCode.location.bottomLeftCorner.y);
+                            ctx.lineTo(qrCode.location.topLeftCorner.x, qrCode.location.topLeftCorner.y);
+                            ctx.stroke();
+                        }
+                    } catch (err) {
+                        // Silent catch
+                    }
+                }, 200); // Capture 5 frames per second during normal playback
+            }
+        });
+        
+        // Initialize
+        showLog('Ready to scan. Click "Start Camera" to begin.', 'live');
+        showLog('Ready to process. Select a video file to begin.', 'video');
     </script>
 </body>
 
