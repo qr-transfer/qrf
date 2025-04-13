@@ -474,6 +474,9 @@
         const tabs = document.querySelectorAll('.tab');
         tabs.forEach(tab => {
             tab.addEventListener('click', () => {
+                const previousTab = document.querySelector('.tab.active').dataset.tab;
+                const newTab = tab.dataset.tab;
+                
                 tabs.forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
 
@@ -484,6 +487,23 @@
 
                 const targetContent = document.querySelector(`.tab-content[data-tab-content="${tab.dataset.tab}"]`);
                 targetContent.classList.add('active');
+                
+                // Clean up resources when switching tabs - important for memory management
+                if (previousTab === 'capture' && newTab === 'process') {
+                    // Switching from capture to process - stop camera to free resources
+                    if (mediaStream) {
+                        stopRecording();
+                        mediaStream.getTracks().forEach(track => track.stop());
+                        mediaStream = null;
+                        log('Camera stopped to free resources');
+                    }
+                } else if (previousTab === 'process' && newTab === 'capture') {
+                    // Switching from process to capture - clean up video resources
+                    if (isProcessing) {
+                        togglePauseProcessing(); // Pause processing
+                    }
+                    cleanupVideoResources();
+                }
             });
         });
 
@@ -775,50 +795,102 @@
                 // Setup canvas dimensions
                 const videoWidth = videoElement.videoWidth;
                 const videoHeight = videoElement.videoHeight;
-                frameCanvas.width = videoWidth;
-                frameCanvas.height = videoHeight;
-                workCanvas.width = videoWidth;
-                workCanvas.height = videoHeight;
+                
+                // Detect very high resolution videos and scale down to prevent memory issues
+                const MAX_DIMENSION = 1280; // Limit dimensions for memory reasons
+                let scaleFactor = 1;
+                
+                if (videoWidth > MAX_DIMENSION || videoHeight > MAX_DIMENSION) {
+                    scaleFactor = Math.min(MAX_DIMENSION / videoWidth, MAX_DIMENSION / videoHeight);
+                    log(`Scaling down video by ${scaleFactor.toFixed(2)} to save memory`);
+                }
+                
+                // Apply the scale factor to canvas
+                frameCanvas.width = videoWidth * scaleFactor;
+                frameCanvas.height = videoHeight * scaleFactor;
+                workCanvas.width = videoWidth * scaleFactor;
+                workCanvas.height = videoHeight * scaleFactor;
 
                 // Start video and begin frame capture
                 videoElement.play();
                 log(`Video dimensions: ${videoWidth}x${videoHeight}, duration: ${videoElement.duration.toFixed(2)}s`);
 
-                // Process frames at regular intervals
-                const totalFrames = Math.floor(videoElement.duration * 10); // Capture at 10fps
-                const captureInterval = videoElement.duration * 1000 / totalFrames;
+                // Determine processing strategy based on video length
+                const videoLengthSeconds = videoElement.duration;
+                let framesPerSecond = 10; // Default capture rate
+                
+                // For long videos, reduce the frame rate to save memory
+                if (videoLengthSeconds > 60) {
+                    framesPerSecond = 5;
+                    log('Long video detected, reducing processing rate to 5fps to save memory');
+                } else if (videoLengthSeconds > 180) {
+                    framesPerSecond = 3;
+                    log('Very long video detected, reducing processing rate to 3fps to save memory');
+                }
+                
+                const totalFrames = Math.floor(videoLengthSeconds * framesPerSecond);
+                const captureIntervalTime = videoLengthSeconds * 1000 / totalFrames;
 
                 updateProgress(0, totalFrames);
+                log(`Processing ${totalFrames} frames at ${framesPerSecond}fps`);
 
                 let frameIndex = 0;
-                captureInterval = setInterval(() => {
-                    if (processingPaused) {
-                        return;
-                    }
-
-                    if (frameIndex >= totalFrames || videoElement.currentTime >= videoElement.duration) {
-                        finishProcessing();
-                        return;
-                    }
-
-                    const targetTime = (frameIndex * videoElement.duration) / totalFrames;
-                    videoElement.currentTime = targetTime;
-
-                    setTimeout(() => {
-                        captureAndProcessFrame(frameIndex, totalFrames);
-                        frameIndex++;
-                    }, 100); // Wait for the currentTime to update
-                }, captureInterval);
+                memoryCleanupCounter = 0; // Reset memory cleanup counter
+                
+                // Process video in smaller chunks to manage memory
+                const FRAMES_PER_BATCH = 100;
+                
+                function processBatch(startIndex, endIndex) {
+                    log(`Processing batch of frames ${startIndex} to ${endIndex}`);
+                    
+                    let currentIndex = startIndex;
+                    captureInterval = setInterval(() => {
+                        if (processingPaused) return;
+                        
+                        if (currentIndex >= endIndex || currentIndex >= totalFrames || videoElement.currentTime >= videoElement.duration) {
+                            clearInterval(captureInterval);
+                            
+                            // Schedule next batch or finish
+                            if (currentIndex < totalFrames && videoElement.currentTime < videoElement.duration) {
+                                setTimeout(() => {
+                                    // Force garbage collection between batches
+                                    if (window.gc) window.gc();
+                                    
+                                    // Process next batch
+                                    processBatch(currentIndex, Math.min(currentIndex + FRAMES_PER_BATCH, totalFrames));
+                                }, 500); // Brief pause between batches
+                            } else {
+                                finishProcessing();
+                            }
+                            return;
+                        }
+                        
+                        const targetTime = (currentIndex * videoElement.duration) / totalFrames;
+                        videoElement.currentTime = targetTime;
+                        
+                        setTimeout(() => {
+                            captureAndProcessFrame(currentIndex, totalFrames);
+                            currentIndex++;
+                        }, 100); // Wait for the currentTime to update
+                    }, captureIntervalTime);
+                }
+                
+                // Start processing the first batch
+                processBatch(0, Math.min(FRAMES_PER_BATCH, totalFrames));
             };
 
             videoElement.onerror = (error) => {
                 log(`Error loading video: ${error}`);
-                clearInterval(captureInterval);
+                if (captureInterval) clearInterval(captureInterval);
                 isProcessing = false;
                 startProcessingBtn.disabled = false;
                 pauseProcessingBtn.disabled = true;
             };
         }
+
+        // Track memory usage with these variables
+        let memoryCleanupCounter = 0;
+        const MEMORY_CLEANUP_INTERVAL = 50; // Clean up every 50 frames
 
         function captureAndProcessFrame(frameIndex, totalFrames) {
             // Draw current video frame to canvas
@@ -827,8 +899,11 @@
             // Get image data from canvas
             const imageData = frameCtx.getImageData(0, 0, frameCanvas.width, frameCanvas.height);
             
-            // Update current frame display
-            currentFrameImg.src = frameCanvas.toDataURL('image/jpeg', 0.7);
+            // Update current frame display - with memory optimizations
+            // Only update display every few frames to reduce memory pressure
+            if (frameIndex % 3 === 0) {
+                currentFrameImg.src = frameCanvas.toDataURL('image/jpeg', 0.6); // Lower quality for memory savings
+            }
             frameOverlay.textContent = `Frame: ${frameIndex + 1} / ${totalFrames}`;
             
             // Process frame to find QR codes
@@ -841,6 +916,14 @@
                     processQRCode(code.data);
                     detectedQRCount++;
                     qrCodesFound.textContent = detectedQRCount;
+                    
+                    // Log the type of QR code found (helps verify sync with encoder)
+                    try {
+                        const data = JSON.parse(code.data);
+                        if (data.type === "metadata" || data.type === "set_header" || data.type === "end") {
+                            log(`Found ${data.type} QR code`);
+                        }
+                    } catch (e) {}
                 }
             } catch (error) {
                 console.error('QR processing error:', error);
@@ -850,6 +933,20 @@
             processedFrameCount++;
             framesProcessed.textContent = processedFrameCount;
             updateProgress(processedFrameCount, totalFrames);
+            
+            // Memory management: periodically clean up resources
+            memoryCleanupCounter++;
+            if (memoryCleanupCounter >= MEMORY_CLEANUP_INTERVAL) {
+                // Force garbage collection of unused image data by removing references
+                // (let the local variable go out of scope in next frame)
+                
+                if (window.gc) window.gc(); // Explicit GC if available (Chrome with flag)
+                
+                // Reset counter
+                memoryCleanupCounter = 0;
+                
+                log(`Memory cleanup at frame ${frameIndex + 1}`);
+            }
         }
 
         function processQRCode(qrData) {
@@ -979,8 +1076,41 @@
             }
         }
 
+        // Function to clean up video resources and release memory
+        function cleanupVideoResources() {
+            // Stop and remove the video element
+            if (videoElement) {
+                videoElement.pause();
+                videoElement.removeAttribute('src');
+                videoElement.load(); // Forces release of media resources
+                videoElement = null;
+            }
+            
+            // Clear canvas contexts
+            if (frameCtx) {
+                frameCtx.clearRect(0, 0, frameCanvas.width, frameCanvas.height);
+            }
+            if (workCtx) {
+                workCtx.clearRect(0, 0, workCanvas.width, workCanvas.height);
+            }
+            
+            // Reset current frame image
+            currentFrameImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+            
+            // Suggest garbage collection
+            setTimeout(() => {
+                if (window.gc) window.gc();
+            }, 100);
+            
+            log('Video resources released');
+        }
+
         function finishProcessing() {
-            clearInterval(captureInterval);
+            if (captureInterval) {
+                clearInterval(captureInterval);
+                captureInterval = null;
+            }
+            
             isProcessing = false;
             
             log('Video processing complete');
@@ -1002,6 +1132,9 @@
                 log('Processing completed but no valid data was found');
                 recoveryStatusInfo.textContent = 'Failed - No data';
             }
+            
+            // Clean up resources to free memory
+            cleanupVideoResources();
         }
 
         function saveRecoveredFile() {

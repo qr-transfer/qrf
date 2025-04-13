@@ -138,24 +138,44 @@ let sets = {};
 let processedFrameCount = 0;
 let detectedQRCount = 0;
 let retrievedChunkCount = 0;
+let memoryCleanupCounter = 0;
+const MEMORY_CLEANUP_INTERVAL = 50;
 
 // Tab switching
 const tabs = document.querySelectorAll('.tab');
 tabs.forEach(tab => {
     tab.addEventListener('click', () => {
+        const prevTab = document.querySelector('.tab.active')?.dataset.tab;
+        const newTab = tab.dataset.tab;
+        
         tabs.forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
         
-        if(tab.dataset.tab === 'capture') {
+        if(newTab === 'capture') {
             captureView.style.display = 'block';
             processView.style.display = 'none';
             captureControls.style.display = 'flex';
             processControls.style.display = 'none';
+            
+            // Clean up resources when switching to capture
+            if (isProcessing) {
+                pauseProcessing();
+                cleanupVideoResources();
+            }
         } else {
             captureView.style.display = 'none';
             processView.style.display = 'flex';
             captureControls.style.display = 'none';
             processControls.style.display = 'flex';
+            
+            // Stop camera when switching to process
+            if (mediaStream) {
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    stopRecording();
+                }
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
         }
     });
 });
@@ -189,8 +209,20 @@ function updateProgress(current, total) {
 // Camera and Recording Functions
 async function startCamera() {
     try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}});
+        // Always stop previous stream if exists
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
+        }
+        
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: { ideal: "environment" },
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            }
+        });
         video.srcObject = mediaStream;
+        video.muted = true; // Fix autoplay issues in some browsers
         startCameraBtn.disabled = true;
         startRecordingBtn.disabled = false;
         log('Camera started');
@@ -203,7 +235,17 @@ function startRecording() {
     if (!mediaStream) return;
     
     try {
-        mediaRecorder = new MediaRecorder(mediaStream, {mimeType: 'video/webm'});
+        // Use browser-compatible options
+        const options = {};
+        if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+            options.mimeType = 'video/webm;codecs=vp9';
+        } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+            options.mimeType = 'video/webm;codecs=vp8';
+        } else if (MediaRecorder.isTypeSupported('video/webm')) {
+            options.mimeType = 'video/webm';
+        }
+        
+        mediaRecorder = new MediaRecorder(mediaStream, options);
         recordedChunks = [];
         
         mediaRecorder.ondataavailable = (e) => {
@@ -211,7 +253,7 @@ function startRecording() {
         };
         
         mediaRecorder.onstop = () => {
-            videoBlob = new Blob(recordedChunks, {type: 'video/webm'});
+            videoBlob = new Blob(recordedChunks, {type: mediaRecorder.mimeType || 'video/webm'});
             downloadBtn.disabled = false;
             clearInterval(timerInterval);
             log(`Recording stopped (${(videoBlob.size/1024/1024).toFixed(1)}MB)`);
@@ -321,6 +363,24 @@ function resetProcessingState() {
     qrCount.textContent = '0';
     chunkCount.textContent = '0';
     progress.style.width = '0';
+    memoryCleanupCounter = 0;
+}
+
+function cleanupVideoResources() {
+    if (videoElement) {
+        videoElement.pause();
+        videoElement.removeAttribute('src');
+        videoElement.load();
+        videoElement = null;
+    }
+    
+    frameCtx.clearRect(0, 0, frameCanvas.width, frameCanvas.height);
+    workCtx.clearRect(0, 0, workCanvas.width, workCanvas.height);
+    currentFrame.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+    
+    setTimeout(() => {
+        if (window.gc) window.gc();
+    }, 100);
 }
 
 function startProcessing() {
@@ -330,6 +390,7 @@ function startProcessing() {
     processingPaused = false;
     startProcessingBtn.disabled = true;
     pauseBtn.disabled = false;
+    pauseBtn.textContent = 'Pause';
     
     log('Processing started');
     
@@ -340,50 +401,89 @@ function startProcessing() {
     videoElement.muted = true;
     
     videoElement.onloadedmetadata = () => {
-        frameCanvas.width = videoElement.videoWidth;
-        frameCanvas.height = videoElement.videoHeight;
-        workCanvas.width = videoElement.videoWidth;
-        workCanvas.height = videoElement.videoHeight;
+        // Scale down high-res videos
+        const MAX_DIM = 1280;
+        let scale = 1;
+        if (videoElement.videoWidth > MAX_DIM || videoElement.videoHeight > MAX_DIM) {
+            scale = Math.min(MAX_DIM / videoElement.videoWidth, MAX_DIM / videoElement.videoHeight);
+            log(`Scaling video (${scale.toFixed(2)}x) to save memory`);
+        }
+        
+        frameCanvas.width = videoElement.videoWidth * scale;
+        frameCanvas.height = videoElement.videoHeight * scale;
+        workCanvas.width = videoElement.videoWidth * scale;
+        workCanvas.height = videoElement.videoHeight * scale;
         
         videoElement.play();
         
-        const totalFrames = Math.floor(videoElement.duration * 10);
-        const captureInterval = videoElement.duration * 1000 / totalFrames;
+        // Adjust fps based on video length
+        const duration = videoElement.duration;
+        let fps = 10;
+        if (duration > 60) fps = 5;
+        else if (duration > 180) fps = 3;
         
-        let frameIndex = 0;
-        captureInterval = setInterval(() => {
-            if (processingPaused) return;
-            
-            if (frameIndex >= totalFrames || videoElement.currentTime >= videoElement.duration) {
-                finishProcessing();
-                return;
-            }
-            
-            const targetTime = (frameIndex * videoElement.duration) / totalFrames;
-            videoElement.currentTime = targetTime;
-            
-            setTimeout(() => {
-                captureAndProcessFrame(frameIndex, totalFrames);
-                frameIndex++;
-            }, 100);
-        }, captureInterval);
+        const totalFrames = Math.floor(duration * fps);
+        const frameInterval = duration * 1000 / totalFrames;
+        
+        log(`Processing ${totalFrames} frames at ${fps}fps`);
+        updateProgress(0, totalFrames);
+        
+        // Process in batches to manage memory
+        const BATCH_SIZE = 100;
+        
+        function processBatch(start, end) {
+            let idx = start;
+            captureInterval = setInterval(() => {
+                if (processingPaused) return;
+                
+                if (idx >= end || idx >= totalFrames || videoElement.currentTime >= duration) {
+                    clearInterval(captureInterval);
+                    
+                    if (idx < totalFrames && videoElement.currentTime < duration) {
+                        setTimeout(() => {
+                            processBatch(idx, Math.min(idx + BATCH_SIZE, totalFrames));
+                        }, 500);
+                    } else {
+                        finishProcessing();
+                    }
+                    return;
+                }
+                
+                const time = (idx * duration) / totalFrames;
+                videoElement.currentTime = time;
+                
+                setTimeout(() => {
+                    processFrame(idx, totalFrames);
+                    idx++;
+                }, 100);
+            }, frameInterval);
+        }
+        
+        processBatch(0, Math.min(BATCH_SIZE, totalFrames));
     };
     
-    videoElement.onerror = (error) => {
+    videoElement.onerror = () => {
         log(`Video error`);
-        clearInterval(captureInterval);
+        if (captureInterval) clearInterval(captureInterval);
         isProcessing = false;
         startProcessingBtn.disabled = false;
         pauseBtn.disabled = true;
     };
 }
 
-function captureAndProcessFrame(frameIndex, totalFrames) {
+function processFrame(idx, total) {
+    // Draw frame to canvas
     frameCtx.drawImage(videoElement, 0, 0, frameCanvas.width, frameCanvas.height);
     
+    // Get frame data
     const imageData = frameCtx.getImageData(0, 0, frameCanvas.width, frameCanvas.height);
-    currentFrame.src = frameCanvas.toDataURL('image/jpeg', 0.7);
     
+    // Update display (less frequently to save memory)
+    if (idx % 3 === 0) {
+        currentFrame.src = frameCanvas.toDataURL('image/jpeg', 0.6);
+    }
+    
+    // Process QR code
     try {
         const code = jsQR(imageData.data, frameCanvas.width, frameCanvas.height, {
             inversionAttempts: "dontInvert"
@@ -394,11 +494,19 @@ function captureAndProcessFrame(frameIndex, totalFrames) {
             detectedQRCount++;
             qrCount.textContent = detectedQRCount;
         }
-    } catch (error) {}
+    } catch (e) {}
     
+    // Update progress
     processedFrameCount++;
     frameCount.textContent = processedFrameCount;
-    updateProgress(processedFrameCount, totalFrames);
+    updateProgress(processedFrameCount, total);
+    
+    // Memory management
+    memoryCleanupCounter++;
+    if (memoryCleanupCounter >= MEMORY_CLEANUP_INTERVAL) {
+        memoryCleanupCounter = 0;
+        if (window.gc) window.gc();
+    }
 }
 
 function processQRCode(qrData) {
@@ -442,7 +550,7 @@ function processQRCode(qrData) {
             
             checkCompletion();
         }
-    } catch (error) {}
+    } catch (e) {}
 }
 
 function checkCompletion() {
@@ -464,13 +572,17 @@ function checkCompletion() {
     }
 }
 
-function togglePause() {
+function pauseProcessing() {
     processingPaused = !processingPaused;
     pauseBtn.textContent = processingPaused ? 'Resume' : 'Pause';
 }
 
 function finishProcessing() {
-    clearInterval(captureInterval);
+    if (captureInterval) {
+        clearInterval(captureInterval);
+        captureInterval = null;
+    }
+    
     isProcessing = false;
     
     log('Processing complete');
@@ -484,6 +596,8 @@ function finishProcessing() {
         log(`Received ${receivedChunks}/${totalChunks} chunks`);
         saveFileBtn.disabled = false;
     }
+    
+    cleanupVideoResources();
 }
 
 function saveRecoveredFile() {
@@ -537,7 +651,7 @@ fileInput.addEventListener('change', e => handleVideoFile(e.target.files[0]));
 urlInput.addEventListener('keypress', e => { if (e.key === 'Enter') fetchVideoFromUrl(); });
 urlInput.addEventListener('blur', () => { if (urlInput.value.trim() === '') urlInput.style.display = 'none'; });
 startProcessingBtn.addEventListener('click', startProcessing);
-pauseBtn.addEventListener('click', togglePause);
+pauseBtn.addEventListener('click', pauseProcessing);
 saveFileBtn.addEventListener('click', saveRecoveredFile);
 
 // Initialize

@@ -286,61 +286,56 @@
         </div>
     </div>
     
-    <div class="tabs">
-        <div class="tab active" data-tab="display">QR Display</div>
-        <div class="tab" data-tab="debug">Debug View</div>
-    </div>
-
-    <div class="tab-content active" data-tab-content="display">
-        <div class="display-container" id="displayContainer">
-            <div class="frame-counter" id="frameCounter">Frame: 0 / 0</div>
-            <div id="qrDisplay" style="width: 300px; height: 300px;"></div>
-            <div class="progress-container">
-                <div class="progress-bar" id="progressBar"></div>
-                <div class="progress-text" id="progressText">0%</div>
-            </div>
-            <button id="fullscreenBtn" style="position: absolute; top: 10px; right: 10px; z-index: 100; display: none;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                    <path d="M5.828 10.172a.5.5 0 0 0-.707 0l-4.096 4.096V11.5a.5.5 0 0 0-1 0v3.975a.5.5 0 0 0 .5.5H4.5a.5.5 0 0 0 0-1H1.732l4.096-4.096a.5.5 0 0 0 0-.707zm4.344 0a.5.5 0 0 1 .707 0l4.096 4.096V11.5a.5.5 0 1 1 1 0v3.975a.5.5 0 0 1-.5.5H11.5a.5.5 0 0 1 0-1h2.768l-4.096-4.096a.5.5 0 0 1 0-.707zm0-4.344a.5.5 0 0 0 .707 0l4.096-4.096V4.5a.5.5 0 1 0 1 0V.525a.5.5 0 0 0-.5-.5H11.5a.5.5 0 0 0 0 1h2.768l-4.096 4.096a.5.5 0 0 0 0 .707zm-4.344 0a.5.5 0 0 1-.707 0L1.025 1.732V4.5a.5.5 0 0 1-1 0V.525a.5.5 0 0 1 .5-.5H4.5a.5.5 0 0 1 0 1H1.732l4.096 4.096a.5.5 0 0 1 0 .707z"/>
-                </svg>
-            </button>
+    <div class="display-container" id="displayContainer" style="margin-bottom: 20px;">
+        <div class="frame-counter" id="frameCounter">Frame: 0 / 0</div>
+        <div id="qrDisplay" style="width: 300px; height: 300px; margin: 20px auto;"></div>
+        <div class="progress-container">
+            <div class="progress-bar" id="progressBar"></div>
+            <div class="progress-text" id="progressText">0%</div>
         </div>
     </div>
     
-    <div id="fullscreenOverlay" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 1000; justify-content: center; align-items: center; flex-direction: column;">
-        <div id="fullscreenQrDisplay" style="background: white; padding: 20px;"></div>
-        <div id="fullscreenCounter" style="color: white; margin-top: 15px; font-size: 18px;"></div>
-        <button id="exitFullscreenBtn" style="position: absolute; top: 20px; right: 20px; background: #ff4444; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">Exit</button>
+    <div class="tabs">
+        <div class="tab active" data-tab="display">QR Info</div>
+        <div class="tab" data-tab="debug">Debug View</div>
     </div>
 
-    <div class="sets-selection-panel" style="margin-top: 20px; background: #f5f5f5; padding: 15px; border-radius: 8px; display: none;">
-        <h3>Set Selection</h3>
-        <p style="margin-bottom: 10px;">Select which sets to include in the display:</p>
-        <div id="setsSelectionList" style="margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 8px; max-height: 300px; overflow-y: auto;"></div>
-        <div style="margin-top: 10px; display: flex; gap: 10px;">
-            <button id="selectAllSetsBtn">Select All</button>
-            <button id="deselectAllSetsBtn">Deselect All</button>
-            <button id="selectMissingSetsBtn" disabled>Select Missing Sets</button>
+    <div class="tab-content active" data-tab-content="display" style="max-height: 400px; overflow-y: auto;">
+        <div class="sets-selection-panel" style="margin-top: 20px; background: #f5f5f5; padding: 15px; border-radius: 8px; display: none;">
+            <h3>Set Selection</h3>
+            <p style="margin-bottom: 10px;">Select which sets to include in the display:</p>
+            <div id="setsSelectionList" style="margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 8px; max-height: 300px; overflow-y: auto;"></div>
+            <div style="margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap;">
+                <button id="selectAllSetsBtn">Select All</button>
+                <button id="deselectAllSetsBtn">Deselect All</button>
+                <button id="selectMissingSetsBtn" disabled>Select Missing Sets</button>
+            </div>
+        </div>
+
+        <div class="info-panel" style="margin-top: 20px;">
+            <div class="info-row">
+                <span class="info-label">File Name:</span>
+                <span id="fileNameInfo">None selected</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">File Size:</span>
+                <span id="fileSizeInfo">0 bytes</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Total Sets:</span>
+                <span id="totalSetsInfo">0</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Chunks Per Set:</span>
+                <span id="chunksPerSetInfo">0</span>
+            </div>
         </div>
     </div>
-
-    <div class="info-panel">
-        <div class="info-row">
-            <span class="info-label">File Name:</span>
-            <span id="fileNameInfo">None selected</span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">File Size:</span>
-            <span id="fileSizeInfo">0 bytes</span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">Total Sets:</span>
-            <span id="totalSetsInfo">0</span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">Chunks Per Set:</span>
-            <span id="chunksPerSetInfo">0</span>
-        </div>
+    
+    <div id="presentationOverlay" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; z-index: 1000; justify-content: center; align-items: center; flex-direction: column;">
+        <div id="presentationQrDisplay" style="display: flex; justify-content: center; align-items: center; flex-direction: column; width: 100vw; height: 100vh; padding: 20px; box-sizing: border-box;"></div>
+        <div id="presentationCounter" style="position: absolute; bottom: 5px; left: 5px; text-align: left; color: #aaa; font-size: 12px; padding: 3px 8px; background: rgba(0,0,0,0.5); border-radius: 4px;"></div>
+        <button id="exitPresentationBtn" style="position: absolute; top: 10px; right: 10px; background: rgba(255,30,30,0.7); color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; z-index: 1010; font-size: 14px;">Exit</button>
     </div>
 
     <div class="tab-content" data-tab-content="debug">
@@ -417,29 +412,28 @@
         let currentFileIndex = 0; // Currently active file in the queue
         let frameTimingMultiplier = 1; // Used for varying frame display times
 
-        // Get fullscreen elements
-        const fullscreenBtn = document.getElementById('fullscreenBtn');
-        const fullscreenOverlay = document.getElementById('fullscreenOverlay');
-        const fullscreenQrDisplay = document.getElementById('fullscreenQrDisplay');
-        const fullscreenCounter = document.getElementById('fullscreenCounter');
-        const exitFullscreenBtn = document.getElementById('exitFullscreenBtn');
+        // Get presentation mode elements
+        const presentationOverlay = document.getElementById('presentationOverlay');
+        const presentationQrDisplay = document.getElementById('presentationQrDisplay');
+        const presentationCounter = document.getElementById('presentationCounter');
+        const exitPresentationBtn = document.getElementById('exitPresentationBtn');
         
-        let isFullscreen = false;
+        let isPresentation = false;
         
-        // Function to enter fullscreen mode
-        function enterFullscreen() {
-            // Clone current QR code to fullscreen display
-            fullscreenQrDisplay.innerHTML = qrDisplay.innerHTML;
-            fullscreenCounter.textContent = frameCounter.textContent;
+        // Function to enter presentation mode (full screen QR display)
+        function enterPresentationMode() {
+            // Clone current QR code to presentation display
+            presentationQrDisplay.innerHTML = qrDisplay.innerHTML;
+            presentationCounter.textContent = frameCounter.textContent;
             
             // Show the overlay
-            fullscreenOverlay.style.display = 'flex';
-            isFullscreen = true;
+            presentationOverlay.style.display = 'flex';
+            isPresentation = true;
             
-            // Adjust QR code size to be bigger in fullscreen
-            const qrElement = fullscreenQrDisplay.querySelector('img');
+            // Adjust QR code size to maximize screen usage
+            const qrElement = presentationQrDisplay.querySelector('img');
             if (qrElement) {
-                const size = Math.min(window.innerWidth, window.innerHeight) * 0.8;
+                const size = Math.min(window.innerWidth, window.innerHeight) * 0.9;
                 qrElement.style.width = `${size}px`;
                 qrElement.style.height = `${size}px`;
             }
@@ -452,10 +446,12 @@
             }
         }
         
-        // Function to exit fullscreen mode
-        function exitFullscreen() {
-            fullscreenOverlay.style.display = 'none';
-            isFullscreen = false;
+        // Function to exit presentation mode
+        function exitPresentationMode() {
+            if (!isPresentation) return;
+            
+            presentationOverlay.style.display = 'none';
+            isPresentation = false;
             
             // Exit physical fullscreen if active
             if (document.fullscreenElement && document.exitFullscreen) {
@@ -465,9 +461,12 @@
             }
         }
         
-        // Event listeners for fullscreen buttons
-        fullscreenBtn.addEventListener('click', enterFullscreen);
-        exitFullscreenBtn.addEventListener('click', exitFullscreen);
+        // Event listener for exit button
+        exitPresentationBtn.addEventListener('click', () => {
+            exitPresentationMode();
+            // Also stop the display when exiting presentation mode
+            stopDisplay();
+        });
         
         // Event listeners for sliders
         speedSlider.addEventListener('input', () => {
@@ -950,6 +949,9 @@
                     // Clear display
                     qrDisplay.innerHTML = '';
                     
+                    // Enter presentation mode right away
+                    enterPresentationMode();
+                    
                     // Start display loop
                     displayFrame();
                     restartInterval();
@@ -962,6 +964,9 @@
             
             isPlaying = false;
             clearInterval(displayInterval);
+            
+            // Exit presentation mode
+            exitPresentationMode();
             
             log('Display stopped');
             
@@ -1206,23 +1211,32 @@
             // Update progress
             updateProgress(currentFrame + 1, totalFrames);
             
-            // Update fullscreen display if active
-            if (isFullscreen) {
-                fullscreenQrDisplay.innerHTML = qrDisplay.innerHTML;
-                fullscreenCounter.textContent = frameCounter.textContent;
+            // Update presentation display if active
+            if (isPresentation) {
+                presentationQrDisplay.innerHTML = qrDisplay.innerHTML;
+                presentationCounter.textContent = frameCounter.textContent;
                 
-                // Adjust QR code size to be bigger in fullscreen
-                const qrElement = fullscreenQrDisplay.querySelector('img');
+                // Adjust QR code size to maximize screen usage
+                const qrElement = presentationQrDisplay.querySelector('img');
                 if (qrElement) {
-                    const size = Math.min(window.innerWidth, window.innerHeight) * 0.8;
+                    const size = Math.min(window.innerWidth, window.innerHeight) * 0.9;
                     qrElement.style.width = `${size}px`;
                     qrElement.style.height = `${size}px`;
+                    
+                    // Add label from original display
+                    const label = qrDisplay.querySelector('div');
+                    if (label) {
+                        const presentationLabel = presentationQrDisplay.querySelector('div') || document.createElement('div');
+                        presentationLabel.style.marginTop = '10px';
+                        presentationLabel.style.color = label.style.color;
+                        presentationLabel.style.fontWeight = 'bold';
+                        presentationLabel.style.fontSize = '24px';
+                        presentationLabel.textContent = label.textContent;
+                        if (!presentationLabel.parentNode) {
+                            presentationQrDisplay.appendChild(presentationLabel);
+                        }
+                    }
                 }
-            }
-            
-            // Show fullscreen button when playing
-            if (isPlaying && !fullscreenBtn.style.display) {
-                fullscreenBtn.style.display = 'block';
             }
         }
     </script>
