@@ -103,6 +103,18 @@
             align-self: center;
         }
 
+        .display-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #f0f0f0;
+            border-radius: 8px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+            max-width: 95%;
+        }
+        
         .display-container.presentation {
             position: fixed;
             left: 0;
@@ -440,6 +452,22 @@
 <body>
     <h1>Video QR Code Encoder</h1>
 
+    <!-- Moved QR display to the top for better visibility -->
+    <div class="display-container" id="displayContainer">
+        <div class="frame-counter" id="frameCounter">Frame: 0 / 0</div>
+        <div id="qrDisplay" style="width: 300px; height: 300px;"></div>
+        <div class="progress-container">
+            <div class="progress-bar" id="progressBar"></div>
+            <div class="progress-text" id="progressText">0%</div>
+        </div>
+        <!-- Added toggle button for presentation mode -->
+        <div style="margin-top: 15px; text-align: center;">
+            <button id="togglePresentationBtn" disabled style="background-color: #4285f4; color: white; padding: 10px 15px; font-weight: bold; font-size: 16px; border-radius: 5px; border: none; cursor: pointer;">
+                <span id="togglePresentationText">Enter Full Screen Mode</span>
+            </button>
+        </div>
+    </div>
+
     <div class="control-panel">
         <div class="control-group">
             <div class="control-row">
@@ -461,6 +489,21 @@
                 <div class="control-label">QR Code Size:</div>
                 <input type="range" id="sizeSlider" min="150" max="500" value="300" />
                 <div class="value-display" id="sizeValue">300px</div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <div class="control-row">
+                <div class="control-label">QR Grid Layout:</div>
+                <select id="gridLayoutSelect">
+                    <option value="1">1x1 (Single QR)</option>
+                    <option value="2">2x1 (2 QRs horizontally)</option>
+                    <option value="4">2x2 (4 QRs grid)</option>
+                    <option value="8">4x2 (8 QRs grid)</option>
+                    <option value="16">4x4 (16 QRs grid)</option>
+                    <option value="32">8x4 (32 QRs grid)</option>
+                </select>
+                <div class="value-display" id="gridValue">1 QR per frame</div>
             </div>
         </div>
 
@@ -494,15 +537,6 @@
             <button id="moveUpBtn" disabled>Move Up</button>
             <button id="moveDownBtn" disabled>Move Down</button>
             <button id="removeFileBtn" disabled>Remove</button>
-        </div>
-    </div>
-    
-    <div class="display-container" id="displayContainer">
-        <div class="frame-counter" id="frameCounter">Frame: 0 / 0</div>
-        <div id="qrDisplay" style="width: 300px; height: 300px;"></div>
-        <div class="progress-container">
-            <div class="progress-bar" id="progressBar"></div>
-            <div class="progress-text" id="progressText">0%</div>
         </div>
     </div>
     
@@ -581,10 +615,12 @@
         const fileInput = document.getElementById('fileInput');
         const speedSlider = document.getElementById('speedSlider');
         const sizeSlider = document.getElementById('sizeSlider');
+        const gridLayoutSelect = document.getElementById('gridLayoutSelect');
         const chunkSlider = document.getElementById('chunkSlider');
         const countdownSlider = document.getElementById('countdownSlider');
         const speedValue = document.getElementById('speedValue');
         const sizeValue = document.getElementById('sizeValue');
+        const gridValue = document.getElementById('gridValue');
         const chunkValue = document.getElementById('chunkValue');
         const countdownValueEl = document.getElementById('countdownValue');
         const generateBtn = document.getElementById('generateBtn');
@@ -595,6 +631,7 @@
         const progressText = document.getElementById('progressText');
         const frameCounter = document.getElementById('frameCounter');
         const statusEl = document.getElementById('status');
+        const togglePresentationBtn = document.getElementById('togglePresentationBtn');
         const debugView = document.getElementById('debugView');
         const fileQueuePanel = document.querySelector('.file-queue-panel');
         const fileQueueList = document.getElementById('fileQueueList');
@@ -666,9 +703,59 @@
         sizeSlider.addEventListener('input', () => {
             const size = sizeSlider.value;
             sizeValue.textContent = `${size}px`;
-            qrDisplay.style.width = `${size}px`;
-            qrDisplay.style.height = `${size}px`;
+            updateQRContainerSize();
         });
+        
+        gridLayoutSelect.addEventListener('change', () => {
+            const qrCount = parseInt(gridLayoutSelect.value);
+            let layoutDesc = "";
+            
+            switch(qrCount) {
+                case 1: layoutDesc = "1 QR per frame"; break;
+                case 2: layoutDesc = "2 QRs horizontally"; break;
+                case 4: layoutDesc = "2×2 grid (4 QRs)"; break;
+                case 8: layoutDesc = "4×2 grid (8 QRs)"; break;
+                case 16: layoutDesc = "4×4 grid (16 QRs)"; break;
+                case 32: layoutDesc = "8×4 grid (32 QRs)"; break;
+                default: layoutDesc = `${qrCount} QRs per frame`;
+            }
+            
+            gridValue.textContent = layoutDesc;
+            updateQRContainerSize();
+        });
+
+        // Function to update QR container size based on grid layout
+        function updateQRContainerSize() {
+            const size = parseInt(sizeSlider.value);
+            const qrCount = parseInt(gridLayoutSelect.value);
+            
+            // Calculate rows and columns
+            let cols, rows;
+            switch(qrCount) {
+                case 1: cols = 1; rows = 1; break;
+                case 2: cols = 2; rows = 1; break; 
+                case 4: cols = 2; rows = 2; break;
+                case 8: cols = 4; rows = 2; break;
+                case 16: cols = 4; rows = 4; break;
+                case 32: cols = 8; rows = 4; break;
+                default: cols = 1; rows = 1;
+            }
+            
+            // Calculate grid dimensions with some padding
+            const padding = 20; // Pixels between QR codes
+            const totalWidth = (size * cols) + (padding * (cols - 1));
+            const totalHeight = (size * rows) + (padding * (rows - 1));
+            
+            // Update container size
+            qrDisplay.style.width = `${totalWidth}px`;
+            qrDisplay.style.height = `${totalHeight}px`;
+            
+            // Update grid layout
+            qrDisplay.style.display = 'grid';
+            qrDisplay.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+            qrDisplay.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+            qrDisplay.style.gap = `${padding}px`;
+        }
 
         chunkSlider.addEventListener('input', () => {
             chunkValue.textContent = `${chunkSlider.value} bytes`;
@@ -917,11 +1004,24 @@
         generateBtn.addEventListener('click', generateQRCodes);
         startBtn.addEventListener('click', startDisplay);
         stopBtn.addEventListener('click', stopDisplay);
+        togglePresentationBtn.addEventListener('click', togglePresentationMode);
         exitPresentationBtn.addEventListener('click', () => {
             exitPresentationMode();
-            // Also stop the display when exiting presentation mode
-            stopDisplay();
+            // No longer stop the display when exiting presentation mode
         });
+        
+        // Function to toggle between presentation mode and normal mode
+        function togglePresentationMode() {
+            const toggleText = document.getElementById('togglePresentationText');
+            
+            if (isPresentation) {
+                exitPresentationMode();
+                toggleText.textContent = 'Enter Full Screen Mode';
+            } else {
+                enterPresentationMode();
+                toggleText.textContent = 'Exit Full Screen Mode';
+            }
+        }
 
         // Presentation mode functions
         function enterPresentationMode() {
@@ -1075,6 +1175,7 @@
                     // Enable start button
                     startBtn.disabled = false;
                     generateBtn.disabled = true;
+                    togglePresentationBtn.disabled = true;
                     
                 } catch (error) {
                     log(`Error processing file: ${error.message}`, true);
@@ -1160,8 +1261,9 @@
                     // Clear display
                     qrDisplay.innerHTML = '';
                     
-                    // Enter presentation mode right away
-                    enterPresentationMode();
+                    // No longer automatically enter presentation mode
+                    // Enable the toggle button instead
+                    togglePresentationBtn.disabled = false;
                     
                     // Start display loop
                     displayFrame();
@@ -1174,6 +1276,14 @@
             if (!isPlaying && !countdownTimer) return;
             
             isPlaying = false;
+            
+            // Exit presentation mode if active
+            if (isPresentation) {
+                exitPresentationMode();
+            }
+            
+            // Disable the toggle button
+            togglePresentationBtn.disabled = true;
             
             if (countdownTimer) {
                 clearInterval(countdownTimer);
@@ -1315,285 +1425,115 @@
             
             qrDisplay.innerHTML = '';
             
-            // Determine which frame to display
-            let frameContent;
-            let frameLabel;
+            // Get grid layout information
+            const qrCount = parseInt(gridLayoutSelect.value);
+            let cols, rows;
+            switch(qrCount) {
+                case 1: cols = 1; rows = 1; break;
+                case 2: cols = 2; rows = 1; break; 
+                case 4: cols = 2; rows = 2; break;
+                case 8: cols = 4; rows = 2; break;
+                case 16: cols = 4; rows = 4; break;
+                case 32: cols = 8; rows = 4; break;
+                default: cols = 1; rows = 1;
+            }
+            
+            // Calculate how many frames to display in this grid
+            const framesToDisplay = Math.min(qrCount, totalFrames - currentFrame);
             
             try {
+                // Apply border styling based on the first frame type
                 if (currentFrame === 0) {
-                    // Metadata frame
-                    const includeFileQueueInfo = fileQueue.length > 1;
-                    
-                    const metadata = {
-                        type: "metadata",
-                        file_name: fileName,
-                        file_size: fileSize,
-                        total_sets: sets.length,
-                        total_selected_sets: selectedSets.filter(Boolean).length,
-                        chunks_per_set: SET_SIZE_CHUNKS,
-                        total_chunks: chunks.length,
-                        timestamp: Date.now()
-                    };
-                    
-                    // Add file queue information if multiple files
-                    if (includeFileQueueInfo) {
-                        metadata.file_index = currentFileIndex + 1;
-                        metadata.total_files = fileQueue.length;
-                    }
-                    
-                    // Add selected sets information
-                    metadata.selected_sets = selectedSets.map((selected, index) => 
-                        selected ? index + 1 : null).filter(Boolean);
-                    
-                    frameContent = JSON.stringify(metadata);
-                    frameLabel = "Metadata";
-                    
-                    // Add emphasis for metadata frame
+                    // Metadata frame - red border
                     qrDisplay.style.border = '3px solid red';
-                    
                 } else {
-                    // Reset border for non-metadata frames
-                    qrDisplay.style.border = '2px solid #333';
-                    
-                    // Track position in the selected sets
-                    let currentPosition = 1; // Start after metadata
-                    let selectedSetIndices = selectedSets
-                        .map((selected, index) => selected ? index : -1)
-                        .filter(index => index !== -1);
-                    
-                    if (currentPosition <= currentFrame && 
-                        currentFrame < currentPosition + selectedSetIndices.length) {
-                        // Set header frame
-                        const selectedSetIndex = currentFrame - currentPosition;
-                        const actualSetIndex = selectedSetIndices[selectedSetIndex];
-                        const setChunks = sets[actualSetIndex] || [];
-                        
-                        const setHeader = {
-                            type: "set_header",
-                            set_index: actualSetIndex + 1,
-                            total_sets: selectedSets.filter(Boolean).length,
-                            chunks_in_set: setChunks.length
-                        };
-                        
-                        frameContent = JSON.stringify(setHeader);
-                        frameLabel = `Set ${actualSetIndex + 1} Header`;
-                        
-                        // Highlight set header frames
+                    const nextSetHeaderFrame = getNextSetHeaderFrame(currentFrame);
+                    if (nextSetHeaderFrame === currentFrame) {
+                        // Set header frame - orange border
                         qrDisplay.style.border = '2px solid orange';
-                        
+                    } else if (currentFrame === totalFrames - 1) {
+                        // End frame - red border
+                        qrDisplay.style.border = '3px solid red';
                     } else {
-                        // Advance position past set headers
-                        currentPosition += selectedSetIndices.length;
-                        
-                        // End frame
-                        if (currentFrame === totalFrames - 1) {
-                            const endData = {
-                                type: "end",
-                                file_name: fileName,
-                                file_size: fileSize,
-                                selected_sets: selectedSets.map((selected, index) => 
-                                    selected ? index + 1 : null).filter(Boolean),
-                                timestamp: Date.now()
-                            };
-                            
-                            frameContent = JSON.stringify(endData);
-                            frameLabel = "End Frame";
-                            
-                            // Highlight end frame
-                            qrDisplay.style.border = '3px solid red';
-                            
-                        } else {
-                            // Chunk frame - map from frame index to actual chunk index
-                            let chunkPositionInStream = currentFrame - currentPosition;
-                            let actualChunkIndex = -1;
-                            let runningTotal = 0;
-                            
-                            // Find which set and chunk this corresponds to
-                            for (let i = 0; i < selectedSets.length; i++) {
-                                if (!selectedSets[i]) continue;
-                                
-                                const setSize = sets[i].length;
-                                if (chunkPositionInStream < runningTotal + setSize) {
-                                    // Found the set - calculate chunk index
-                                    const localChunkIndex = chunkPositionInStream - runningTotal;
-                                    
-                                    // Create chunk data
-                                    const chunkData = {
-                                        type: "chunk",
-                                        set_index: i + 1,
-                                        chunk_index: localChunkIndex + 1,
-                                        chunks_in_set: setSize,
-                                        data: sets[i][localChunkIndex] || ""
-                                    };
-                                    
-                                    frameContent = JSON.stringify(chunkData);
-                                    frameLabel = `Set ${i + 1}, Chunk ${localChunkIndex + 1}`;
-                                    break;
-                                }
-                                
-                                runningTotal += setSize;
-                            }
-                            
-                            if (!frameContent) {
-                                // Error case - shouldn't happen with proper indexing
-                                frameContent = JSON.stringify({ error: "Invalid chunk index" });
-                                frameLabel = "Error";
-                            }
-                        }
+                        // Regular chunk frame - normal border
+                        qrDisplay.style.border = '2px solid #333';
                     }
                 }
                 
-                // Create QR code - using a promise-based approach
-                const qrContainer = document.createElement('div');
-                qrContainer.style.display = 'flex';
-                qrContainer.style.justifyContent = 'center';
-                qrContainer.style.alignItems = 'center';
-                qrContainer.style.width = '100%';
-                qrContainer.style.height = '100%';
-                qrDisplay.appendChild(qrContainer);
+                // Create a list of frames to display
+                const framePromises = [];
                 
-                // Create QR code
-                QRCode.toCanvas(document.createElement('canvas'), frameContent || 'ERROR', {
-                    width: parseInt(sizeSlider.value),
-                    margin: 1,
-                    errorCorrectionLevel: 'L',
-                    color: {
-                        dark: '#000000',
-                        light: '#FFFFFF'
-                    }
-                }, function(error, canvas) {
-                    if (error) {
-                        console.error("Error generating QR code:", error);
-                        qrContainer.textContent = "Error generating QR code";
-                        return;
-                    }
+                for (let i = 0; i < framesToDisplay; i++) {
+                    const frameIndex = currentFrame + i;
+                    if (frameIndex >= totalFrames) break;
                     
-                    // Clear previous content and add the new QR code
-                    qrContainer.innerHTML = '';
-                    qrContainer.appendChild(canvas);
+                    // Get frame content for this position
+                    const {content, label, type} = getFrameContent(frameIndex);
                     
-                    // Add frame label below QR code
-                    const labelElement = document.createElement('div');
-                    labelElement.style.marginTop = '10px';
-                    labelElement.style.textAlign = 'center';
-                    labelElement.style.fontWeight = 'bold';
-                    labelElement.style.position = 'absolute';
-                    labelElement.style.bottom = '5px';
-                    labelElement.style.left = '0';
-                    labelElement.style.right = '0';
+                    // Create container for this QR code
+                    const qrContainer = document.createElement('div');
+                    qrContainer.style.display = 'flex';
+                    qrContainer.style.flexDirection = 'column';
+                    qrContainer.style.justifyContent = 'center';
+                    qrContainer.style.alignItems = 'center';
+                    qrContainer.style.position = 'relative';
+                    qrContainer.className = 'qr-grid-cell';
+                    qrContainer.setAttribute('data-frame-index', frameIndex);
+                    qrContainer.setAttribute('data-frame-type', type);
+                    qrDisplay.appendChild(qrContainer);
                     
-                    // Style label according to frame type
-                    if (frameType === 'metadata' || frameType === 'endframe') {
-                        labelElement.style.color = 'red';
-                    } else if (frameType === 'setheader') {
-                        labelElement.style.color = 'orange';
-                    }
-                    
-                    labelElement.textContent = frameLabel;
-                    qrDisplay.appendChild(labelElement);
-                    
-                    // Update presentation mode if active
-                    if (isPresentation) {
-                        // Create a clean display for presentation mode
-                        presentationQrDisplay.innerHTML = '';
-                        
-                        // Add a wrapper with white background for better contrast
-                        const qrWrapper = document.createElement('div');
-                        qrWrapper.style.background = '#ffffff';
-                        qrWrapper.style.padding = '30px';
-                        qrWrapper.style.borderRadius = '8px';
-                        qrWrapper.style.boxShadow = '0 0 30px rgba(255,255,255,0.3)';
-                        qrWrapper.style.display = 'flex';
-                        qrWrapper.style.flexDirection = 'column';
-                        qrWrapper.style.alignItems = 'center';
-                        qrWrapper.style.justifyContent = 'center';
-                        
-                        // Create a loading indicator while we generate the QR code
-                        const loadingIndicator = document.createElement('div');
-                        loadingIndicator.textContent = 'Generating QR...';
-                        loadingIndicator.style.padding = '20px';
-                        loadingIndicator.style.border = '1px solid #ccc';
-                        loadingIndicator.style.borderRadius = '4px';
-                        loadingIndicator.style.marginBottom = '15px';
-                        qrWrapper.appendChild(loadingIndicator);
-                        
-                        // Create a new QR code canvas specifically for the presentation view
-                        const size = Math.min(window.innerWidth, window.innerHeight) * 0.7;
-                        
-                        // Create the full presentationCanvas
-                        const presentationCanvas = document.createElement('canvas');
-                        presentationCanvas.width = size;
-                        presentationCanvas.height = size;
-                        
-                        // First, set up the whole canvas with red frame and white center
-                        const pctx = presentationCanvas.getContext('2d');
-                        // Draw red outer frame
-                        pctx.fillStyle = '#FF0000';
-                        pctx.fillRect(0, 0, size, size);
-                        // Draw white inner area (with margin)
-                        const margin = size * 0.05; // 5% margin
-                        pctx.fillStyle = '#FFFFFF';
-                        pctx.fillRect(margin, margin, size - (margin * 2), size - (margin * 2));
-                        
-                        // Insert the presentation canvas before the loading indicator
-                        qrWrapper.insertBefore(presentationCanvas, loadingIndicator);
-                        
-                        // Use QRCode.toCanvas to create a fresh QR code with appropriate size
-                        QRCode.toCanvas(document.createElement('canvas'), frameContent || 'ERROR', {
-                            width: size - 40, // Slightly smaller to ensure it fits
-                            margin: 4,
+                    // Create promise to generate this QR code
+                    const promise = new Promise((resolve) => {
+                        QRCode.toCanvas(document.createElement('canvas'), content || 'ERROR', {
+                            width: parseInt(sizeSlider.value),
+                            margin: 1,
                             errorCorrectionLevel: 'L',
                             color: {
                                 dark: '#000000',
                                 light: '#FFFFFF'
                             }
-                        }, function(err, qrCanvas) {
-                            // Remove the QR code from the loading area once we're handling it
-                            qrWrapper.removeChild(loadingIndicator);
-                            if (!err) {
-                                // Draw the generated QR code onto our presentation canvas
-                                // Calculate position to center QR code in the white area
-                                const qrMargin = size * 0.1; // 10% in from the edge
-                                pctx.drawImage(qrCanvas, qrMargin, qrMargin, size - (qrMargin * 2), size - (qrMargin * 2));
-                                // Loading indicator already removed
-                            } else {
-                                console.error("Error creating presentation QR", err);
-                                // Create error indicator since we already removed the loading indicator
-                                const errorIndicator = document.createElement('div');
-                                errorIndicator.textContent = 'Error generating QR';
-                                errorIndicator.style.color = 'red';
-                                errorIndicator.style.padding = '10px';
-                                errorIndicator.style.border = '1px solid red';
-                                errorIndicator.style.borderRadius = '4px';
-                                qrWrapper.appendChild(errorIndicator);
-                                
-                                // Fallback - try to use the original canvas
-                                try {
-                                    pctx.drawImage(canvas, 20, 20, size - 40, size - 40);
-                                    // Remove the error message if this worked
-                                    qrWrapper.removeChild(errorIndicator);
-                                } catch (e) {
-                                    console.error("Fallback failed", e);
-                                }
+                        }, function(error, canvas) {
+                            if (error) {
+                                console.error("Error generating QR code:", error);
+                                qrContainer.textContent = "Error generating QR code";
+                                resolve();
+                                return;
                             }
+                            
+                            // Add the QR code
+                            qrContainer.appendChild(canvas);
+                            
+                            // Add frame label
+                            const labelElement = document.createElement('div');
+                            labelElement.style.marginTop = '8px';
+                            labelElement.style.textAlign = 'center';
+                            labelElement.style.fontWeight = 'bold';
+                            labelElement.style.fontSize = '10px';
+                            
+                            // Style label according to frame type
+                            if (type === 'metadata' || type === 'end') {
+                                labelElement.style.color = 'red';
+                            } else if (type === 'set_header') {
+                                labelElement.style.color = 'orange';
+                            }
+                            
+                            labelElement.textContent = label;
+                            qrContainer.appendChild(labelElement);
+                            
+                            resolve();
                         });
-                        
-                        // Create the frame label immediately
-                        const newLabel = document.createElement('div');
-                        newLabel.style.marginTop = '15px';
-                        newLabel.style.color = labelElement.style.color || '#000';
-                        newLabel.style.fontWeight = 'bold';
-                        newLabel.style.fontSize = '24px';
-                        newLabel.textContent = labelElement.textContent;
-                        
-                        // We add this right away, before the async QR code generation
-                        qrWrapper.appendChild(newLabel);
-                        
-                        // Add the wrapper to the presentation display
-                        presentationQrDisplay.appendChild(qrWrapper);
-                        
-                        // Update the counter
-                        presentationCounter.textContent = frameCounter.textContent;
+                    });
+                    
+                    framePromises.push(promise);
+                }
+                
+                // Wait for all QR codes to be generated
+                Promise.all(framePromises).then(() => {
+                    // Update presentation mode if active
+                    if (isPresentation) {
+                        // Get the content for the current frame
+                        const { content, label } = getFrameContent(currentFrame);
+                        updatePresentationView(content, label);
                     }
                 });
                 
@@ -1604,6 +1544,252 @@
                 console.error("Error displaying frame:", error);
                 log(`Error displaying frame: ${error.message}`, true);
             }
+        }
+        
+        // Helper function to get the next set header frame
+        function getNextSetHeaderFrame(startFrame) {
+            let currentPosition = 1; // Start after metadata
+            let selectedSetIndices = selectedSets
+                .map((selected, index) => selected ? index : -1)
+                .filter(index => index !== -1);
+                
+            // Check if the current frame is in the set header range
+            if (currentPosition <= startFrame && 
+                startFrame < currentPosition + selectedSetIndices.length) {
+                return startFrame;
+            }
+            
+            return -1;
+        }
+        
+        // Helper function to get frame content by index
+        function getFrameContent(frameIndex) {
+            let frameContent = '';
+            let frameLabel = '';
+            let frameType = 'chunk';
+            
+            if (frameIndex === 0) {
+                // Metadata frame
+                const includeFileQueueInfo = fileQueue.length > 1;
+                
+                const metadata = {
+                    type: "metadata",
+                    file_name: fileName,
+                    file_size: fileSize,
+                    total_sets: sets.length,
+                    total_selected_sets: selectedSets.filter(Boolean).length,
+                    chunks_per_set: SET_SIZE_CHUNKS,
+                    total_chunks: chunks.length,
+                    timestamp: Date.now(),
+                    qr_grid_size: parseInt(gridLayoutSelect.value)
+                };
+                
+                // Add file queue information if multiple files
+                if (includeFileQueueInfo) {
+                    metadata.file_index = currentFileIndex + 1;
+                    metadata.total_files = fileQueue.length;
+                }
+                
+                // Add selected sets information
+                metadata.selected_sets = selectedSets.map((selected, index) => 
+                    selected ? index + 1 : null).filter(Boolean);
+                
+                frameContent = JSON.stringify(metadata);
+                frameLabel = "Metadata";
+                frameType = 'metadata';
+                
+            } else {
+                // Track position in the selected sets
+                let currentPosition = 1; // Start after metadata
+                let selectedSetIndices = selectedSets
+                    .map((selected, index) => selected ? index : -1)
+                    .filter(index => index !== -1);
+                
+                if (currentPosition <= frameIndex && 
+                    frameIndex < currentPosition + selectedSetIndices.length) {
+                    // Set header frame
+                    const selectedSetIndex = frameIndex - currentPosition;
+                    const actualSetIndex = selectedSetIndices[selectedSetIndex];
+                    const setChunks = sets[actualSetIndex] || [];
+                    
+                    const setHeader = {
+                        type: "set_header",
+                        set_index: actualSetIndex + 1,
+                        total_sets: selectedSets.filter(Boolean).length,
+                        chunks_in_set: setChunks.length
+                    };
+                    
+                    frameContent = JSON.stringify(setHeader);
+                    frameLabel = `Set ${actualSetIndex + 1} Header`;
+                    frameType = 'set_header';
+                    
+                } else {
+                    // Advance position past set headers
+                    currentPosition += selectedSetIndices.length;
+                    
+                    // End frame
+                    if (frameIndex === totalFrames - 1) {
+                        const endData = {
+                            type: "end",
+                            file_name: fileName,
+                            file_size: fileSize,
+                            selected_sets: selectedSets.map((selected, index) => 
+                                selected ? index + 1 : null).filter(Boolean),
+                            timestamp: Date.now()
+                        };
+                        
+                        frameContent = JSON.stringify(endData);
+                        frameLabel = "End Frame";
+                        frameType = 'end';
+                        
+                    } else {
+                        // Chunk frame - map from frame index to actual chunk index
+                        let chunkPositionInStream = frameIndex - currentPosition;
+                        let actualChunkIndex = -1;
+                        let runningTotal = 0;
+                        
+                        // Find which set and chunk this corresponds to
+                        for (let i = 0; i < selectedSets.length; i++) {
+                            if (!selectedSets[i]) continue;
+                            
+                            const setSize = sets[i].length;
+                            if (chunkPositionInStream < runningTotal + setSize) {
+                                // Found the set - calculate chunk index
+                                const localChunkIndex = chunkPositionInStream - runningTotal;
+                                
+                                // Create chunk data
+                                const chunkData = {
+                                    type: "chunk",
+                                    set_index: i + 1,
+                                    chunk_index: localChunkIndex + 1,
+                                    chunks_in_set: setSize,
+                                    data: sets[i][localChunkIndex] || ""
+                                };
+                                
+                                frameContent = JSON.stringify(chunkData);
+                                frameLabel = `Set ${i + 1}, Chunk ${localChunkIndex + 1}`;
+                                frameType = 'chunk';
+                                break;
+                            }
+                            
+                            runningTotal += setSize;
+                        }
+                        
+                        if (!frameContent) {
+                            // Error case - shouldn't happen with proper indexing
+                            frameContent = JSON.stringify({ error: "Invalid chunk index" });
+                            frameLabel = "Error";
+                            frameType = 'error';
+                        }
+                    }
+                }
+            }
+            
+            return { content: frameContent, label: frameLabel, type: frameType };
+        }
+        
+        // Function to update presentation view (for fullscreen mode)
+        function updatePresentationView(frameContent, frameLabel) {
+            // Create a clean display for presentation mode
+            presentationQrDisplay.innerHTML = '';
+            
+            // Add a wrapper with white background for better contrast
+            const qrWrapper = document.createElement('div');
+            qrWrapper.style.background = '#ffffff';
+            qrWrapper.style.padding = '30px';
+            qrWrapper.style.borderRadius = '8px';
+            qrWrapper.style.boxShadow = '0 0 30px rgba(255,255,255,0.3)';
+            qrWrapper.style.display = 'flex';
+            qrWrapper.style.flexDirection = 'column';
+            qrWrapper.style.alignItems = 'center';
+            qrWrapper.style.justifyContent = 'center';
+            
+            // Create a loading indicator while we generate the QR code
+            const loadingIndicator = document.createElement('div');
+            loadingIndicator.textContent = 'Generating QR...';
+            loadingIndicator.style.padding = '20px';
+            loadingIndicator.style.border = '1px solid #ccc';
+            loadingIndicator.style.borderRadius = '4px';
+            loadingIndicator.style.marginBottom = '15px';
+            qrWrapper.appendChild(loadingIndicator);
+            
+            // Create a new QR code canvas specifically for the presentation view
+            const size = Math.min(window.innerWidth, window.innerHeight) * 0.7;
+            
+            // Create the full presentationCanvas
+            const presentationCanvas = document.createElement('canvas');
+            presentationCanvas.width = size;
+            presentationCanvas.height = size;
+            
+            // First, set up the whole canvas with red frame and white center
+            const pctx = presentationCanvas.getContext('2d');
+            // Draw red outer frame
+            pctx.fillStyle = '#FF0000';
+            pctx.fillRect(0, 0, size, size);
+            // Draw white inner area (with margin)
+            const margin = size * 0.05; // 5% margin
+            pctx.fillStyle = '#FFFFFF';
+            pctx.fillRect(margin, margin, size - (margin * 2), size - (margin * 2));
+            
+            // Insert the presentation canvas before the loading indicator
+            qrWrapper.insertBefore(presentationCanvas, loadingIndicator);
+            
+            // Use QRCode.toCanvas to create a fresh QR code with appropriate size
+            QRCode.toCanvas(document.createElement('canvas'), frameContent || 'ERROR', {
+                width: size - 40, // Slightly smaller to ensure it fits
+                margin: 4,
+                errorCorrectionLevel: 'L',
+                color: {
+                    dark: '#000000',
+                    light: '#FFFFFF'
+                }
+            }, function(err, qrCanvas) {
+                // Remove the QR code from the loading area once we're handling it
+                qrWrapper.removeChild(loadingIndicator);
+                if (!err) {
+                    // Draw the generated QR code onto our presentation canvas
+                    // Calculate position to center QR code in the white area
+                    const qrMargin = size * 0.1; // 10% in from the edge
+                    pctx.drawImage(qrCanvas, qrMargin, qrMargin, size - (qrMargin * 2), size - (qrMargin * 2));
+                    // Loading indicator already removed
+                } else {
+                    console.error("Error creating presentation QR", err);
+                    // Create error indicator since we already removed the loading indicator
+                    const errorIndicator = document.createElement('div');
+                    errorIndicator.textContent = 'Error generating QR';
+                    errorIndicator.style.color = 'red';
+                    errorIndicator.style.padding = '10px';
+                    errorIndicator.style.border = '1px solid red';
+                    errorIndicator.style.borderRadius = '4px';
+                    qrWrapper.appendChild(errorIndicator);
+                    
+                    // Fallback - try to use the original canvas
+                    try {
+                        pctx.drawImage(canvas, 20, 20, size - 40, size - 40);
+                        // Remove the error message if this worked
+                        qrWrapper.removeChild(errorIndicator);
+                    } catch (e) {
+                        console.error("Fallback failed", e);
+                    }
+                }
+            });
+            
+            // Create the frame label immediately
+            const newLabel = document.createElement('div');
+            newLabel.style.marginTop = '15px';
+            newLabel.style.color = '#000';
+            newLabel.style.fontWeight = 'bold';
+            newLabel.style.fontSize = '24px';
+            newLabel.textContent = frameLabel || 'Frame';
+            
+            // We add this right away, before the async QR code generation
+            qrWrapper.appendChild(newLabel);
+            
+            // Add the wrapper to the presentation display
+            presentationQrDisplay.appendChild(qrWrapper);
+            
+            // Update the counter
+            presentationCounter.textContent = frameCounter.textContent;
         }
 
         function updateProgress(current, total) {
