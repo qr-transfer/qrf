@@ -130,13 +130,14 @@
             position: relative;
             border: 2px solid #333;
             background: white;
-            padding: 20px;
+            padding: 40px;
             border-radius: 8px;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             margin: 0 auto;
+            overflow: hidden; /* Prevent layout shifts */
         }
 
         .progress-container {
@@ -375,6 +376,7 @@
             align-items: center;
             background: #FFFFFF;
             margin-top: 30px;
+            box-sizing: content-box; /* Ensure border is added outside the content area */
         }
         
         #countdownInstructions {
@@ -385,6 +387,58 @@
             text-align: center;
             color: white;
             font-size: 18px;
+        }
+        
+        /* Time estimate display styles */
+        .time-estimate {
+            margin-top: 10px;
+            padding: 8px 12px;
+            background-color: #f0f7ff;
+            border-radius: 4px;
+            border: 1px solid #d0e3ff;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        /* Normal countdown overlay */
+        #normalCountdown {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.9);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 40px;
+            z-index: 100;
+            border-radius: 8px;
+        }
+        
+        /* Normal timer display */
+        #normalTimerDisplay {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            background-color: #e9f5ff;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-size: 14px;
+            border: 1px solid #b8e0ff;
+        }
+        
+        /* QR code animations */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .qr-grid-cell {
+            animation: fadeIn 0.2s ease-in-out;
         }
 
         .file-queue-panel {
@@ -746,24 +800,99 @@
             const totalWidth = (size * cols) + (padding * (cols - 1));
             const totalHeight = (size * rows) + (padding * (rows - 1));
             
-            // Update container size
+            // Add extra padding around the QR codes (40px on each side)
+            const containerPadding = 40;
+            
+            // Update container size with padding
             qrDisplay.style.width = `${totalWidth}px`;
             qrDisplay.style.height = `${totalHeight}px`;
+            qrDisplay.style.padding = `${containerPadding}px`;
+            qrDisplay.style.boxSizing = 'content-box'; // Ensure padding adds to size
+            qrDisplay.style.backgroundColor = '#ffffff'; // Ensure white background
+            qrDisplay.style.border = '4px solid rgba(255, 0, 0, 0.6)'; // Red border
             
             // Update grid layout
             qrDisplay.style.display = 'grid';
             qrDisplay.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
             qrDisplay.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
             qrDisplay.style.gap = `${padding}px`;
+            
+            // Update presentation frame border styling
+            const countdownFrame = document.getElementById('countdownFrame');
+            if (countdownFrame) {
+                // Make the frame match the qrDisplay size including padding
+                countdownFrame.style.width = `${totalWidth + (containerPadding * 2)}px`;
+                countdownFrame.style.height = `${totalHeight + (containerPadding * 2)}px`;
+            }
+            
+            // Update time estimates based on new grid size
+            updateEstimatedTime();
+        }
+        
+        // Function to update the estimated transfer time display
+        function updateEstimatedTime() {
+            if (!totalFrames || !fileName || startBtn.disabled) return; // Only show when QR generation is ready
+            
+            const fps = parseInt(speedSlider.value);
+            const totalTimeSeconds = calculateEstimatedTime(totalFrames, fps);
+            const gridSize = parseInt(gridLayoutSelect.value);
+            const effectiveSpeed = fps * gridSize; // Effective QR codes per second
+            
+            // Calculate transfer rate in bytes per second
+            const bytesPerSecond = (fileSize / totalTimeSeconds).toFixed(2);
+            const transferRate = formatFileSize(bytesPerSecond) + '/sec';
+            
+            const infoText = `
+Estimated transfer:
+• ${totalFrames} frames at ${fps} fps
+• ${gridSize} QR${gridSize > 1 ? 's' : ''} per frame = ${effectiveSpeed} QR/sec
+• Time: ${formatTime(totalTimeSeconds)}
+• Transfer rate: ${transferRate}
+• File: ${formatFileSize(fileSize)}`;
+            
+            // Show in the status element
+            statusEl.innerHTML = infoText.replace(/\n/g, '<br>');
+            
+            // Create or update the time estimate display for normal view
+            let timeEstimateDisplay = document.getElementById('normalTimeEstimate');
+            if (!timeEstimateDisplay) {
+                timeEstimateDisplay = document.createElement('div');
+                timeEstimateDisplay.id = 'normalTimeEstimate';
+                timeEstimateDisplay.className = 'time-estimate';
+                timeEstimateDisplay.style.marginTop = '10px';
+                timeEstimateDisplay.style.padding = '8px 12px';
+                timeEstimateDisplay.style.backgroundColor = '#f0f7ff';
+                timeEstimateDisplay.style.borderRadius = '4px';
+                timeEstimateDisplay.style.border = '1px solid #d0e3ff';
+                timeEstimateDisplay.style.fontSize = '14px';
+                frameCounter.parentNode.insertBefore(timeEstimateDisplay, frameCounter);
+            }
+            
+            timeEstimateDisplay.innerHTML = `
+                <div><strong>Est. Time:</strong> ${formatTime(totalTimeSeconds)}</div>
+                <div><strong>Transfer Rate:</strong> ${transferRate}</div>
+                <div><strong>Grid Layout:</strong> ${gridValue.textContent}</div>
+            `;
+            
+            // Also update presentation estimate if it exists
+            const presentationEstTime = document.getElementById('presentationEstTime');
+            if (presentationEstTime) {
+                presentationEstTime.textContent = `Est. Time: ${formatTime(totalTimeSeconds)}`;
+            }
         }
 
         chunkSlider.addEventListener('input', () => {
             chunkValue.textContent = `${chunkSlider.value} bytes`;
+            // Don't update time estimates here as chunk size doesn't directly affect display time
         });
 
         countdownSlider.addEventListener('input', () => {
             countdownValueEl.textContent = `${countdownSlider.value} seconds`;
         });
+        
+        // Update time estimates when parameters change
+        speedSlider.addEventListener('change', updateEstimatedTime);
+        gridLayoutSelect.addEventListener('change', updateEstimatedTime);
 
         fileInput.addEventListener('change', (e) => {
             const files = e.target.files;
@@ -1017,6 +1146,8 @@
             if (isPresentation) {
                 exitPresentationMode();
                 toggleText.textContent = 'Enter Full Screen Mode';
+                // Make sure normal view components are visible
+                qrDisplay.style.display = 'grid';
             } else {
                 enterPresentationMode();
                 toggleText.textContent = 'Exit Full Screen Mode';
@@ -1028,6 +1159,10 @@
             if (isPresentation) return;
             
             try {
+                // Store current frame/content before switching modes
+                const currentFrameNumber = currentFrame;
+                const currentContent = getFrameContent(currentFrame);
+                
                 // Setup presentation mode
                 presentationOverlay.style.display = 'flex';
                 isPresentation = true;
@@ -1040,9 +1175,19 @@
                 const totalTimeSeconds = calculateEstimatedTime(totalFrames, fps);
                 const presentationFilename = document.getElementById('presentationFilename');
                 const presentationEstTime = document.getElementById('presentationEstTime');
+                const presentationRemaining = document.getElementById('presentationRemaining');
                 
                 presentationFilename.textContent = `Transmitting: ${fileName}`;
                 presentationEstTime.textContent = `Est. Time: ${formatTime(totalTimeSeconds)}`;
+                
+                // Update remaining time if we're already playing
+                if (isPlaying && remainingSeconds > 0) {
+                    if (presentationRemaining) {
+                        presentationRemaining.textContent = `Remaining: ${formatTime(remainingSeconds)}`;
+                    }
+                    // Update presentation with current content
+                    updatePresentationView(currentContent.content, currentContent.label);
+                }
                 
                 // Try to request fullscreen if supported (not required)
                 try {
@@ -1066,6 +1211,13 @@
             
             presentationOverlay.style.display = 'none';
             isPresentation = false;
+            
+            // Ensure normal QR display reflects current state
+            if (isPlaying) {
+                // Temporarily store current frame to redisplay it in normal mode
+                const currentFrameContent = getFrameContent(currentFrame);
+                displayFrame(); // This will redisplay frame in normal mode
+            }
             
             // Exit fullscreen if we're in it
             try {
@@ -1175,7 +1327,13 @@
                     // Enable start button
                     startBtn.disabled = false;
                     generateBtn.disabled = true;
-                    togglePresentationBtn.disabled = true;
+                    togglePresentationBtn.disabled = false;
+                    
+                    // Update the estimated time display
+                    updateEstimatedTime();
+                    
+                    // Pre-size the QR display to match the grid layout
+                    updateQRContainerSize();
                     
                 } catch (error) {
                     log(`Error processing file: ${error.message}`, true);
@@ -1211,24 +1369,34 @@
         function startDisplay() {
             if (isPlaying || !chunks.length) return;
             
-            // First update the presentation header information before we start
+            // Update presentation header information before we start
             const fps = parseInt(speedSlider.value);
             const totalTimeSeconds = calculateEstimatedTime(totalFrames, fps);
             const presentationFilename = document.getElementById('presentationFilename');
             const presentationEstTime = document.getElementById('presentationEstTime');
+            const presentationRemaining = document.getElementById('presentationRemaining');
             
             presentationFilename.textContent = `Transmitting: ${fileName}`;
             presentationEstTime.textContent = `Est. Time: ${formatTime(totalTimeSeconds)}`;
+            if (presentationRemaining) {
+                presentationRemaining.textContent = `Remaining: ${formatTime(totalTimeSeconds)}`;
+            }
             
-            // Prepare the estimate display in countdown
+            // Update the QR container size to make sure it matches the grid layout
+            updateQRContainerSize();
+            
+            // Prepare the estimate display for countdown
             const estimateDisplay = document.createElement('div');
             estimateDisplay.style.fontSize = '24px';
             estimateDisplay.style.marginTop = '20px';
             estimateDisplay.style.color = '#fff';
-            estimateDisplay.textContent = `Estimated transmission time: ${formatTime(totalTimeSeconds)}`;
-            countdownOverlay.appendChild(estimateDisplay);
+            estimateDisplay.innerHTML = `
+                <div style="margin-bottom: 8px;">Estimated transmission time: ${formatTime(totalTimeSeconds)}</div>
+                <div style="font-size: 18px;">File: ${fileName} (${formatFileSize(fileSize)})</div>
+                <div style="font-size: 18px;">Transfer rate: ${formatFileSize((fileSize / totalTimeSeconds).toFixed(2))}/sec</div>
+            `;
             
-            // Start with countdown
+            // Set countdown values
             countdownValue = parseInt(countdownSlider.value);
             
             // Disable buttons during countdown
@@ -1236,38 +1404,163 @@
             stopBtn.disabled = false;
             generateBtn.disabled = true;
             
-            // Show countdown overlay
-            countdownOverlay.style.display = 'flex';
-            countdownDisplay.textContent = countdownValue;
+            // Adjust countdown frame size to match the QR display size
+            const size = parseInt(sizeSlider.value);
+            const qrCount = parseInt(gridLayoutSelect.value);
+            let cols, rows;
+            switch(qrCount) {
+                case 1: cols = 1; rows = 1; break;
+                case 2: cols = 2; rows = 1; break; 
+                case 4: cols = 2; rows = 2; break;
+                case 8: cols = 4; rows = 2; break;
+                case 16: cols = 4; rows = 4; break;
+                case 32: cols = 8; rows = 4; break;
+                default: cols = 1; rows = 1;
+            }
+            const padding = 20;
+            const totalWidth = (size * cols) + (padding * (cols - 1));
+            const totalHeight = (size * rows) + (padding * (rows - 1));
+            
+            // Make the frame 20% larger than the QR code for better visibility
+            countdownFrame.style.width = `${Math.round(totalWidth * 1.2)}px`;
+            countdownFrame.style.height = `${Math.round(totalHeight * 1.2)}px`;
+            
+            // Create a normal mode real-time timer display if it doesn't exist
+            let normalTimerDisplay = document.getElementById('normalTimerDisplay');
+            if (!normalTimerDisplay) {
+                normalTimerDisplay = document.createElement('div');
+                normalTimerDisplay.id = 'normalTimerDisplay';
+                normalTimerDisplay.style.marginTop = '10px';
+                normalTimerDisplay.style.padding = '8px 12px';
+                normalTimerDisplay.style.backgroundColor = '#e9f5ff';
+                normalTimerDisplay.style.borderRadius = '4px';
+                normalTimerDisplay.style.border = '1px solid #b8e0ff';
+                normalTimerDisplay.style.fontSize = '14px';
+                normalTimerDisplay.style.display = 'flex';
+                normalTimerDisplay.style.justifyContent = 'space-between';
+                normalTimerDisplay.innerHTML = `
+                    <div><strong>Elapsed:</strong> <span id="normalElapsedTime">00:00</span></div>
+                    <div><strong>Remaining:</strong> <span id="normalRemainingTime">${formatTime(totalTimeSeconds)}</span></div>
+                    <div><strong>Progress:</strong> <span id="normalProgressPercent">0%</span></div>
+                `;
+                // Add it before progress bar
+                const progressContainer = document.querySelector('.progress-container');
+                progressContainer.parentNode.insertBefore(normalTimerDisplay, progressContainer);
+            }
+            
+            // Scroll to the QR display container when starting display
+            displayContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            log('Scrolling to QR display for better visibility');
             
             log(`Starting countdown: ${countdownValue} seconds before QR display. Estimated time: ${formatTime(totalTimeSeconds)}`);
+            
+            // If in presentation mode, use presentation countdowns, otherwise use in-place display
+            if (isPresentation) {
+                // Show countdown in presentation mode
+                countdownOverlay.appendChild(estimateDisplay);
+                countdownOverlay.style.display = 'flex';
+                countdownDisplay.textContent = countdownValue;
+            } else {
+                // For regular display, use a countdown overlay just above the QR display
+                // Create an overlay for the regular view
+                const normalCountdown = document.createElement('div');
+                normalCountdown.id = 'normalCountdown';
+                normalCountdown.style.position = 'absolute';
+                normalCountdown.style.top = '0';
+                normalCountdown.style.left = '0';
+                normalCountdown.style.width = '100%';
+                normalCountdown.style.height = '100%';
+                normalCountdown.style.backgroundColor = 'rgba(0,0,0,0.9)';
+                normalCountdown.style.color = 'white';
+                normalCountdown.style.display = 'flex';
+                normalCountdown.style.flexDirection = 'column';
+                normalCountdown.style.justifyContent = 'center';
+                normalCountdown.style.alignItems = 'center';
+                normalCountdown.style.fontSize = '40px';
+                normalCountdown.style.zIndex = '100';
+                normalCountdown.innerHTML = `
+                    <div style="font-size: 60px; font-weight: bold;">${countdownValue}</div>
+                    <div style="margin-top: 10px;">Prepare to scan</div>
+                    <div style="margin-top: 20px; font-size: 18px;">Est. Time: ${formatTime(totalTimeSeconds)}</div>
+                    <div style="margin-top: 5px; font-size: 16px;">${fileName} (${formatFileSize(fileSize)})</div>
+                `;
+                
+                // Create the countdown overlay that will be in the center
+                // (not touching the edges of the QR area)
+                qrDisplay.style.position = 'relative';
+                qrDisplay.appendChild(normalCountdown);
+                
+                // For normal mode, we'll adjust the QR display to have a border that doesn't interfere
+                // Create a persistent frame that will remain after countdown
+                // Store original border to restore later
+                const originalBorder = qrDisplay.style.border;
+                const originalBorderRadius = qrDisplay.style.borderRadius;
+                
+                // Add a margin around the QR display so the frame doesn't touch QR codes
+                const originalPadding = qrDisplay.style.padding || '0px';
+                qrDisplay.style.padding = '20px';
+                qrDisplay.style.border = '4px solid #FF0000';
+                qrDisplay.style.borderRadius = '10px';
+                
+                // Store original styles to restore them later
+                qrDisplay.dataset.originalPadding = originalPadding;
+                qrDisplay.dataset.originalBorder = originalBorder;
+                qrDisplay.dataset.originalBorderRadius = originalBorderRadius;
+            }
             
             // Start countdown timer
             countdownTimer = setInterval(() => {
                 countdownValue--;
-                countdownDisplay.textContent = countdownValue;
+                
+                if (isPresentation) {
+                    countdownDisplay.textContent = countdownValue;
+                } else {
+                    const normalCountdown = document.getElementById('normalCountdown');
+                    if (normalCountdown) {
+                        normalCountdown.querySelector('div').textContent = countdownValue;
+                    }
+                }
                 
                 if (countdownValue <= 0) {
                     clearInterval(countdownTimer);
-                    countdownOverlay.style.display = 'none';
-                    countdownOverlay.removeChild(estimateDisplay); // Clean up
+                    
+                    if (isPresentation) {
+                        countdownOverlay.style.display = 'none';
+                        countdownOverlay.removeChild(estimateDisplay); // Clean up
+                    } else {
+                        // Remove only the countdown overlay, keep the frame
+                        const normalCountdown = document.getElementById('normalCountdown');
+                        if (normalCountdown) {
+                            qrDisplay.removeChild(normalCountdown);
+                        }
+                        
+                        // Change the border to be thinner but still visible during display
+                        qrDisplay.style.border = '4px solid rgba(255, 0, 0, 0.5)';
+                    }
                     
                     // Start the actual display
                     isPlaying = true;
                     currentFrame = 0;
+                    startTransmissionTime = Date.now();
                     
                     log('Starting QR code display...');
                     
                     // Clear display
                     qrDisplay.innerHTML = '';
                     
-                    // No longer automatically enter presentation mode
-                    // Enable the toggle button instead
+                    // Make sure the toggle button is enabled
                     togglePresentationBtn.disabled = false;
                     
                     // Start display loop
                     displayFrame();
                     restartInterval();
+                    
+                    // Start tracking remaining time
+                    remainingInterval = setInterval(updateRemainingTime, 1000);
+                    const presentationRemaining = document.getElementById('presentationRemaining');
+                    if (presentationRemaining) {
+                        presentationRemaining.textContent = `Remaining: ${formatTime(totalTimeSeconds)}`;
+                    }
                 }
             }, 1000);
         }
@@ -1277,17 +1570,32 @@
             
             isPlaying = false;
             
+            // Clear the normal view timer display
+            const normalTimerDisplay = document.getElementById('normalTimerDisplay');
+            if (normalTimerDisplay && normalTimerDisplay.parentNode) {
+                normalTimerDisplay.parentNode.removeChild(normalTimerDisplay);
+            }
+            
             // Exit presentation mode if active
             if (isPresentation) {
                 exitPresentationMode();
             }
             
-            // Disable the toggle button
+            // Update the toggle button
             togglePresentationBtn.disabled = true;
+            document.getElementById('togglePresentationText').textContent = 'Enter Full Screen Mode';
             
             if (countdownTimer) {
                 clearInterval(countdownTimer);
                 countdownTimer = null;
+                
+                // Handle normal countdown wrapper if present
+                const normalCountdownWrapper = document.getElementById('normalCountdownWrapper');
+                if (normalCountdownWrapper && normalCountdownWrapper.parentNode) {
+                    normalCountdownWrapper.parentNode.removeChild(normalCountdownWrapper);
+                }
+                
+                // Handle presentation countdown overlay if visible
                 countdownOverlay.style.display = 'none';
                 
                 // Remove any dynamically added elements to the countdown overlay
@@ -1307,11 +1615,33 @@
                 remainingInterval = null;
             }
             
-            exitPresentationMode();
+            // Simple reset of the display
+            qrDisplay.innerHTML = '';
+            qrDisplay.style.display = 'flex';
+            
+            // Restore original styles if they were saved
+            if (qrDisplay.dataset.originalBorder !== undefined) {
+                qrDisplay.style.border = qrDisplay.dataset.originalBorder;
+                qrDisplay.style.borderRadius = qrDisplay.dataset.originalBorderRadius;
+                qrDisplay.style.padding = qrDisplay.dataset.originalPadding;
+                
+                // Clear dataset values
+                delete qrDisplay.dataset.originalBorder;
+                delete qrDisplay.dataset.originalBorderRadius;
+                delete qrDisplay.dataset.originalPadding;
+            } else {
+                // Default if no saved styles
+                qrDisplay.style.border = '2px solid #333';
+                qrDisplay.style.padding = '0px';
+                qrDisplay.style.borderRadius = '0px';
+            }
             
             startBtn.disabled = false;
             stopBtn.disabled = true;
             generateBtn.disabled = false;
+            
+            // Update progress to 0
+            updateProgress(0, totalFrames);
             
             log('Display stopped');
         }
@@ -1327,11 +1657,29 @@
             const totalEstimated = calculateEstimatedTime(totalFrames, fps);
             
             remainingSeconds = Math.max(0, totalEstimated - elapsed);
+            const percentComplete = Math.min(100, Math.round((elapsed / totalEstimated) * 100));
             
-            // Update the display
+            // Update the presentation mode display
             const presentationRemaining = document.getElementById('presentationRemaining');
             if (presentationRemaining) {
                 presentationRemaining.textContent = `Remaining: ${formatTime(remainingSeconds)}`;
+            }
+            
+            // Update the normal mode timer display
+            const normalElapsedTime = document.getElementById('normalElapsedTime');
+            const normalRemainingTime = document.getElementById('normalRemainingTime');
+            const normalProgressPercent = document.getElementById('normalProgressPercent');
+            
+            if (normalElapsedTime) {
+                normalElapsedTime.textContent = formatTime(elapsed);
+            }
+            
+            if (normalRemainingTime) {
+                normalRemainingTime.textContent = formatTime(remainingSeconds);
+            }
+            
+            if (normalProgressPercent) {
+                normalProgressPercent.textContent = `${percentComplete}%`;
             }
             
             // If we're done, clear the interval
@@ -1356,6 +1704,112 @@
                 updateRemainingTime(); // Update immediately
             }
             
+            // Map to store pregenerated frames to eliminate blinking
+            let pregeneratedFrames = {};
+            
+            // Create and return a ready-to-use frame without async rendering
+            function createFrameSync(frameIndex) {
+                // Create a new container for the frame
+                const frameContainer = document.createElement('div');
+                frameContainer.style.display = 'grid';
+                frameContainer.style.width = '100%';
+                frameContainer.style.height = '100%';
+                frameContainer.style.gridTemplateColumns = qrDisplay.style.gridTemplateColumns;
+                frameContainer.style.gridTemplateRows = qrDisplay.style.gridTemplateRows;
+                frameContainer.style.gap = qrDisplay.style.gap;
+                
+                // Get frame content
+                const {content, label, type} = getFrameContent(frameIndex);
+                
+                // Get grid layout information
+                const qrCount = parseInt(gridLayoutSelect.value);
+                
+                // Calculate how many frames to display in this grid
+                const framesToDisplay = Math.min(qrCount, totalFrames - frameIndex);
+                
+                // Create all QR codes in the grid synchronously
+                for (let i = 0; i < framesToDisplay; i++) {
+                    const subFrameIndex = frameIndex + i;
+                    if (subFrameIndex >= totalFrames) break;
+                    
+                    // Get frame content for this position
+                    const subFrameData = getFrameContent(subFrameIndex);
+                    
+                    // Create container for this QR code
+                    const qrContainer = document.createElement('div');
+                    qrContainer.style.display = 'flex';
+                    qrContainer.style.flexDirection = 'column';
+                    qrContainer.style.justifyContent = 'center';
+                    qrContainer.style.alignItems = 'center';
+                    qrContainer.style.position = 'relative';
+                    qrContainer.style.backgroundColor = '#ffffff';
+                    qrContainer.className = 'qr-grid-cell';
+                    qrContainer.setAttribute('data-frame-index', subFrameIndex);
+                    qrContainer.setAttribute('data-frame-type', subFrameData.type);
+                    
+                    // Create a placeholder element so layout doesn't shift
+                    const placeholderCanvas = document.createElement('canvas');
+                    placeholderCanvas.width = parseInt(sizeSlider.value);
+                    placeholderCanvas.height = parseInt(sizeSlider.value);
+                    placeholderCanvas.style.backgroundColor = '#ffffff';
+                    qrContainer.appendChild(placeholderCanvas);
+                    
+                    // Add placeholder for label to maintain layout
+                    const labelElement = document.createElement('div');
+                    labelElement.style.marginTop = '8px';
+                    labelElement.style.textAlign = 'center';
+                    labelElement.style.fontWeight = 'bold';
+                    labelElement.style.fontSize = '10px';
+                    labelElement.textContent = subFrameData.label;
+                    
+                    // Style label according to frame type
+                    if (subFrameData.type === 'metadata' || subFrameData.type === 'end') {
+                        labelElement.style.color = 'red';
+                    } else if (subFrameData.type === 'set_header') {
+                        labelElement.style.color = 'orange';
+                    }
+                    
+                    qrContainer.appendChild(labelElement);
+                    frameContainer.appendChild(qrContainer);
+                    
+                    // Now generate QR code - we'll add it directly to the canvas
+                    // This happens synchronously so no frame flashing
+                    const canvasContext = placeholderCanvas.getContext('2d');
+                    canvasContext.fillStyle = '#FFFFFF';
+                    canvasContext.fillRect(0, 0, placeholderCanvas.width, placeholderCanvas.height);
+                    
+                    // Use QRCode library to render to our existing canvas
+                    QRCode.toCanvas(
+                        placeholderCanvas,
+                        subFrameData.content || 'ERROR',
+                        {
+                            width: parseInt(sizeSlider.value),
+                            margin: 1,
+                            errorCorrectionLevel: 'L',
+                            color: {
+                                dark: '#000000',
+                                light: '#FFFFFF'
+                            }
+                        }
+                    );
+                }
+                
+                return frameContainer;
+            }
+            
+            // Function to pregenerate the next frame - now synchronous
+            function pregenerateFrame(frameIndex) {
+                if (pregeneratedFrames[frameIndex]) {
+                    return Promise.resolve(pregeneratedFrames[frameIndex]);
+                }
+                
+                // Create the frame synchronously
+                const frameContainer = createFrameSync(frameIndex);
+                pregeneratedFrames[frameIndex] = frameContainer;
+                
+                return Promise.resolve(frameContainer);
+            }
+            
             // Set up next frame using timeout to handle variable frame times
             function scheduleNextFrame() {
                 // Determine frame type for current frame
@@ -1378,28 +1832,121 @@
                     intervalMultiplier = METADATA_DISPLAY_MULTIPLIER;
                 }
                 
-                // Display the current frame
-                displayFrame(frameType);
-                
-                // Schedule the next frame with appropriate interval
-                const actualInterval = baseInterval * intervalMultiplier;
-                
-                displayInterval = setTimeout(() => {
-                    currentFrame++;
+                // Pre-generate the current frame and the next frame to avoid flicker
+                pregenerateFrame(currentFrame).then(frameContainer => {
+                    // Store current padding to maintain it
+                    const currentPadding = qrDisplay.style.padding || '40px';
                     
-                    if (currentFrame >= totalFrames) {
-                        currentFrame = 0;
+                    if (isPresentation) {
+                        // Use the presentation mode approach which works without flickering
+                        const { content, label } = getFrameContent(currentFrame);
+                        updatePresentationView(content, label);
+                    } else {
+                        // Create a new approach similar to presentation mode but for normal view
+                        // Instead of clearing and re-adding content, we'll use the same technique
+                        // that works in presentation mode
+                        
+                        // First, create a new canvas that we can render to
+                        const normalCanvas = document.createElement('canvas');
+                        const size = Math.max(qrDisplay.clientWidth, qrDisplay.clientHeight) - (parseInt(currentPadding) * 2);
+                        normalCanvas.width = size;
+                        normalCanvas.height = size;
+                        
+                        // Get the context and fill with white
+                        const ctx = normalCanvas.getContext('2d', { willReadFrequently: true });
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fillRect(0, 0, size, size);
+                        
+                        // For each QR code in the frame, render it to the canvas
+                        const qrCount = parseInt(gridLayoutSelect.value);
+                        const framesToDisplay = Math.min(qrCount, totalFrames - currentFrame);
+                        
+                        // Get frame content
+                        const { content, label, type } = getFrameContent(currentFrame);
+                        
+                        // Use the QR library to draw directly to our canvas
+                        // This happens synchronously and avoids DOM manipulation
+                        QRCode.toCanvas(normalCanvas, content || 'ERROR', {
+                            width: size - 40, // Add margin
+                            margin: 4,
+                            errorCorrectionLevel: 'L',
+                            color: {
+                                dark: '#000000',
+                                light: '#FFFFFF'
+                            }
+                        }, function(err, canvas) {
+                            // Clear the display and add the new canvas
+                            qrDisplay.innerHTML = '';
+                            
+                            // Create a container for the canvas and label
+                            const container = document.createElement('div');
+                            container.style.display = 'flex';
+                            container.style.flexDirection = 'column';
+                            container.style.alignItems = 'center';
+                            container.style.justifyContent = 'center';
+                            container.style.width = '100%';
+                            container.style.height = '100%';
+                            
+                            // Add the canvas
+                            container.appendChild(canvas);
+                            
+                            // Add a label
+                            const labelElement = document.createElement('div');
+                            labelElement.style.marginTop = '8px';
+                            labelElement.style.textAlign = 'center';
+                            labelElement.style.fontWeight = 'bold';
+                            labelElement.style.fontSize = '14px';
+                            
+                            // Style label according to frame type
+                            if (type === 'metadata' || type === 'end') {
+                                labelElement.style.color = 'red';
+                            } else if (type === 'set_header') {
+                                labelElement.style.color = 'orange';
+                            }
+                            
+                            labelElement.textContent = label;
+                            container.appendChild(labelElement);
+                            
+                            // Add the container to the display
+                            qrDisplay.appendChild(container);
+                            qrDisplay.style.padding = currentPadding;
+                        });
                     }
                     
-                    if (isPlaying) {
-                        scheduleNextFrame();
-                    }
-                }, actualInterval);
+                    // Update progress
+                    updateProgress(currentFrame + 1, totalFrames);
+                    
+                    // Pre-generate the next frame
+                    const nextFrame = (currentFrame + 1) % totalFrames;
+                    pregenerateFrame(nextFrame);
+                    
+                    // Schedule the next frame with appropriate interval
+                    const actualInterval = baseInterval * intervalMultiplier;
+                    
+                    displayInterval = setTimeout(() => {
+                        currentFrame++;
+                        
+                        if (currentFrame >= totalFrames) {
+                            currentFrame = 0;
+                        }
+                        
+                        if (isPlaying) {
+                            scheduleNextFrame();
+                        }
+                    }, actualInterval);
+                });
             }
             
             // Start the scheduling
             if (isPlaying) {
-                scheduleNextFrame();
+                // Pregenerate first two frames and then start display
+                pregenerateFrame(currentFrame).then(() => {
+                    // Pregenerate the next frame as well
+                    const nextFrame = (currentFrame + 1) % totalFrames;
+                    pregenerateFrame(nextFrame).then(() => {
+                        scheduleNextFrame();
+                    });
+                });
             }
         }
 
@@ -1420,130 +1967,16 @@
             return false;
         }
 
+        // This function is now a placeholder - actual frame display logic is in restartInterval
+        // to support pregeneration and avoid blinking
         function displayFrame(frameType) {
+            // The displayFrame function is no longer used directly
+            // All frame generation and display is handled by restartInterval
+            // This placeholder is kept for compatibility with existing code
             if (!isPlaying) return;
             
-            qrDisplay.innerHTML = '';
-            
-            // Get grid layout information
-            const qrCount = parseInt(gridLayoutSelect.value);
-            let cols, rows;
-            switch(qrCount) {
-                case 1: cols = 1; rows = 1; break;
-                case 2: cols = 2; rows = 1; break; 
-                case 4: cols = 2; rows = 2; break;
-                case 8: cols = 4; rows = 2; break;
-                case 16: cols = 4; rows = 4; break;
-                case 32: cols = 8; rows = 4; break;
-                default: cols = 1; rows = 1;
-            }
-            
-            // Calculate how many frames to display in this grid
-            const framesToDisplay = Math.min(qrCount, totalFrames - currentFrame);
-            
-            try {
-                // Apply border styling based on the first frame type
-                if (currentFrame === 0) {
-                    // Metadata frame - red border
-                    qrDisplay.style.border = '3px solid red';
-                } else {
-                    const nextSetHeaderFrame = getNextSetHeaderFrame(currentFrame);
-                    if (nextSetHeaderFrame === currentFrame) {
-                        // Set header frame - orange border
-                        qrDisplay.style.border = '2px solid orange';
-                    } else if (currentFrame === totalFrames - 1) {
-                        // End frame - red border
-                        qrDisplay.style.border = '3px solid red';
-                    } else {
-                        // Regular chunk frame - normal border
-                        qrDisplay.style.border = '2px solid #333';
-                    }
-                }
-                
-                // Create a list of frames to display
-                const framePromises = [];
-                
-                for (let i = 0; i < framesToDisplay; i++) {
-                    const frameIndex = currentFrame + i;
-                    if (frameIndex >= totalFrames) break;
-                    
-                    // Get frame content for this position
-                    const {content, label, type} = getFrameContent(frameIndex);
-                    
-                    // Create container for this QR code
-                    const qrContainer = document.createElement('div');
-                    qrContainer.style.display = 'flex';
-                    qrContainer.style.flexDirection = 'column';
-                    qrContainer.style.justifyContent = 'center';
-                    qrContainer.style.alignItems = 'center';
-                    qrContainer.style.position = 'relative';
-                    qrContainer.className = 'qr-grid-cell';
-                    qrContainer.setAttribute('data-frame-index', frameIndex);
-                    qrContainer.setAttribute('data-frame-type', type);
-                    qrDisplay.appendChild(qrContainer);
-                    
-                    // Create promise to generate this QR code
-                    const promise = new Promise((resolve) => {
-                        QRCode.toCanvas(document.createElement('canvas'), content || 'ERROR', {
-                            width: parseInt(sizeSlider.value),
-                            margin: 1,
-                            errorCorrectionLevel: 'L',
-                            color: {
-                                dark: '#000000',
-                                light: '#FFFFFF'
-                            }
-                        }, function(error, canvas) {
-                            if (error) {
-                                console.error("Error generating QR code:", error);
-                                qrContainer.textContent = "Error generating QR code";
-                                resolve();
-                                return;
-                            }
-                            
-                            // Add the QR code
-                            qrContainer.appendChild(canvas);
-                            
-                            // Add frame label
-                            const labelElement = document.createElement('div');
-                            labelElement.style.marginTop = '8px';
-                            labelElement.style.textAlign = 'center';
-                            labelElement.style.fontWeight = 'bold';
-                            labelElement.style.fontSize = '10px';
-                            
-                            // Style label according to frame type
-                            if (type === 'metadata' || type === 'end') {
-                                labelElement.style.color = 'red';
-                            } else if (type === 'set_header') {
-                                labelElement.style.color = 'orange';
-                            }
-                            
-                            labelElement.textContent = label;
-                            qrContainer.appendChild(labelElement);
-                            
-                            resolve();
-                        });
-                    });
-                    
-                    framePromises.push(promise);
-                }
-                
-                // Wait for all QR codes to be generated
-                Promise.all(framePromises).then(() => {
-                    // Update presentation mode if active
-                    if (isPresentation) {
-                        // Get the content for the current frame
-                        const { content, label } = getFrameContent(currentFrame);
-                        updatePresentationView(content, label);
-                    }
-                });
-                
-                // Update progress
-                updateProgress(currentFrame + 1, totalFrames);
-                
-            } catch (error) {
-                console.error("Error displaying frame:", error);
-                log(`Error displaying frame: ${error.message}`, true);
-            }
+            // Just update progress in case this is called directly
+            updateProgress(currentFrame + 1, totalFrames);
         }
         
         // Helper function to get the next set header frame
@@ -1749,7 +2182,8 @@
                 if (!err) {
                     // Draw the generated QR code onto our presentation canvas
                     // Calculate position to center QR code in the white area
-                    const qrMargin = size * 0.1; // 10% in from the edge
+                    // Use a smaller margin (5%) to make the QR code fill more of the space
+                    const qrMargin = size * 0.05; // 5% in from the edge, making QR code larger
                     pctx.drawImage(qrCanvas, qrMargin, qrMargin, size - (qrMargin * 2), size - (qrMargin * 2));
                     // Loading indicator already removed
                 } else {
