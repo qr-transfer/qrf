@@ -3,8 +3,9 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Video QR Code Encoder</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -23,13 +24,7 @@
         body {
             display: flex;
             flex-direction: column;
-            padding: 20px;
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-
-        h1 {
-            margin-bottom: 20px;
+            overflow-x: hidden;
         }
 
         .control-panel {
@@ -39,7 +34,7 @@
             background: #f5f5f5;
             padding: 20px;
             border-radius: 8px;
-            margin-bottom: 20px;
+            margin: 20px;
         }
 
         .control-group {
@@ -103,7 +98,20 @@
             align-items: center;
             flex-direction: column;
             gap: 20px;
-            margin-top: 20px;
+            margin: 20px;
+            max-width: 95%;
+            align-self: center;
+        }
+
+        .display-container.presentation {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            z-index: 1000;
+            margin: 0;
         }
 
         #qrDisplay {
@@ -113,8 +121,10 @@
             padding: 20px;
             border-radius: 8px;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
+            margin: 0 auto;
         }
 
         .progress-container {
@@ -144,7 +154,6 @@
             justify-content: center;
             color: #000;
             font-weight: bold;
-            text-shadow: 0 0 3px rgba(255,255,255,0.5);
         }
 
         #status {
@@ -154,7 +163,7 @@
             border-radius: 4px;
             max-height: 200px;
             overflow-y: auto;
-            margin-top: 20px;
+            margin: 20px;
         }
 
         #debugView {
@@ -181,7 +190,10 @@
             background: #f0f0f0;
             padding: 15px;
             border-radius: 8px;
-            margin-top: 20px;
+            margin: 20px;
+            width: 100%;
+            max-width: 800px;
+            align-self: center;
         }
 
         .info-row {
@@ -196,7 +208,7 @@
 
         .tabs {
             display: flex;
-            margin-bottom: 20px;
+            margin: 20px 20px 0 20px;
         }
 
         .tab {
@@ -218,9 +230,168 @@
             padding: 20px;
             border: 1px solid #ddd;
             border-radius: 0 4px 4px 4px;
+            margin: 0 20px 20px 20px;
+            max-height: 400px;
+            overflow-y: auto;
         }
 
         .tab-content.active {
+            display: block;
+        }
+
+        .sets-selection-panel {
+            margin-top: 20px;
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        #setsSelectionList {
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+            gap: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .set-checkbox {
+            background-color: #e6f7ff;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin: 3px;
+            cursor: pointer;
+            border: 1px solid #1890ff;
+            text-align: center;
+        }
+
+        #presentationOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #000;
+            z-index: 1000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        #presentationQrDisplay {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            width: 100vw;
+            height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #presentationCounter {
+            position: absolute;
+            bottom: 5px;
+            left: 5px;
+            text-align: left;
+            color: #aaa;
+            font-size: 12px;
+            padding: 3px 8px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 4px;
+        }
+
+        #exitPresentationBtn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255,30,30,0.7);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 1010;
+            font-size: 14px;
+        }
+
+        #countdownOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 2000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #countdownDisplay {
+            font-size: 120px;
+            color: white;
+            font-weight: bold;
+        }
+
+        .file-queue-panel {
+            margin: 20px;
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        #fileQueueList {
+            margin-top: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .file-queue-item {
+            padding: 5px;
+            margin: 2px 0;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .file-status {
+            float: right;
+            font-size: 0.8em;
+        }
+
+        h1 {
+            margin: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .control-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .control-label {
+                margin-bottom: 5px;
+            }
+            
+            button {
+                width: 100%;
+                margin-top: 5px;
+            }
+        }
+
+        /* Ensure QR code is always visible and centered */
+        #qrDisplay img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+
+        #presentationQrDisplay img {
+            max-width: 90vmin;
+            max-height: 90vmin;
             display: block;
         }
     </style>
@@ -276,9 +447,9 @@
         </div>
     </div>
     
-    <div class="file-queue-panel" style="margin-top: 20px; background: #f5f5f5; padding: 15px; border-radius: 8px; display: none;">
+    <div class="file-queue-panel">
         <h3>File Queue</h3>
-        <div id="fileQueueList" style="margin-top: 10px; max-height: 150px; overflow-y: auto;"></div>
+        <div id="fileQueueList"></div>
         <div style="margin-top: 10px; display: flex; gap: 10px;">
             <button id="moveUpBtn" disabled>Move Up</button>
             <button id="moveDownBtn" disabled>Move Down</button>
@@ -286,9 +457,9 @@
         </div>
     </div>
     
-    <div class="display-container" id="displayContainer" style="margin-bottom: 20px;">
+    <div class="display-container" id="displayContainer">
         <div class="frame-counter" id="frameCounter">Frame: 0 / 0</div>
-        <div id="qrDisplay" style="width: 300px; height: 300px; margin: 20px auto;"></div>
+        <div id="qrDisplay" style="width: 300px; height: 300px;"></div>
         <div class="progress-container">
             <div class="progress-bar" id="progressBar"></div>
             <div class="progress-text" id="progressText">0%</div>
@@ -300,19 +471,19 @@
         <div class="tab" data-tab="debug">Debug View</div>
     </div>
 
-    <div class="tab-content active" data-tab-content="display" style="max-height: 400px; overflow-y: auto;">
-        <div class="sets-selection-panel" style="margin-top: 20px; background: #f5f5f5; padding: 15px; border-radius: 8px; display: none;">
+    <div class="tab-content active" data-tab-content="display">
+        <div class="sets-selection-panel" style="display: none;">
             <h3>Set Selection</h3>
-            <p style="margin-bottom: 10px;">Select which sets to include in the display:</p>
-            <div id="setsSelectionList" style="margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 8px; max-height: 300px; overflow-y: auto;"></div>
+            <p style="margin-bottom: 10px;">Select which sets to include in the transmission:</p>
+            <div id="setsSelectionList"></div>
             <div style="margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap;">
                 <button id="selectAllSetsBtn">Select All</button>
                 <button id="deselectAllSetsBtn">Deselect All</button>
-                <button id="selectMissingSetsBtn" disabled>Select Missing Sets</button>
+                <button id="selectMissingSetsBtn" disabled>Select Missing</button>
             </div>
         </div>
 
-        <div class="info-panel" style="margin-top: 20px;">
+        <div class="info-panel">
             <div class="info-row">
                 <span class="info-label">File Name:</span>
                 <span id="fileNameInfo">None selected</span>
@@ -332,35 +503,40 @@
         </div>
     </div>
     
-    <div id="presentationOverlay" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; z-index: 1000; justify-content: center; align-items: center; flex-direction: column;">
-        <div id="presentationQrDisplay" style="display: flex; justify-content: center; align-items: center; flex-direction: column; width: 100vw; height: 100vh; padding: 20px; box-sizing: border-box;"></div>
-        <div id="presentationCounter" style="position: absolute; bottom: 5px; left: 5px; text-align: left; color: #aaa; font-size: 12px; padding: 3px 8px; background: rgba(0,0,0,0.5); border-radius: 4px;"></div>
-        <button id="exitPresentationBtn" style="position: absolute; top: 10px; right: 10px; background: rgba(255,30,30,0.7); color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; z-index: 1010; font-size: 14px;">Exit</button>
-    </div>
-
     <div class="tab-content" data-tab-content="debug">
         <div id="debugView"></div>
     </div>
+    
+    <div id="status">Ready to encode files...</div>
+    
+    <div id="presentationOverlay">
+        <div id="presentationQrDisplay"></div>
+        <div id="presentationCounter"></div>
+        <button id="exitPresentationBtn">Exit</button>
+    </div>
 
-    <div id="status">Ready to encode file...</div>
+    <div id="countdownOverlay">
+        <div id="countdownDisplay">5</div>
+    </div>
 
     <script>
         // Constants and configuration
-        const MAX_SET_SIZE = 100 * 1024; // 100KB per set
+        const MAX_SET_SIZE = 100 * 1024; // 100KB
         const DEFAULT_CHUNK_SIZE = 500; // Default bytes per chunk
         const SET_SIZE_CHUNKS = 50; // Number of chunks per set
-        const COUNTDOWN_SECONDS = 5; // Countdown before display starts
         const METADATA_DISPLAY_MULTIPLIER = 3; // Show metadata frames this many times longer
         const SET_HEADER_DISPLAY_MULTIPLIER = 2; // Show set headers this many times longer
-
+        
         // DOM Elements
         const fileInput = document.getElementById('fileInput');
         const speedSlider = document.getElementById('speedSlider');
         const sizeSlider = document.getElementById('sizeSlider');
         const chunkSlider = document.getElementById('chunkSlider');
+        const countdownSlider = document.getElementById('countdownSlider');
         const speedValue = document.getElementById('speedValue');
         const sizeValue = document.getElementById('sizeValue');
         const chunkValue = document.getElementById('chunkValue');
+        const countdownValue = document.getElementById('countdownValue');
         const generateBtn = document.getElementById('generateBtn');
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
@@ -370,13 +546,48 @@
         const frameCounter = document.getElementById('frameCounter');
         const statusEl = document.getElementById('status');
         const debugView = document.getElementById('debugView');
-
-        // Info panel elements
+        const fileQueuePanel = document.querySelector('.file-queue-panel');
+        const fileQueueList = document.getElementById('fileQueueList');
+        const moveUpBtn = document.getElementById('moveUpBtn');
+        const moveDownBtn = document.getElementById('moveDownBtn');
+        const removeFileBtn = document.getElementById('removeFileBtn');
+        const setsSelectionPanel = document.querySelector('.sets-selection-panel');
+        const setsSelectionList = document.getElementById('setsSelectionList');
+        const selectAllSetsBtn = document.getElementById('selectAllSetsBtn');
+        const deselectAllSetsBtn = document.getElementById('deselectAllSetsBtn');
+        const selectMissingSetsBtn = document.getElementById('selectMissingSetsBtn');
+        const countdownValueDisplay = document.getElementById('countdownValue');
         const fileNameInfo = document.getElementById('fileNameInfo');
         const fileSizeInfo = document.getElementById('fileSizeInfo');
         const totalSetsInfo = document.getElementById('totalSetsInfo');
         const chunksPerSetInfo = document.getElementById('chunksPerSetInfo');
+        const presentationOverlay = document.getElementById('presentationOverlay');
+        const presentationQrDisplay = document.getElementById('presentationQrDisplay');
+        const presentationCounter = document.getElementById('presentationCounter');
+        const exitPresentationBtn = document.getElementById('exitPresentationBtn');
+        const countdownOverlay = document.getElementById('countdownOverlay');
+        const countdownDisplay = document.getElementById('countdownDisplay');
+        const displayContainer = document.getElementById('displayContainer');
 
+        // State variables
+        let fileContent = null;
+        let fileName = '';
+        let fileSize = 0;
+        let chunks = [];
+        let sets = [];
+        let displayInterval = null;
+        let currentFrame = 0;
+        let totalFrames = 0;
+        let isPlaying = false;
+        let debugLogs = [];
+        let countdownTimer = null;
+        let countdownValue = 0;
+        let selectedSets = []; // Tracks which sets are selected for display
+        let fileQueue = []; // For multiple file transfers
+        let currentFileIndex = 0; // Currently active file
+        let frameTimingMultiplier = 1; // Used for varying frame times
+        let isPresentation = false;
+        
         // Tab functionality
         const tabs = document.querySelectorAll('.tab');
         tabs.forEach(tab => {
@@ -394,81 +605,7 @@
             });
         });
 
-        // State variables
-        let fileContent = null;
-        let fileName = '';
-        let fileSize = 0;
-        let chunks = [];
-        let sets = [];
-        let displayInterval = null;
-        let currentFrame = 0;
-        let totalFrames = 0;
-        let isPlaying = false;
-        let debugLogs = [];
-        let countdownTimer = null;
-        let countdownValue = 0;
-        let selectedSets = []; // Tracks which sets are selected for display
-        let fileQueue = []; // For multiple file transfers
-        let currentFileIndex = 0; // Currently active file in the queue
-        let frameTimingMultiplier = 1; // Used for varying frame display times
-
-        // Get presentation mode elements
-        const presentationOverlay = document.getElementById('presentationOverlay');
-        const presentationQrDisplay = document.getElementById('presentationQrDisplay');
-        const presentationCounter = document.getElementById('presentationCounter');
-        const exitPresentationBtn = document.getElementById('exitPresentationBtn');
-        
-        let isPresentation = false;
-        
-        // Function to enter presentation mode (full screen QR display)
-        function enterPresentationMode() {
-            // Clone current QR code to presentation display
-            presentationQrDisplay.innerHTML = qrDisplay.innerHTML;
-            presentationCounter.textContent = frameCounter.textContent;
-            
-            // Show the overlay
-            presentationOverlay.style.display = 'flex';
-            isPresentation = true;
-            
-            // Adjust QR code size to maximize screen usage
-            const qrElement = presentationQrDisplay.querySelector('img');
-            if (qrElement) {
-                const size = Math.min(window.innerWidth, window.innerHeight) * 0.9;
-                qrElement.style.width = `${size}px`;
-                qrElement.style.height = `${size}px`;
-            }
-            
-            // Handle physical fullscreen if supported
-            if (document.documentElement.requestFullscreen) {
-                document.documentElement.requestFullscreen().catch(err => {
-                    console.log("Error attempting to enable fullscreen:", err);
-                });
-            }
-        }
-        
-        // Function to exit presentation mode
-        function exitPresentationMode() {
-            if (!isPresentation) return;
-            
-            presentationOverlay.style.display = 'none';
-            isPresentation = false;
-            
-            // Exit physical fullscreen if active
-            if (document.fullscreenElement && document.exitFullscreen) {
-                document.exitFullscreen().catch(err => {
-                    console.log("Error attempting to exit fullscreen:", err);
-                });
-            }
-        }
-        
-        // Event listener for exit button
-        exitPresentationBtn.addEventListener('click', () => {
-            exitPresentationMode();
-            // Also stop the display when exiting presentation mode
-            stopDisplay();
-        });
-        
-        // Event listeners for sliders
+        // UI event listeners
         speedSlider.addEventListener('input', () => {
             speedValue.textContent = `${speedSlider.value} fps`;
             if (isPlaying) {
@@ -477,36 +614,20 @@
         });
 
         sizeSlider.addEventListener('input', () => {
-            sizeValue.textContent = `${sizeSlider.value}px`;
-            qrDisplay.style.width = `${sizeSlider.value}px`;
-            qrDisplay.style.height = `${sizeSlider.value}px`;
+            const size = sizeSlider.value;
+            sizeValue.textContent = `${size}px`;
+            qrDisplay.style.width = `${size}px`;
+            qrDisplay.style.height = `${size}px`;
         });
 
         chunkSlider.addEventListener('input', () => {
             chunkValue.textContent = `${chunkSlider.value} bytes`;
         });
 
-        // Get UI elements for queue and set selection
-        const fileQueuePanel = document.querySelector('.file-queue-panel');
-        const fileQueueList = document.getElementById('fileQueueList');
-        const moveUpBtn = document.getElementById('moveUpBtn');
-        const moveDownBtn = document.getElementById('moveDownBtn');
-        const removeFileBtn = document.getElementById('removeFileBtn');
-        
-        const setsSelectionPanel = document.querySelector('.sets-selection-panel');
-        const setsSelectionList = document.getElementById('setsSelectionList');
-        const selectAllSetsBtn = document.getElementById('selectAllSetsBtn');
-        const deselectAllSetsBtn = document.getElementById('deselectAllSetsBtn');
-        const selectMissingSetsBtn = document.getElementById('selectMissingSetsBtn');
-        
-        const countdownSlider = document.getElementById('countdownSlider');
-        const countdownValueDisplay = document.getElementById('countdownValue');
-        
         countdownSlider.addEventListener('input', () => {
             countdownValueDisplay.textContent = `${countdownSlider.value} seconds`;
         });
 
-        // File input handling
         fileInput.addEventListener('change', (e) => {
             const files = e.target.files;
             if (!files || files.length === 0) {
@@ -569,19 +690,19 @@
             updateQueueControls();
             generateBtn.disabled = fileQueue.length === 0;
         });
-        
+
         // Function to load a file's content from the queue
         function loadFileContent(index) {
             if (index >= fileQueue.length) return;
             
             const fileItem = fileQueue[index];
-            updateFileStatus(index, 'Loading...');
+            updateFileStatus(index, 'Loading...', '#2196f3');
             
             const reader = new FileReader();
             reader.onload = (e) => {
                 fileItem.content = e.target.result;
                 fileItem.processed = true;
-                updateFileStatus(index, 'Ready');
+                updateFileStatus(index, 'Ready', '#4caf50');
                 
                 // If this is the current file, update the display
                 if (index === currentFileIndex) {
@@ -599,7 +720,7 @@
             };
             
             reader.onerror = () => {
-                updateFileStatus(index, 'Error');
+                updateFileStatus(index, 'Error', '#f44336');
                 log(`Error reading file: ${fileItem.name}`, true);
                 loadFileContent(index + 1);
             };
@@ -608,20 +729,12 @@
         }
         
         // Update status display for a file in the queue
-        function updateFileStatus(index, status) {
+        function updateFileStatus(index, status, color) {
             const fileItem = fileQueueList.querySelectorAll('.file-queue-item')[index];
             if (fileItem) {
                 const statusElement = fileItem.querySelector('.file-status');
                 statusElement.textContent = status;
-                
-                // Update color based on status
-                let color = '#888';
-                if (status === 'Ready') color = '#4caf50';
-                else if (status === 'Error') color = '#f44336';
-                else if (status === 'Loading...') color = '#2196f3';
-                else if (status === 'Active') color = '#ff9800';
-                
-                statusElement.style.color = color;
+                statusElement.style.color = color || '#888';
             }
         }
         
@@ -644,7 +757,11 @@
                 // Mark current file as active
                 const fileItems = fileQueueList.querySelectorAll('.file-queue-item');
                 fileItems.forEach((item, idx) => {
-                    updateFileStatus(idx, idx === currentFileIndex ? 'Active' : (fileQueue[idx].processed ? 'Ready' : 'Pending'));
+                    updateFileStatus(
+                        idx, 
+                        idx === currentFileIndex ? 'Active' : (fileQueue[idx].processed ? 'Ready' : 'Pending'),
+                        idx === currentFileIndex ? '#ff9800' : (fileQueue[idx].processed ? '#4caf50' : '#888')
+                    );
                 });
             }
         }
@@ -725,43 +842,103 @@
             updateQueueControls();
         }
 
-        // Initialize QR code generator
+        // Set selection controls
+        selectAllSetsBtn.addEventListener('click', () => {
+            selectedSets = Array(sets.length).fill(1);
+            const checkboxes = setsSelectionList.querySelectorAll('.set-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.style.backgroundColor = '#e6f7ff';
+                checkbox.style.border = '1px solid #1890ff';
+            });
+            updateTotalFramesCount();
+        });
+        
+        deselectAllSetsBtn.addEventListener('click', () => {
+            selectedSets = Array(sets.length).fill(0);
+            const checkboxes = setsSelectionList.querySelectorAll('.set-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.style.backgroundColor = '#f5f5f5';
+                checkbox.style.border = '1px solid #d9d9d9';
+            });
+            updateTotalFramesCount();
+        });
+
+        // Button event handlers
         generateBtn.addEventListener('click', generateQRCodes);
         startBtn.addEventListener('click', startDisplay);
         stopBtn.addEventListener('click', stopDisplay);
+        exitPresentationBtn.addEventListener('click', () => {
+            exitPresentationMode();
+            // Also stop the display when exiting presentation mode
+            stopDisplay();
+        });
 
-        // Utility functions
-        function formatFileSize(bytes) {
-            if (bytes < 1024) return bytes + ' bytes';
-            else if (bytes < 1048576) return (bytes / 1024).toFixed(2) + ' KB';
-            else if (bytes < 1073741824) return (bytes / 1048576).toFixed(2) + ' MB';
-            else return (bytes / 1073741824).toFixed(2) + ' GB';
-        }
-
-        function log(message, isError = false) {
-            const timestamp = new Date().toLocaleTimeString();
-            const logMessage = `[${timestamp}] ${message}`;
+        // Presentation mode functions
+        function enterPresentationMode() {
+            if (isPresentation) return;
             
-            statusEl.textContent = message;
-            
-            if (isError) {
-                console.error(logMessage);
-                statusEl.style.color = 'red';
-            } else {
-                console.log(logMessage);
-                statusEl.style.color = 'black';
+            try {
+                // Setup fullscreen mode
+                presentationQrDisplay.innerHTML = qrDisplay.innerHTML;
+                presentationCounter.textContent = frameCounter.textContent;
+                presentationOverlay.style.display = 'flex';
+                isPresentation = true;
+                
+                // Adjust QR code size for fullscreen
+                const qrElement = presentationQrDisplay.querySelector('img');
+                if (qrElement) {
+                    const size = Math.min(window.innerWidth, window.innerHeight) * 0.9;
+                    qrElement.style.width = `${size}px`;
+                    qrElement.style.height = `${size}px`;
+                    
+                    // Add label if present
+                    const label = qrDisplay.querySelector('div');
+                    if (label) {
+                        const presentationLabel = presentationQrDisplay.querySelector('div') || document.createElement('div');
+                        presentationLabel.style.marginTop = '10px';
+                        presentationLabel.style.color = label.style.color;
+                        presentationLabel.style.fontWeight = 'bold';
+                        presentationLabel.style.fontSize = '24px';
+                        presentationLabel.textContent = label.textContent;
+                        if (!presentationLabel.parentNode) {
+                            presentationQrDisplay.appendChild(presentationLabel);
+                        }
+                    }
+                }
+                
+                // Try to request fullscreen if supported (not required)
+                try {
+                    if (document.documentElement.requestFullscreen) {
+                        document.documentElement.requestFullscreen().catch(e => {
+                            log("Info: Fullscreen not available. " + e.message, false);
+                        });
+                    }
+                } catch (err) {
+                    log("Info: Fullscreen mode not supported by browser.", false);
+                    // Continue without fullscreen
+                }
+            } catch (error) {
+                log("Error entering presentation mode: " + error.message, true);
+                // Continue in regular mode
             }
-            
-            debugLogs.push(logMessage);
-            debugView.textContent = debugLogs.join('\n');
-            debugView.scrollTop = debugView.scrollHeight;
         }
-
-        function updateProgress(current, total) {
-            const percent = Math.round((current / total) * 100);
-            progressBar.style.width = `${percent}%`;
-            progressText.textContent = `${percent}%`;
-            frameCounter.textContent = `Frame: ${current} / ${total}`;
+        
+        function exitPresentationMode() {
+            if (!isPresentation) return;
+            
+            presentationOverlay.style.display = 'none';
+            isPresentation = false;
+            
+            // Exit fullscreen if we're in it
+            try {
+                if (document.fullscreenElement && document.exitFullscreen) {
+                    document.exitFullscreen().catch(err => {
+                        log("Note: Could not exit fullscreen mode.", false);
+                    });
+                }
+            } catch (err) {
+                // Just continue if there's an error exiting fullscreen
+            }
         }
 
         // Core functionality
@@ -780,109 +957,97 @@
                 
                 log(`Preparing file chunks for ${currentFile.name}...`);
                 
-                // Convert ArrayBuffer to Uint8Array
+                // Convert ArrayBuffer to Uint8Array and then to base64
                 const bytes = new Uint8Array(currentFile.content);
-                
-                // Convert to base64 string for efficient QR encoding
                 let binary = '';
-                for (let i = 0; i < bytes.byteLength; i++) {
-                    binary += String.fromCharCode(bytes[i]);
-                }
-                const base64Content = btoa(binary);
                 
-                // Calculate chunk sizes
-                const chunkSize = parseInt(chunkSlider.value);
-                chunks = [];
-                
-                // Split into chunks
-                for (let i = 0; i < base64Content.length; i += chunkSize) {
-                    chunks.push(base64Content.substring(i, i + chunkSize));
-                }
-                
-                // Organize chunks into sets
-                sets = [];
-                let currentSet = [];
-                
-                for (let i = 0; i < chunks.length; i++) {
-                    currentSet.push(chunks[i]);
-                    
-                    if (currentSet.length >= SET_SIZE_CHUNKS || i === chunks.length - 1) {
-                        sets.push(currentSet);
-                        currentSet = [];
+                // Convert binary data to base64 string
+                try {
+                    for (let i = 0; i < bytes.byteLength; i++) {
+                        binary += String.fromCharCode(bytes[i]);
                     }
-                }
-                
-                // Show set selection panel
-                setsSelectionPanel.style.display = 'block';
-                setsSelectionList.innerHTML = '';
-                
-                // Initially select all sets
-                selectedSets = Array(sets.length).fill(1);
-                
-                // Create set selection UI
-                sets.forEach((set, index) => {
-                    const setCheckbox = document.createElement('div');
-                    setCheckbox.className = 'set-checkbox';
-                    setCheckbox.style.backgroundColor = '#e6f7ff';
-                    setCheckbox.style.padding = '8px 12px';
-                    setCheckbox.style.borderRadius = '4px';
-                    setCheckbox.style.margin = '3px';
-                    setCheckbox.style.cursor = 'pointer';
-                    setCheckbox.style.border = '1px solid #1890ff';
+                    const base64Content = btoa(binary);
                     
-                    setCheckbox.innerHTML = `Set ${index + 1} <small>(${set.length} chunks)</small>`;
+                    // Calculate chunk sizes
+                    const chunkSize = parseInt(chunkSlider.value);
+                    chunks = [];
                     
-                    // Toggle selection when clicked
-                    setCheckbox.addEventListener('click', () => {
-                        selectedSets[index] = selectedSets[index] ? 0 : 1;
-                        setCheckbox.style.backgroundColor = selectedSets[index] ? '#e6f7ff' : '#f5f5f5';
-                        setCheckbox.style.border = selectedSets[index] ? '1px solid #1890ff' : '1px solid #d9d9d9';
+                    // Split into chunks
+                    for (let i = 0; i < base64Content.length; i += chunkSize) {
+                        chunks.push(base64Content.substring(i, i + chunkSize));
+                    }
+                    
+                    log(`Created ${chunks.length} chunks of data`);
+                    
+                    // Organize chunks into sets
+                    sets = [];
+                    let currentSet = [];
+                    
+                    for (let i = 0; i < chunks.length; i++) {
+                        currentSet.push(chunks[i]);
                         
-                        // Update total frames calculation
-                        updateTotalFramesCount();
+                        if (currentSet.length >= SET_SIZE_CHUNKS || i === chunks.length - 1) {
+                            sets.push([...currentSet]);
+                            currentSet = [];
+                        }
+                    }
+                    
+                    log(`Organized into ${sets.length} sets`);
+                    
+                    // Show set selection panel
+                    setsSelectionPanel.style.display = 'block';
+                    
+                    // Initially select all sets
+                    selectedSets = Array(sets.length).fill(1);
+                    
+                    // Create set selection UI
+                    setsSelectionList.innerHTML = '';
+                    sets.forEach((set, index) => {
+                        const setCheckbox = document.createElement('div');
+                        setCheckbox.className = 'set-checkbox';
+                        setCheckbox.style.backgroundColor = '#e6f7ff';
+                        setCheckbox.style.padding = '8px 12px';
+                        setCheckbox.style.borderRadius = '4px';
+                        setCheckbox.style.margin = '3px';
+                        setCheckbox.style.cursor = 'pointer';
+                        setCheckbox.style.border = '1px solid #1890ff';
+                        
+                        setCheckbox.innerHTML = `Set ${index + 1} <br><small>(${set.length})</small>`;
+                        
+                        // Toggle selection when clicked
+                        setCheckbox.addEventListener('click', () => {
+                            selectedSets[index] = selectedSets[index] ? 0 : 1;
+                            setCheckbox.style.backgroundColor = selectedSets[index] ? '#e6f7ff' : '#f5f5f5';
+                            setCheckbox.style.border = selectedSets[index] ? '1px solid #1890ff' : '1px solid #d9d9d9';
+                            
+                            // Update total frames calculation
+                            updateTotalFramesCount();
+                        });
+                        
+                        setsSelectionList.appendChild(setCheckbox);
                     });
                     
-                    setsSelectionList.appendChild(setCheckbox);
-                });
-                
-                // Set selection controls
-                selectAllSetsBtn.addEventListener('click', () => {
-                    selectedSets = Array(sets.length).fill(1);
-                    const checkboxes = setsSelectionList.querySelectorAll('.set-checkbox');
-                    checkboxes.forEach(checkbox => {
-                        checkbox.style.backgroundColor = '#e6f7ff';
-                        checkbox.style.border = '1px solid #1890ff';
-                    });
+                    // Update info panel
+                    totalSetsInfo.textContent = sets.length;
+                    chunksPerSetInfo.textContent = SET_SIZE_CHUNKS;
+                    
+                    // Calculate total frames based on selected sets
                     updateTotalFramesCount();
-                });
-                
-                deselectAllSetsBtn.addEventListener('click', () => {
-                    selectedSets = Array(sets.length).fill(0);
-                    const checkboxes = setsSelectionList.querySelectorAll('.set-checkbox');
-                    checkboxes.forEach(checkbox => {
-                        checkbox.style.backgroundColor = '#f5f5f5';
-                        checkbox.style.border = '1px solid #d9d9d9';
-                    });
-                    updateTotalFramesCount();
-                });
-                
-                // Update info panel
-                totalSetsInfo.textContent = sets.length;
-                chunksPerSetInfo.textContent = SET_SIZE_CHUNKS;
-                
-                // Calculate total frames based on selected sets
-                updateTotalFramesCount();
-                
-                // Enable start button
-                startBtn.disabled = false;
-                generateBtn.disabled = true;
-                
+                    
+                    // Enable start button
+                    startBtn.disabled = false;
+                    generateBtn.disabled = true;
+                    
+                } catch (error) {
+                    log(`Error processing file: ${error.message}`, true);
+                    console.error(error);
+                }
             } catch (error) {
                 log(`Error generating QR codes: ${error.message}`, true);
                 console.error(error);
             }
         }
-        
+
         function updateTotalFramesCount() {
             // Count how many chunks are in selected sets
             let selectedChunksCount = 0;
@@ -895,7 +1060,7 @@
                 }
             });
             
-            // Calculate total frames (metadata + selected set headers + selected chunks + end frame)
+            // Calculate total frames (metadata + set headers + chunks + end frame)
             totalFrames = 1 + selectedSetsCount + selectedChunksCount + 1;
             
             log(`Selected ${selectedSetsCount} sets with ${selectedChunksCount} chunks`);
@@ -915,30 +1080,20 @@
             stopBtn.disabled = false;
             generateBtn.disabled = true;
             
-            // Show countdown on QR display
-            qrDisplay.innerHTML = '';
-            
-            const countdownDiv = document.createElement('div');
-            countdownDiv.style.fontSize = '48px';
-            countdownDiv.style.fontWeight = 'bold';
-            countdownDiv.style.display = 'flex';
-            countdownDiv.style.alignItems = 'center';
-            countdownDiv.style.justifyContent = 'center';
-            countdownDiv.style.width = '100%';
-            countdownDiv.style.height = '100%';
-            countdownDiv.textContent = countdownValue;
-            
-            qrDisplay.appendChild(countdownDiv);
+            // Show countdown overlay
+            countdownOverlay.style.display = 'flex';
+            countdownDisplay.textContent = countdownValue;
             
             log(`Starting countdown: ${countdownValue} seconds before QR display...`);
             
             // Start countdown timer
             countdownTimer = setInterval(() => {
                 countdownValue--;
-                countdownDiv.textContent = countdownValue;
+                countdownDisplay.textContent = countdownValue;
                 
                 if (countdownValue <= 0) {
                     clearInterval(countdownTimer);
+                    countdownOverlay.style.display = 'none';
                     
                     // Start the actual display
                     isPlaying = true;
@@ -960,28 +1115,37 @@
         }
 
         function stopDisplay() {
-            if (!isPlaying) return;
+            if (!isPlaying && !countdownTimer) return;
             
             isPlaying = false;
-            clearInterval(displayInterval);
             
-            // Exit presentation mode
+            if (countdownTimer) {
+                clearInterval(countdownTimer);
+                countdownTimer = null;
+                countdownOverlay.style.display = 'none';
+            }
+            
+            if (displayInterval) {
+                clearTimeout(displayInterval);
+                displayInterval = null;
+            }
+            
             exitPresentationMode();
-            
-            log('Display stopped');
             
             startBtn.disabled = false;
             stopBtn.disabled = true;
+            generateBtn.disabled = false;
+            
+            log('Display stopped');
         }
 
         function restartInterval() {
             if (displayInterval) {
-                clearInterval(displayInterval);
+                clearTimeout(displayInterval);
             }
             
             // Calculate base interval from fps setting
-            const fps = parseInt(speedSlider.value);
-            const baseInterval = Math.floor(1000 / fps);
+            const baseInterval = Math.floor(1000 / parseInt(speedSlider.value));
             
             // Set up next frame using timeout to handle variable frame times
             function scheduleNextFrame() {
@@ -1025,9 +1189,11 @@
             }
             
             // Start the scheduling
-            scheduleNextFrame();
+            if (isPlaying) {
+                scheduleNextFrame();
+            }
         }
-        
+
         // Helper function to check if current frame is a set header
         function isSetHeaderFrame(frameIndex) {
             // Calculate which frames are set headers based on selected sets
@@ -1054,191 +1220,243 @@
             let frameContent;
             let frameLabel;
             
-            if (currentFrame === 0) {
-                // Metadata frame
-                const includeFileQueueInfo = fileQueue.length > 1;
-                
-                const metadata = {
-                    type: "metadata",
-                    file_name: fileName,
-                    file_size: fileSize,
-                    total_sets: selectedSets.filter(Boolean).length, // Count of selected sets
-                    total_selected_sets: selectedSets.filter(Boolean).length,
-                    chunks_per_set: SET_SIZE_CHUNKS,
-                    timestamp: Date.now()
-                };
-                
-                // Add file queue information if multiple files
-                if (includeFileQueueInfo) {
-                    metadata.file_index = currentFileIndex + 1;
-                    metadata.total_files = fileQueue.length;
-                }
-                
-                // Add selected sets information
-                metadata.selected_sets = selectedSets.map((selected, index) => 
-                    selected ? index + 1 : null).filter(Boolean);
-                
-                frameContent = JSON.stringify(metadata);
-                frameLabel = "Metadata";
-                
-                // Add emphasis for metadata frame
-                qrDisplay.style.border = '3px solid red';
-                
-            } else {
-                // Reset border for non-metadata frames
-                qrDisplay.style.border = '2px solid #333';
-                
-                // Track position in the selected sets
-                let currentPosition = 1; // Start after metadata
-                let selectedSetIndices = selectedSets
-                    .map((selected, index) => selected ? index : -1)
-                    .filter(index => index !== -1);
-                
-                if (currentPosition <= currentFrame && 
-                    currentFrame < currentPosition + selectedSetIndices.length) {
-                    // Set header frame
-                    const selectedSetIndex = currentFrame - currentPosition;
-                    const actualSetIndex = selectedSetIndices[selectedSetIndex];
-                    const setChunks = sets[actualSetIndex] || [];
+            try {
+                if (currentFrame === 0) {
+                    // Metadata frame
+                    const includeFileQueueInfo = fileQueue.length > 1;
                     
-                    const setHeader = {
-                        type: "set_header",
-                        set_index: actualSetIndex + 1,
-                        total_sets: selectedSets.filter(Boolean).length,
-                        chunks_in_set: setChunks.length
+                    const metadata = {
+                        type: "metadata",
+                        file_name: fileName,
+                        file_size: fileSize,
+                        total_sets: sets.length,
+                        total_selected_sets: selectedSets.filter(Boolean).length,
+                        chunks_per_set: SET_SIZE_CHUNKS,
+                        total_chunks: chunks.length,
+                        timestamp: Date.now()
                     };
                     
-                    frameContent = JSON.stringify(setHeader);
-                    frameLabel = `Set ${actualSetIndex + 1} Header`;
+                    // Add file queue information if multiple files
+                    if (includeFileQueueInfo) {
+                        metadata.file_index = currentFileIndex + 1;
+                        metadata.total_files = fileQueue.length;
+                    }
                     
-                    // Highlight set header frames
-                    qrDisplay.style.border = '2px solid orange';
+                    // Add selected sets information
+                    metadata.selected_sets = selectedSets.map((selected, index) => 
+                        selected ? index + 1 : null).filter(Boolean);
+                    
+                    frameContent = JSON.stringify(metadata);
+                    frameLabel = "Metadata";
+                    
+                    // Add emphasis for metadata frame
+                    qrDisplay.style.border = '3px solid red';
                     
                 } else {
-                    // Advance position past set headers
-                    currentPosition += selectedSetIndices.length;
+                    // Reset border for non-metadata frames
+                    qrDisplay.style.border = '2px solid #333';
                     
-                    // End frame
-                    if (currentFrame === totalFrames - 1) {
-                        const endData = {
-                            type: "end",
-                            file_name: fileName,
-                            file_size: fileSize,
-                            selected_sets: selectedSets.map((selected, index) => 
-                                selected ? index + 1 : null).filter(Boolean),
-                            timestamp: Date.now()
+                    // Track position in the selected sets
+                    let currentPosition = 1; // Start after metadata
+                    let selectedSetIndices = selectedSets
+                        .map((selected, index) => selected ? index : -1)
+                        .filter(index => index !== -1);
+                    
+                    if (currentPosition <= currentFrame && 
+                        currentFrame < currentPosition + selectedSetIndices.length) {
+                        // Set header frame
+                        const selectedSetIndex = currentFrame - currentPosition;
+                        const actualSetIndex = selectedSetIndices[selectedSetIndex];
+                        const setChunks = sets[actualSetIndex] || [];
+                        
+                        const setHeader = {
+                            type: "set_header",
+                            set_index: actualSetIndex + 1,
+                            total_sets: selectedSets.filter(Boolean).length,
+                            chunks_in_set: setChunks.length
                         };
                         
-                        if (fileQueue.length > 1) {
-                            endData.file_index = currentFileIndex + 1;
-                            endData.total_files = fileQueue.length;
-                        }
+                        frameContent = JSON.stringify(setHeader);
+                        frameLabel = `Set ${actualSetIndex + 1} Header`;
                         
-                        frameContent = JSON.stringify(endData);
-                        frameLabel = "End Frame";
-                        
-                        // Highlight end frame
-                        qrDisplay.style.border = '3px solid red';
+                        // Highlight set header frames
+                        qrDisplay.style.border = '2px solid orange';
                         
                     } else {
-                        // Chunk frame - map from frame index to actual chunk index
-                        let chunkPositionInStream = currentFrame - currentPosition;
-                        let actualChunkIndex = -1;
-                        let runningTotal = 0;
+                        // Advance position past set headers
+                        currentPosition += selectedSetIndices.length;
                         
-                        // Find which set and chunk this corresponds to
-                        for (let i = 0; i < selectedSets.length; i++) {
-                            if (!selectedSets[i]) continue;
+                        // End frame
+                        if (currentFrame === totalFrames - 1) {
+                            const endData = {
+                                type: "end",
+                                file_name: fileName,
+                                file_size: fileSize,
+                                selected_sets: selectedSets.map((selected, index) => 
+                                    selected ? index + 1 : null).filter(Boolean),
+                                timestamp: Date.now()
+                            };
                             
-                            const setSize = sets[i].length;
-                            if (chunkPositionInStream < runningTotal + setSize) {
-                                // Found the set - calculate chunk index
-                                const localChunkIndex = chunkPositionInStream - runningTotal;
-                                actualChunkIndex = i * SET_SIZE_CHUNKS + localChunkIndex;
+                            frameContent = JSON.stringify(endData);
+                            frameLabel = "End Frame";
+                            
+                            // Highlight end frame
+                            qrDisplay.style.border = '3px solid red';
+                            
+                        } else {
+                            // Chunk frame - map from frame index to actual chunk index
+                            let chunkPositionInStream = currentFrame - currentPosition;
+                            let actualChunkIndex = -1;
+                            let runningTotal = 0;
+                            
+                            // Find which set and chunk this corresponds to
+                            for (let i = 0; i < selectedSets.length; i++) {
+                                if (!selectedSets[i]) continue;
                                 
-                                // Create chunk data
-                                const chunkData = {
-                                    type: "chunk",
-                                    set_index: i + 1,
-                                    chunk_index: localChunkIndex + 1,
-                                    chunks_in_set: setSize,
-                                    data: chunks[actualChunkIndex]
-                                };
+                                const setSize = sets[i].length;
+                                if (chunkPositionInStream < runningTotal + setSize) {
+                                    // Found the set - calculate chunk index
+                                    const localChunkIndex = chunkPositionInStream - runningTotal;
+                                    
+                                    // Create chunk data
+                                    const chunkData = {
+                                        type: "chunk",
+                                        set_index: i + 1,
+                                        chunk_index: localChunkIndex + 1,
+                                        chunks_in_set: setSize,
+                                        data: sets[i][localChunkIndex] || ""
+                                    };
+                                    
+                                    frameContent = JSON.stringify(chunkData);
+                                    frameLabel = `Set ${i + 1}, Chunk ${localChunkIndex + 1}`;
+                                    break;
+                                }
                                 
-                                frameContent = JSON.stringify(chunkData);
-                                frameLabel = `Set ${i + 1}, Chunk ${localChunkIndex + 1}`;
-                                break;
+                                runningTotal += setSize;
                             }
                             
-                            runningTotal += setSize;
-                        }
-                        
-                        if (actualChunkIndex === -1) {
-                            // Error case - shouldn't happen with proper indexing
-                            frameContent = JSON.stringify({ error: "Invalid chunk index" });
-                            frameLabel = "Error";
+                            if (!frameContent) {
+                                // Error case - shouldn't happen with proper indexing
+                                frameContent = JSON.stringify({ error: "Invalid chunk index" });
+                                frameLabel = "Error";
+                            }
                         }
                     }
                 }
-            }
-            
-            // Create QR code
-            new QRCode(qrDisplay, {
-                text: frameContent,
-                width: parseInt(sizeSlider.value),
-                height: parseInt(sizeSlider.value),
-                colorDark: "#000000",
-                colorLight: "#ffffff",
-                correctLevel: QRCode.CorrectLevel.L
-            });
-            
-            // Add frame label below QR code
-            const labelElement = document.createElement('div');
-            labelElement.style.marginTop = '10px';
-            labelElement.style.textAlign = 'center';
-            labelElement.style.fontWeight = 'bold';
-            
-            // Style label according to frame type
-            if (frameType === 'metadata' || frameType === 'endframe') {
-                labelElement.style.color = 'red';
-            } else if (frameType === 'setheader') {
-                labelElement.style.color = 'orange';
-            }
-            
-            labelElement.textContent = frameLabel;
-            qrDisplay.appendChild(labelElement);
-            
-            // Update progress
-            updateProgress(currentFrame + 1, totalFrames);
-            
-            // Update presentation display if active
-            if (isPresentation) {
-                presentationQrDisplay.innerHTML = qrDisplay.innerHTML;
-                presentationCounter.textContent = frameCounter.textContent;
                 
-                // Adjust QR code size to maximize screen usage
-                const qrElement = presentationQrDisplay.querySelector('img');
-                if (qrElement) {
-                    const size = Math.min(window.innerWidth, window.innerHeight) * 0.9;
-                    qrElement.style.width = `${size}px`;
-                    qrElement.style.height = `${size}px`;
+                // Create QR code - using a promise-based approach
+                const qrContainer = document.createElement('div');
+                qrContainer.style.display = 'flex';
+                qrContainer.style.justifyContent = 'center';
+                qrContainer.style.alignItems = 'center';
+                qrContainer.style.width = '100%';
+                qrContainer.style.height = '100%';
+                qrDisplay.appendChild(qrContainer);
+                
+                // Create QR code
+                QRCode.toCanvas(document.createElement('canvas'), frameContent || 'ERROR', {
+                    width: parseInt(sizeSlider.value),
+                    margin: 1,
+                    errorCorrectionLevel: 'L',
+                    color: {
+                        dark: '#000000',
+                        light: '#FFFFFF'
+                    }
+                }, function(error, canvas) {
+                    if (error) {
+                        console.error("Error generating QR code:", error);
+                        qrContainer.textContent = "Error generating QR code";
+                        return;
+                    }
                     
-                    // Add label from original display
-                    const label = qrDisplay.querySelector('div');
-                    if (label) {
-                        const presentationLabel = presentationQrDisplay.querySelector('div') || document.createElement('div');
-                        presentationLabel.style.marginTop = '10px';
-                        presentationLabel.style.color = label.style.color;
-                        presentationLabel.style.fontWeight = 'bold';
-                        presentationLabel.style.fontSize = '24px';
-                        presentationLabel.textContent = label.textContent;
-                        if (!presentationLabel.parentNode) {
-                            presentationQrDisplay.appendChild(presentationLabel);
+                    // Clear previous content and add the new QR code
+                    qrContainer.innerHTML = '';
+                    qrContainer.appendChild(canvas);
+                    
+                    // Add frame label below QR code
+                    const labelElement = document.createElement('div');
+                    labelElement.style.marginTop = '10px';
+                    labelElement.style.textAlign = 'center';
+                    labelElement.style.fontWeight = 'bold';
+                    labelElement.style.position = 'absolute';
+                    labelElement.style.bottom = '5px';
+                    labelElement.style.left = '0';
+                    labelElement.style.right = '0';
+                    
+                    // Style label according to frame type
+                    if (frameType === 'metadata' || frameType === 'endframe') {
+                        labelElement.style.color = 'red';
+                    } else if (frameType === 'setheader') {
+                        labelElement.style.color = 'orange';
+                    }
+                    
+                    labelElement.textContent = frameLabel;
+                    qrDisplay.appendChild(labelElement);
+                    
+                    // Update presentation mode if active
+                    if (isPresentation) {
+                        presentationQrDisplay.innerHTML = qrDisplay.innerHTML;
+                        presentationCounter.textContent = frameCounter.textContent;
+                        
+                        // Adjust QR code size to maximize screen usage
+                        const qrElement = presentationQrDisplay.querySelector('canvas');
+                        if (qrElement) {
+                            const size = Math.min(window.innerWidth, window.innerHeight) * 0.9;
+                            qrElement.style.width = `${size}px`;
+                            qrElement.style.height = `${size}px`;
                         }
                     }
-                }
+                });
+                
+                // Update progress
+                updateProgress(currentFrame + 1, totalFrames);
+                
+            } catch (error) {
+                console.error("Error displaying frame:", error);
+                log(`Error displaying frame: ${error.message}`, true);
             }
         }
+
+        function updateProgress(current, total) {
+            const percent = Math.round((current / total) * 100);
+            progressBar.style.width = `${percent}%`;
+            progressText.textContent = `${percent}%`;
+            frameCounter.textContent = `Frame: ${current} / ${total}`;
+            
+            if (isPresentation) {
+                presentationCounter.textContent = frameCounter.textContent;
+            }
+        }
+
+        // Utility functions
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' bytes';
+            else if (bytes < 1048576) return (bytes / 1024).toFixed(2) + ' KB';
+            else if (bytes < 1073741824) return (bytes / 1048576).toFixed(2) + ' MB';
+            else return (bytes / 1073741824).toFixed(2) + ' GB';
+        }
+
+        function log(message, isError = false) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logMessage = `[${timestamp}] ${message}`;
+            
+            statusEl.textContent = message;
+            
+            if (isError) {
+                console.error(logMessage);
+                statusEl.style.color = 'red';
+            } else {
+                console.log(logMessage);
+                statusEl.style.color = 'black';
+            }
+            
+            debugLogs.push(logMessage);
+            debugView.textContent = debugLogs.join('\n');
+            debugView.scrollTop = debugView.scrollHeight;
+        }
+
+        // Initialize
+        log('Ready to encode files. Select a file and click "Generate QR Codes".');
     </script>
 </body>
 

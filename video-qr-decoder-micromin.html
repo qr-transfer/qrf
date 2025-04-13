@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>QR</title>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font:12px/1.2 system-ui;height:100vh;overflow:hidden}
+#v{width:100%;height:100%;object-fit:cover;position:absolute}#b{border:2px solid red;width:200px;height:200px;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+.t{padding:5px;cursor:pointer;display:inline-block;background:#555;color:#fff;border-radius:4px 4px 0 0}.t.a{background:#07f}button{padding:5px;background:#07f;color:#fff;border:none;border-radius:3px;font-size:12px}
+#w,#x{flex:1;display:none;position:relative;background:#000}.a{display:block}h{background:#333;padding:5px;position:fixed;bottom:0;left:0;right:0;display:flex;gap:5px;flex-wrap:wrap;z-index:100}
+#l{position:fixed;bottom:45px;left:0;right:0;background:rgba(0,0,0,.7);color:#fff;font-size:11px;max-height:80px;overflow:auto;display:none;z-index:10;padding:5px}
+#f{max-width:100%;max-height:100%;display:block;margin:0 auto}.p{height:5px;width:100%;background:#333}.n{height:100%;width:0;background:#07f}.s{display:flex;justify-content:space-around;color:#fff;font-size:10px;padding:2px}
+.m{position:absolute;top:5px;right:5px;color:red;background:rgba(0,0,0,.5);padding:2px 5px;border-radius:3px;display:none}canvas{display:none}</style>
+</head>
+<body>
+<div style="height:100%;display:flex;flex-direction:column;overflow:hidden">
+<div style="background:#222;padding:5px;display:flex;justify-content:space-between;align-items:center">
+<div style="color:#fff">QR</div>
+<div><span class="t a" data-tab="c">Rec</span><span class="t" data-tab="p">Process</span></div>
+</div>
+<div id="w" class="a">
+<video id="v" autoplay playsinline muted></video>
+<div id="b"></div>
+<div class="m">00:00</div>
+</div>
+<div id="x">
+<canvas id="c"></canvas><canvas id="d"></canvas>
+<img id="f" src="data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==">
+<div class="p"><div class="n" id="g"></div></div>
+<div class="s"><div>F:<span id="fc">0</span></div><div>Q:<span id="qc">0</span></div><div>C:<span id="cc">0</span></div></div>
+</div>
+<h id="y">
+<button id="A">Cam</button>
+<button id="B" disabled>Rec</button>
+<button id="C" disabled>Stop</button>
+<button id="D" disabled>Save</button>
+</h>
+<h id="z" style="display:none">
+<button id="E">Load</button>
+<button id="F">URL</button>
+<button id="G" disabled>Process</button>
+<button id="H" disabled>Pause</button>
+<button id="I" disabled>Save</button>
+</h>
+<input type="text" id="j" placeholder="Video URL" style="display:none;width:100%;padding:3px;margin-bottom:3px">
+<input type="file" id="k" accept="video/*" style="display:none">
+<div id="l"></div>
+</div>
+<script>
+const $=id=>document.getElementById(id),v=$('v'),c=$('c'),d=$('d'),f=$('f'),l=$('l'),g=$('g'),
+fc=$('fc'),qc=$('qc'),cc=$('cc'),w=$('w'),x=$('x'),y=$('y'),z=$('z'),j=$('j'),k=$('k'),
+A=$('A'),B=$('B'),C=$('C'),D=$('D'),E=$('E'),F=$('F'),G=$('G'),H=$('H'),I=$('I'),
+m=document.querySelector('.m'),a=c.getContext('2d'),b=d.getContext('2d');
+
+let s=null,r=null,o=[],t=0,i=null,u=null,n=null,p=!1,q=!1,e=null,h=null,
+M=null,J={},K={},P=0,Q=0,R=0,S=0,T=50;
+
+document.querySelectorAll('.t').forEach(t=>{t.addEventListener('click',()=>{
+const c=t.dataset.tab==='c';
+document.querySelectorAll('.t').forEach(x=>x.classList.remove('a'));
+t.classList.add('a');
+w.classList.toggle('a',c);
+x.classList.toggle('a',!c);
+y.style.display=c?'flex':'none';
+z.style.display=c?'none':'flex';
+if(!c&&s){s.getTracks().forEach(t=>t.stop());s=null;}
+if(c&&p){q=!0;e&&e.pause();L();}
+})});
+
+function L(){if(e){e.pause();e.removeAttribute('src');e.load();e=null;}
+a.clearRect(0,0,c.width,c.height);b.clearRect(0,0,d.width,d.height);
+f.src='data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';}
+
+function O(m){l.innerHTML+=`[${new Date().toLocaleTimeString()}] ${m}<br>`;
+l.scrollTop=l.scrollHeight;l.style.display='block';setTimeout(()=>{l.style.display='none'},3000);}
+
+function N(n){const s=Math.floor(n/1000),m=Math.floor(s/60);
+return`${m.toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;}
+
+function U(c,t){g.style.width=`${Math.min(100,(c/t*100)||0)}%`;}
+
+async function V(){try{
+if(s)s.getTracks().forEach(t=>t.stop());
+s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}}});
+v.srcObject=s;v.muted=!0;A.disabled=!0;B.disabled=!1;O('Camera on');
+}catch(e){O(`Camera error: ${e.message}`);}}
+
+function W(){if(!s)return;try{
+const opts={};
+if(MediaRecorder.isTypeSupported('video/webm;codecs=vp9'))opts.mimeType='video/webm;codecs=vp9';
+else if(MediaRecorder.isTypeSupported('video/webm'))opts.mimeType='video/webm';
+r=new MediaRecorder(s,opts);o=[];
+r.ondataavailable=e=>{if(e.data.size>0)o.push(e.data);};
+r.onstop=()=>{u=new Blob(o,{type:r.mimeType||'video/webm'});D.disabled=!1;
+clearInterval(i);O(`Recording: ${(u.size/1024/1024).toFixed(1)}MB`);};
+r.start(1000);t=Date.now();m.style.display='block';
+i=setInterval(()=>{m.textContent=N(Date.now()-t);},1000);
+B.disabled=!0;C.disabled=!1;}catch(e){O(`Record error: ${e.message}`);}
+}
+
+function X(){if(r&&r.state!=='inactive'){r.stop();B.disabled=!1;C.disabled=!0;
+m.style.display='none';if(i){clearInterval(i);i=null;}}}
+
+function Y(){if(!u)return;
+const url=URL.createObjectURL(u),a=document.createElement('a');
+a.href=url;a.download=`qr-rec-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.webm`;
+a.click();setTimeout(()=>URL.revokeObjectURL(url),100);}
+
+function Z(f){if(!f)return;
+if(n)URL.revokeObjectURL(n);u=f;n=URL.createObjectURL(f);
+O(`Video: ${f.name}`);G.disabled=!1;_();}
+
+function _(){M=null;J={};K={};P=0;Q=0;R=0;S=0;
+fc.textContent='0';qc.textContent='0';cc.textContent='0';g.style.width='0';}
+
+function aa(){j.style.display=j.style.display==='block'?'none':'block';
+j.style.display==='block'&&j.focus();}
+
+async function ab(){const url=j.value.trim();if(!url)return;try{
+O(`Fetching: ${url}`);F.disabled=!0;
+const r=await fetch(url);if(!r.ok)throw Error(`Failed: ${r.status}`);
+const b=await r.blob();if(n)URL.revokeObjectURL(n);u=b;n=URL.createObjectURL(b);
+O('URL loaded');G.disabled=!1;j.style.display='none';_();
+}catch(e){O(`Error: ${e.message}`);}finally{F.disabled=!1;}}
+
+function ac(){if(!n||p)return;p=!0;q=!1;G.disabled=!0;H.disabled=!1;
+H.textContent='Pause';O('Processing...');if(e)e.remove();e=document.createElement('video');
+e.src=n;e.muted=!0;
+
+e.onloadedmetadata=()=>{
+const x=1280,s=Math.min(1,x/Math.max(e.videoWidth,e.videoHeight));
+c.width=e.videoWidth*s;c.height=e.videoHeight*s;
+d.width=c.width;d.height=c.height;e.play();
+
+const du=e.duration,fps=du>180?3:du>60?5:10,
+tf=Math.floor(du*fps),fi=du*1000/tf,bs=Math.min(100,tf);
+
+O(`${tf} frames @ ${fps}fps`);U(0,tf);
+
+function ad(s,e_){let i=s;
+h=setInterval(()=>{
+if(q)return;
+if(i>=e_||i>=tf||e.currentTime>=du){
+clearInterval(h);
+if(i<tf&&e.currentTime<du){
+setTimeout(()=>{ad(i,Math.min(i+bs,tf));},300);
+}else{ae();}
+return;}
+const t=(i*du)/tf;e.currentTime=t;
+setTimeout(()=>{af(i,tf);i++;},100);
+},fi);}
+ad(0,bs);};
+
+e.onerror=()=>{O('Video error');if(h)clearInterval(h);p=!1;G.disabled=!1;H.disabled=!0;};
+}
+
+function af(i,t){a.drawImage(e,0,0,c.width,c.height);
+const imgData=a.getImageData(0,0,c.width,c.height);
+i%5===0&&(f.src=c.toDataURL('image/jpeg',.5));
+
+try{const q=jsQR(imgData.data,c.width,c.height,{inversionAttempts:"dontInvert"});
+if(q){ag(q.data);Q++;qc.textContent=Q;}}catch(e){}
+
+P++;fc.textContent=P;U(P,t);S++;S>=T&&(S=0);}
+
+function ag(d){try{const j=JSON.parse(d);
+if(j.type==="metadata"){M=j;O(`File: ${j.file_name}`);
+I.disabled=!0;} // Reset save button when new file detected
+else if(j.type==="set_header"){
+if(!K[j.set_index]){K[j.set_index]={
+chunks_expected:j.chunks_in_set,chunks_received:0,chunks:{}};}
+}
+else if(j.type==="chunk"){if(!M)return;
+
+const si=j.set_index,ci=j.chunk_index,ck=`${si}_${ci}`;
+if(J[ck])return;J[ck]=j.data;R++;cc.textContent=R;
+
+if(!K[si]){K[si]={chunks_expected:M.chunks_per_set||0,
+chunks_received:0,chunks:{}};
+}
+
+K[si].chunks[ci]=1;K[si].chunks_received=Object.keys(K[si].chunks).length;ah();}}catch(e){}}
+
+function ah(){if(!M)return;
+const tc=M.total_chunks||Object.keys(K).reduce((a,k)=>a+K[k].chunks_expected,0),
+rc=Object.keys(J).length;
+if(rc>0){I.disabled=!1;} // Enable save if we have any chunks
+if(rc===tc){O('All chunks received!');
+if(h){clearInterval(h);p=!1;G.disabled=!n;H.disabled=!0;}}}
+
+function ai(){q=!q;H.textContent=q?'Resume':'Pause';}
+
+function ae(){if(h){clearInterval(h);h=null;}
+p=!1;O('Processing done');G.disabled=!n;H.disabled=!0;
+const tc=M?M.total_chunks:0,rc=Object.keys(J).length;
+rc>0&&(O(`Got ${rc}/${tc} chunks`),I.disabled=!1);L();}
+
+function aj(){if(!M||!Object.keys(J).length)return;try{
+const sc=[];
+for(let si=1;si<=M.total_sets;si++){
+const s=K[si];if(!s)continue;
+for(let ci=1;ci<=s.chunks_expected;ci++){
+const ck=`${si}_${ci}`;J[ck]&&sc.push(J[ck]);}}
+
+const b64=sc.join(''),bin=atob(b64),ua=new Uint8Array(bin.length);
+for(let i=0;i<bin.length;i++)ua[i]=bin.charCodeAt(i);
+
+const b=new Blob([ua],{type:'application/octet-stream'}),
+url=URL.createObjectURL(b),a=document.createElement('a');
+a.href=url;a.download=M.file_name;a.click();
+setTimeout(()=>URL.revokeObjectURL(url),100);
+O(`File saved: ${M.file_name}`);}catch(e){O(`Save error: ${e.message}`);}}
+
+A.addEventListener('click',V);
+B.addEventListener('click',W);
+C.addEventListener('click',X);
+D.addEventListener('click',Y);
+E.addEventListener('click',()=>k.click());
+F.addEventListener('click',aa);
+k.addEventListener('change',e=>Z(e.target.files[0]));
+j.addEventListener('keypress',e=>{e.key==='Enter'&&ab();});
+j.addEventListener('blur',()=>{j.value.trim()===''&&(j.style.display='none');});
+G.addEventListener('click',ac);
+H.addEventListener('click',ai);
+I.addEventListener('click',aj);
+
+O('Ready');
+</script>
+</body></html>
