@@ -271,7 +271,7 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: #000;
+            background: #222;
             z-index: 1000;
             display: none;
             justify-content: center;
@@ -322,7 +322,7 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0,0,0,0.8);
+            background: rgba(0,0,0,0.9);
             z-index: 2000;
             display: none;
             justify-content: center;
@@ -536,7 +536,7 @@
         const speedValue = document.getElementById('speedValue');
         const sizeValue = document.getElementById('sizeValue');
         const chunkValue = document.getElementById('chunkValue');
-        const countdownValue = document.getElementById('countdownValue');
+        const countdownValueEl = document.getElementById('countdownValue');
         const generateBtn = document.getElementById('generateBtn');
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
@@ -556,7 +556,7 @@
         const selectAllSetsBtn = document.getElementById('selectAllSetsBtn');
         const deselectAllSetsBtn = document.getElementById('deselectAllSetsBtn');
         const selectMissingSetsBtn = document.getElementById('selectMissingSetsBtn');
-        const countdownValueDisplay = document.getElementById('countdownValue');
+        // countdownValueEl is already defined above
         const fileNameInfo = document.getElementById('fileNameInfo');
         const fileSizeInfo = document.getElementById('fileSizeInfo');
         const totalSetsInfo = document.getElementById('totalSetsInfo');
@@ -625,7 +625,7 @@
         });
 
         countdownSlider.addEventListener('input', () => {
-            countdownValueDisplay.textContent = `${countdownSlider.value} seconds`;
+            countdownValueEl.textContent = `${countdownSlider.value} seconds`;
         });
 
         fileInput.addEventListener('change', (e) => {
@@ -878,33 +878,12 @@
             if (isPresentation) return;
             
             try {
-                // Setup fullscreen mode
-                presentationQrDisplay.innerHTML = qrDisplay.innerHTML;
-                presentationCounter.textContent = frameCounter.textContent;
+                // Setup presentation mode
                 presentationOverlay.style.display = 'flex';
                 isPresentation = true;
                 
-                // Adjust QR code size for fullscreen
-                const qrElement = presentationQrDisplay.querySelector('img');
-                if (qrElement) {
-                    const size = Math.min(window.innerWidth, window.innerHeight) * 0.9;
-                    qrElement.style.width = `${size}px`;
-                    qrElement.style.height = `${size}px`;
-                    
-                    // Add label if present
-                    const label = qrDisplay.querySelector('div');
-                    if (label) {
-                        const presentationLabel = presentationQrDisplay.querySelector('div') || document.createElement('div');
-                        presentationLabel.style.marginTop = '10px';
-                        presentationLabel.style.color = label.style.color;
-                        presentationLabel.style.fontWeight = 'bold';
-                        presentationLabel.style.fontSize = '24px';
-                        presentationLabel.textContent = label.textContent;
-                        if (!presentationLabel.parentNode) {
-                            presentationQrDisplay.appendChild(presentationLabel);
-                        }
-                    }
-                }
+                // The actual QR will be created in the displayFrame function
+                presentationCounter.textContent = frameCounter.textContent;
                 
                 // Try to request fullscreen if supported (not required)
                 try {
@@ -1395,16 +1374,93 @@
                     
                     // Update presentation mode if active
                     if (isPresentation) {
-                        presentationQrDisplay.innerHTML = qrDisplay.innerHTML;
-                        presentationCounter.textContent = frameCounter.textContent;
+                        // Create a clean display for presentation mode
+                        presentationQrDisplay.innerHTML = '';
                         
-                        // Adjust QR code size to maximize screen usage
-                        const qrElement = presentationQrDisplay.querySelector('canvas');
-                        if (qrElement) {
-                            const size = Math.min(window.innerWidth, window.innerHeight) * 0.9;
-                            qrElement.style.width = `${size}px`;
-                            qrElement.style.height = `${size}px`;
-                        }
+                        // Add a wrapper with white background for better contrast
+                        const qrWrapper = document.createElement('div');
+                        qrWrapper.style.background = '#ffffff';
+                        qrWrapper.style.padding = '30px';
+                        qrWrapper.style.borderRadius = '8px';
+                        qrWrapper.style.boxShadow = '0 0 30px rgba(255,255,255,0.3)';
+                        qrWrapper.style.display = 'flex';
+                        qrWrapper.style.flexDirection = 'column';
+                        qrWrapper.style.alignItems = 'center';
+                        qrWrapper.style.justifyContent = 'center';
+                        
+                        // Create a loading indicator while we generate the QR code
+                        const loadingIndicator = document.createElement('div');
+                        loadingIndicator.textContent = 'Generating QR...';
+                        loadingIndicator.style.padding = '20px';
+                        loadingIndicator.style.border = '1px solid #ccc';
+                        loadingIndicator.style.borderRadius = '4px';
+                        loadingIndicator.style.marginBottom = '15px';
+                        qrWrapper.appendChild(loadingIndicator);
+                        
+                        // Create a new QR code canvas specifically for the presentation view
+                        const size = Math.min(window.innerWidth, window.innerHeight) * 0.7;
+                        
+                        // Create the full presentationCanvas
+                        const presentationCanvas = document.createElement('canvas');
+                        presentationCanvas.width = size;
+                        presentationCanvas.height = size;
+                        
+                        // First, set up the whole canvas as white
+                        const pctx = presentationCanvas.getContext('2d');
+                        pctx.fillStyle = '#FFFFFF';
+                        pctx.fillRect(0, 0, size, size);
+                        
+                        // Insert the presentation canvas before the loading indicator
+                        qrWrapper.insertBefore(presentationCanvas, loadingIndicator);
+                        
+                        // Use QRCode.toCanvas to create a fresh QR code with appropriate size
+                        QRCode.toCanvas(document.createElement('canvas'), frameContent || 'ERROR', {
+                            width: size - 40, // Slightly smaller to ensure it fits
+                            margin: 4,
+                            errorCorrectionLevel: 'L',
+                            color: {
+                                dark: '#000000',
+                                light: '#FFFFFF'
+                            }
+                        }, function(err, qrCanvas) {
+                            if (!err) {
+                                // Draw the generated QR code onto our presentation canvas
+                                pctx.drawImage(qrCanvas, 20, 20, size - 40, size - 40);
+                                // Now remove the loading indicator
+                                qrWrapper.removeChild(loadingIndicator);
+                            } else {
+                                console.error("Error creating presentation QR", err);
+                                // Update the loading indicator to show error
+                                loadingIndicator.textContent = 'Error generating QR';
+                                loadingIndicator.style.color = 'red';
+                                
+                                // Fallback - try to use the original canvas
+                                try {
+                                    pctx.drawImage(canvas, 20, 20, size - 40, size - 40);
+                                    // Remove the error message if this worked
+                                    qrWrapper.removeChild(loadingIndicator);
+                                } catch (e) {
+                                    console.error("Fallback failed", e);
+                                }
+                            }
+                        });
+                        
+                        // Create the frame label immediately
+                        const newLabel = document.createElement('div');
+                        newLabel.style.marginTop = '15px';
+                        newLabel.style.color = labelElement.style.color || '#000';
+                        newLabel.style.fontWeight = 'bold';
+                        newLabel.style.fontSize = '24px';
+                        newLabel.textContent = labelElement.textContent;
+                        
+                        // We add this right away, before the async QR code generation
+                        qrWrapper.appendChild(newLabel);
+                        
+                        // Add the wrapper to the presentation display
+                        presentationQrDisplay.appendChild(qrWrapper);
+                        
+                        // Update the counter
+                        presentationCounter.textContent = frameCounter.textContent;
                     }
                 });
                 
