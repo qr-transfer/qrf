@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QR Scanner</title>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<style>
+* {margin:0; padding:0; box-sizing:border-box;}
+html, body {height:100%; overflow:hidden; font-family:sans-serif;}
+
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.header {
+  padding: 10px;
+  background: #333;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  z-index: 100;
+}
+
+.main {
+  flex: 1;
+  position: relative;
+  background: #000;
+  overflow: hidden;
+}
+
+#camera-view {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+#video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #000;
+}
+
+#target-box {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 250px;
+  height: 250px;
+  border: 4px solid red;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.footer {
+  padding: 10px;
+  background: #333;
+  z-index: 100;
+}
+
+button {
+  padding: 8px 15px;
+  background: #0066cc;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  margin-right: 5px;
+  cursor: pointer;
+}
+
+button:disabled {
+  background: #666;
+}
+
+.tab-buttons {
+  display: flex;
+}
+
+.tab {
+  padding: 8px 12px;
+  background: #555;
+  color: white;
+  cursor: pointer;
+  margin-left: 5px;
+}
+
+.tab.active {
+  background: #0066cc;
+}
+
+#process-view {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #111;
+  display: none;
+  flex-direction: column;
+  z-index: 5;
+}
+
+#preview-container {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#frame-preview {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.progress-container {
+  height: 8px;
+  width: 100%;
+  background: #333;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: #0066cc;
+}
+
+.stats {
+  display: flex;
+  justify-content: space-around;
+  background: #222;
+  color: white;
+  padding: 5px 0;
+}
+
+#log {
+  position: fixed;
+  bottom: 60px;
+  left: 0;
+  right: 0;
+  padding: 10px;
+  background: rgba(0,0,0,0.8);
+  color: white;
+  max-height: 150px;
+  overflow-y: auto;
+  z-index: 1000;
+  display: none;
+}
+
+#timer {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(0,0,0,0.5);
+  color: red;
+  padding: 5px 10px;
+  border-radius: 4px;
+  z-index: 10;
+  display: none;
+}
+
+canvas {
+  display: none;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <span>QR Video Decoder</span>
+  <div class="tab-buttons">
+    <div class="tab active" data-view="camera">Camera</div>
+    <div class="tab" data-view="process">Process</div>
+  </div>
+</div>
+
+<div class="main">
+  <div id="camera-view">
+    <video id="video" autoplay playsinline></video>
+    <div id="target-box"></div>
+    <div id="timer">00:00</div>
+  </div>
+  
+  <div id="process-view">
+    <div id="preview-container">
+      <img id="frame-preview" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+    </div>
+    <div class="progress-container">
+      <div class="progress-bar" id="progress"></div>
+    </div>
+    <div class="stats">
+      <div>Frames: <span id="frame-count">0</span></div>
+      <div>QR: <span id="qr-count">0</span></div>
+      <div>Chunks: <span id="chunk-count">0</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="footer" id="camera-controls">
+  <button id="camera-start">Start Camera</button>
+  <button id="camera-stop" disabled>Stop Camera</button>
+  <button id="record-start" disabled>Record</button>
+  <button id="record-stop" disabled>Stop</button>
+  <button id="download" disabled>Save Video</button>
+</div>
+
+<div class="footer" id="process-controls" style="display:none">
+  <button id="load-video">Load Video</button>
+  <button id="load-url">From URL</button>
+  <button id="process-start" disabled>Process</button>
+  <button id="process-pause" disabled>Pause</button>
+  <button id="save-file" disabled>Save File</button>
+</div>
+
+<input type="file" id="file-input" accept="video/*" style="display:none">
+<input type="text" id="url-input" placeholder="Enter video URL" style="display:none; width:100%; padding:8px; margin-top:10px">
+
+<div id="log"></div>
+
+<canvas id="canvas"></canvas>
+<canvas id="work-canvas"></canvas>
+
+<script>
+// DOM elements
+const cameraView = document.getElementById('camera-view');
+const processView = document.getElementById('process-view');
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const workCanvas = document.getElementById('work-canvas');
+const framePreview = document.getElementById('frame-preview');
+const progress = document.getElementById('progress');
+const frameCount = document.getElementById('frame-count');
+const qrCount = document.getElementById('qr-count');
+const chunkCount = document.getElementById('chunk-count');
+const timer = document.getElementById('timer');
+const logElement = document.getElementById('log');
+const fileInput = document.getElementById('file-input');
+const urlInput = document.getElementById('url-input');
+
+const cameraControls = document.getElementById('camera-controls');
+const processControls = document.getElementById('process-controls');
+
+// Buttons
+const cameraStartBtn = document.getElementById('camera-start');
+const cameraStopBtn = document.getElementById('camera-stop');
+const recordStartBtn = document.getElementById('record-start');
+const recordStopBtn = document.getElementById('record-stop');
+const downloadBtn = document.getElementById('download');
+const loadVideoBtn = document.getElementById('load-video');
+const loadUrlBtn = document.getElementById('load-url');
+const processStartBtn = document.getElementById('process-start');
+const processPauseBtn = document.getElementById('process-pause');
+const saveFileBtn = document.getElementById('save-file');
+
+// Canvas contexts
+const ctx = canvas.getContext('2d');
+const workCtx = workCanvas.getContext('2d');
+
+// State variables
+let mediaStream = null;
+let recorder = null;
+let recordedChunks = [];
+let recordStartTime = 0;
+let recordingTimer = null;
+let videoBlob = null;
+let videoUrl = null;
+let isProcessing = false;
+let isPaused = false;
+let processingVideo = null;
+let processingInterval = null;
+let fileMetadata = null;
+let chunks = {};
+let sets = {};
+let processedFrames = 0;
+let detectedQRs = 0;
+let receivedChunks = 0;
+
+// Tab switching
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    // Update tab UI
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    
+    // Show appropriate view
+    const view = tab.dataset.view;
+    if (view === 'camera') {
+      cameraView.style.zIndex = 10;
+      processView.style.display = 'none';
+      cameraControls.style.display = 'block';
+      processControls.style.display = 'none';
+      
+      // Stop processing if active
+      if (isProcessing) {
+        isPaused = true;
+        if (processingVideo) processingVideo.pause();
+      }
+    } else {
+      cameraView.style.zIndex = 1;
+      processView.style.display = 'flex';
+      cameraControls.style.display = 'none';
+      processControls.style.display = 'block';
+      
+      // Stop camera when switching to process view
+      if (mediaStream) {
+        stopCamera();
+      }
+    }
+  });
+});
+
+// Utility functions
+function showLog(message) {
+  const time = new Date().toLocaleTimeString();
+  logElement.innerHTML += `[${time}] ${message}<br>`;
+  logElement.scrollTop = logElement.scrollHeight;
+  logElement.style.display = 'block';
+  
+  console.log(message);
+  
+  // Auto-hide after 4 seconds
+  setTimeout(() => {
+    logElement.style.display = 'none';
+  }, 4000);
+}
+
+function formatTime(ms) {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes.toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
+}
+
+function updateProgressBar(current, total) {
+  const percent = Math.min(100, (current / total * 100) || 0);
+  progress.style.width = `${percent}%`;
+}
+
+// Camera handling
+async function startCamera() {
+  try {
+    cameraStartBtn.disabled = true;
+    
+    // Stop any existing stream
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(track => track.stop());
+    }
+    
+    // Request camera access with specific constraints
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: 'environment',
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    });
+    
+    // Connect stream to video element
+    video.srcObject = mediaStream;
+    
+    // Log stream info
+    const videoTrack = mediaStream.getVideoTracks()[0];
+    const settings = videoTrack.getSettings();
+    showLog(`Camera active: ${settings.width || '?'}x${settings.height || '?'}`);
+    
+    // Force play to ensure video is visible and handle autoplay restrictions
+    try {
+      await video.play();
+      showLog('Video playing');
+    } catch (err) {
+      showLog('Play error: ' + err.message + ' - Try tapping screen');
+      
+      // Add tap-to-play handler
+      video.addEventListener('click', () => {
+        video.play().catch(e => showLog('Play failed: ' + e.message));
+      });
+      
+      // Add tap-anywhere-to-play handler
+      document.body.addEventListener('click', () => {
+        if (video.paused && mediaStream) {
+          video.play().catch(e => {});
+        }
+      }, { once: true });
+    }
+    
+    // Update UI
+    cameraStartBtn.disabled = true;
+    cameraStopBtn.disabled = false;
+    recordStartBtn.disabled = false;
+    
+    // Debug info
+    video.onloadeddata = () => {
+      showLog(`Video size: ${video.videoWidth}x${video.videoHeight}`);
+    };
+    
+    video.onplaying = () => {
+      showLog('Video stream started');
+    };
+    
+  } catch (error) {
+    showLog('Camera error: ' + error.message);
+    cameraStartBtn.disabled = false;
+  }
+}
+
+function stopCamera() {
+  if (!mediaStream) return;
+  
+  // Stop all tracks
+  mediaStream.getTracks().forEach(track => {
+    track.stop();
+  });
+  
+  // Clear video source
+  video.srcObject = null;
+  mediaStream = null;
+  
+  // Update UI
+  cameraStartBtn.disabled = false;
+  cameraStopBtn.disabled = true;
+  recordStartBtn.disabled = true;
+  
+  showLog('Camera stopped');
+}
+
+// Recording functions
+function startRecording() {
+  if (!mediaStream) return;
+  
+  try {
+    // Set up recorder with best available format
+    const options = {};
+    if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+      options.mimeType = 'video/webm;codecs=vp9';
+    } else if (MediaRecorder.isTypeSupported('video/webm')) {
+      options.mimeType = 'video/webm';
+    }
+    
+    recorder = new MediaRecorder(mediaStream, options);
+    recordedChunks = [];
+    
+    // Collect data
+    recorder.ondataavailable = e => {
+      if (e.data.size > 0) {
+        recordedChunks.push(e.data);
+      }
+    };
+    
+    // Handle recording end
+    recorder.onstop = () => {
+      videoBlob = new Blob(recordedChunks, {
+        type: recorder.mimeType || 'video/webm'
+      });
+      
+      downloadBtn.disabled = false;
+      clearInterval(recordingTimer);
+      
+      const sizeMb = (videoBlob.size / (1024 * 1024)).toFixed(1);
+      showLog(`Recording complete: ${sizeMb} MB`);
+    };
+    
+    // Start recording
+    recorder.start(1000);
+    recordStartTime = Date.now();
+    timer.style.display = 'block';
+    
+    // Update timer
+    recordingTimer = setInterval(() => {
+      timer.textContent = formatTime(Date.now() - recordStartTime);
+    }, 1000);
+    
+    // Update UI
+    recordStartBtn.disabled = true;
+    recordStopBtn.disabled = false;
+    
+    showLog('Recording started');
+  } catch (error) {
+    showLog('Recording error: ' + error.message);
+  }
+}
+
+function stopRecording() {
+  if (!recorder || recorder.state === 'inactive') return;
+  
+  recorder.stop();
+  
+  // Update UI
+  recordStartBtn.disabled = false;
+  recordStopBtn.disabled = true;
+  timer.style.display = 'none';
+  
+  if (recordingTimer) {
+    clearInterval(recordingTimer);
+    recordingTimer = null;
+  }
+  
+  showLog('Recording stopped');
+}
+
+function downloadRecording() {
+  if (!videoBlob) return;
+  
+  const url = URL.createObjectURL(videoBlob);
+  const a = document.createElement('a');
+  
+  a.href = url;
+  a.download = `qr-video-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.webm`;
+  a.click();
+  
+  setTimeout(() => URL.revokeObjectURL(url), 100);
+  showLog('Video saved');
+}
+
+// Video processing functions
+function loadVideoFile(file) {
+  if (!file) return;
+  
+  // Clean up previous URL
+  if (videoUrl) {
+    URL.revokeObjectURL(videoUrl);
+  }
+  
+  videoBlob = file;
+  videoUrl = URL.createObjectURL(videoBlob);
+  
+  showLog(`Video loaded: ${file.name}`);
+  processStartBtn.disabled = false;
+  resetProcessingState();
+}
+
+function toggleUrlInput() {
+  if (urlInput.style.display === 'none' || !urlInput.style.display) {
+    urlInput.style.display = 'block';
+    urlInput.focus();
+  } else {
+    urlInput.style.display = 'none';
+  }
+}
+
+async function loadVideoFromUrl() {
+  const url = urlInput.value.trim();
+  if (!url) return;
+  
+  try {
+    showLog(`Fetching video from URL: ${url}`);
+    loadUrlBtn.disabled = true;
+    
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Network error: ${response.status}`);
+    }
+    
+    const blob = await response.blob();
+    
+    // Clean up previous URL
+    if (videoUrl) {
+      URL.revokeObjectURL(videoUrl);
+    }
+    
+    videoBlob = blob;
+    videoUrl = URL.createObjectURL(blob);
+    
+    showLog('URL video loaded');
+    processStartBtn.disabled = false;
+    urlInput.style.display = 'none';
+    resetProcessingState();
+  } catch (error) {
+    showLog(`Error: ${error.message}`);
+  } finally {
+    loadUrlBtn.disabled = false;
+  }
+}
+
+function resetProcessingState() {
+  fileMetadata = null;
+  chunks = {};
+  sets = {};
+  processedFrames = 0;
+  detectedQRs = 0;
+  receivedChunks = 0;
+  
+  frameCount.textContent = '0';
+  qrCount.textContent = '0';
+  chunkCount.textContent = '0';
+  progress.style.width = '0';
+}
+
+function cleanupVideoResources() {
+  if (processingVideo) {
+    processingVideo.pause();
+    processingVideo.removeAttribute('src');
+    processingVideo.load();
+    processingVideo = null;
+  }
+  
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  workCtx.clearRect(0, 0, workCanvas.width, workCanvas.height);
+  
+  framePreview.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  
+  // Try to force garbage collection if supported
+  setTimeout(() => {
+    if (window.gc) window.gc();
+  }, 100);
+}
+
+function startProcessing() {
+  if (!videoUrl || isProcessing) return;
+  
+  isProcessing = true;
+  isPaused = false;
+  
+  processStartBtn.disabled = true;
+  processPauseBtn.disabled = false;
+  processPauseBtn.textContent = 'Pause';
+  
+  showLog('Processing video...');
+  
+  // Create video element for processing
+  if (processingVideo) {
+    processingVideo.remove();
+  }
+  
+  processingVideo = document.createElement('video');
+  processingVideo.src = videoUrl;
+  processingVideo.muted = true;
+  
+  // Set up processing when video metadata loads
+  processingVideo.onloadedmetadata = () => {
+    // Size canvas based on video dimensions (scale down large videos)
+    const maxDimension = 1280;
+    const scale = Math.min(1, maxDimension / Math.max(processingVideo.videoWidth, processingVideo.videoHeight));
+    
+    canvas.width = processingVideo.videoWidth * scale;
+    canvas.height = processingVideo.videoHeight * scale;
+    workCanvas.width = canvas.width;
+    workCanvas.height = canvas.height;
+    
+    // Start playback
+    processingVideo.play();
+    
+    // Calculate frames to process based on video duration
+    const duration = processingVideo.duration;
+    
+    // Adjust frame rate based on video length
+    const fps = duration > 180 ? 3 : duration > 60 ? 5 : 10;
+    const totalFrames = Math.floor(duration * fps);
+    const frameInterval = (duration * 1000) / totalFrames;
+    const batchSize = Math.min(100, totalFrames);
+    
+    showLog(`Processing ${totalFrames} frames @ ${fps} fps`);
+    updateProgressBar(0, totalFrames);
+    
+    // Process video in batches to manage memory
+    function processBatch(start, end) {
+      let i = start;
+      
+      processingInterval = setInterval(() => {
+        if (isPaused) return;
+        
+        // Check if we've reached the end of the batch or video
+        if (i >= end || i >= totalFrames || processingVideo.currentTime >= duration) {
+          clearInterval(processingInterval);
+          
+          if (i < totalFrames && processingVideo.currentTime < duration) {
+            // Process next batch after a short delay
+            setTimeout(() => {
+              processBatch(i, Math.min(i + batchSize, totalFrames));
+            }, 300);
+          } else {
+            finishProcessing();
+          }
+          return;
+        }
+        
+        // Set video to the frame we want to process
+        const time = (i * duration) / totalFrames;
+        processingVideo.currentTime = time;
+        
+        // Extract and process the frame after a short delay
+        setTimeout(() => {
+          processVideoFrame(i, totalFrames);
+          i++;
+        }, 100);
+      }, frameInterval);
+    }
+    
+    // Start with the first batch
+    processBatch(0, batchSize);
+  };
+  
+  processingVideo.onerror = () => {
+    showLog('Video error');
+    if (processingInterval) {
+      clearInterval(processingInterval);
+    }
+    isProcessing = false;
+    processStartBtn.disabled = false;
+    processPauseBtn.disabled = true;
+  };
+}
+
+function processVideoFrame(index, total) {
+  // Draw the current video frame to the canvas
+  ctx.drawImage(processingVideo, 0, 0, canvas.width, canvas.height);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  
+  // Update preview image occasionally (to save CPU)
+  if (index % 5 === 0) {
+    framePreview.src = canvas.toDataURL('image/jpeg', 0.5);
+  }
+  
+  // Try to detect QR codes in the frame
+  try {
+    const qr = jsQR(imageData.data, canvas.width, canvas.height, {
+      inversionAttempts: "dontInvert"
+    });
+    
+    if (qr) {
+      processQRData(qr.data);
+      detectedQRs++;
+      qrCount.textContent = detectedQRs;
+    }
+  } catch (error) {
+    // Silently ignore QR detection errors
+  }
+  
+  // Update frame counter and progress
+  processedFrames++;
+  frameCount.textContent = processedFrames;
+  updateProgressBar(processedFrames, total);
+}
+
+function processQRData(data) {
+  try {
+    const json = JSON.parse(data);
+    
+    if (json.type === "metadata") {
+      // Store file metadata
+      fileMetadata = json;
+      showLog(`File detected: ${json.file_name}`);
+      saveFileBtn.disabled = true;
+    }
+    else if (json.type === "set_header") {
+      // Create set tracking entry
+      if (!sets[json.set_index]) {
+        sets[json.set_index] = {
+          chunks_expected: json.chunks_in_set,
+          chunks_received: 0,
+          chunks: {}
+        };
+      }
+    }
+    else if (json.type === "chunk") {
+      if (!fileMetadata) return;
+      
+      const setIndex = json.set_index;
+      const chunkIndex = json.chunk_index;
+      const chunkKey = `${setIndex}_${chunkIndex}`;
+      
+      // Skip if we already have this chunk
+      if (chunks[chunkKey]) return;
+      
+      // Store chunk data
+      chunks[chunkKey] = json.data;
+      receivedChunks++;
+      chunkCount.textContent = receivedChunks;
+      
+      // Create set if it doesn't exist
+      if (!sets[setIndex]) {
+        sets[setIndex] = {
+          chunks_expected: fileMetadata.chunks_per_set || 0,
+          chunks_received: 0,
+          chunks: {}
+        };
+      }
+      
+      // Track chunks in this set
+      sets[setIndex].chunks[chunkIndex] = true;
+      sets[setIndex].chunks_received = Object.keys(sets[setIndex].chunks).length;
+      
+      // Check if we have all chunks
+      checkCompletion();
+    }
+  } catch (error) {
+    // Silently ignore parsing errors
+  }
+}
+
+function checkCompletion() {
+  if (!fileMetadata) return;
+  
+  const totalChunks = fileMetadata.total_chunks || 
+    Object.keys(sets).reduce((acc, key) => acc + sets[key].chunks_expected, 0);
+  
+  const receivedCount = Object.keys(chunks).length;
+  
+  // Enable save button once we have any chunks
+  if (receivedCount > 0) {
+    saveFileBtn.disabled = false;
+  }
+  
+  // Check if all chunks received
+  if (receivedCount === totalChunks) {
+    showLog('✅ All chunks received!');
+    
+    if (processingInterval) {
+      clearInterval(processingInterval);
+      isProcessing = false;
+      processStartBtn.disabled = !videoUrl;
+      processPauseBtn.disabled = true;
+    }
+  }
+}
+
+function togglePause() {
+  isPaused = !isPaused;
+  processPauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
+}
+
+function finishProcessing() {
+  if (processingInterval) {
+    clearInterval(processingInterval);
+    processingInterval = null;
+  }
+  
+  isProcessing = false;
+  showLog('Processing completed');
+  
+  processStartBtn.disabled = !videoUrl;
+  processPauseBtn.disabled = true;
+  
+  const totalChunks = fileMetadata ? fileMetadata.total_chunks : 0;
+  const receivedCount = Object.keys(chunks).length;
+  
+  if (receivedCount > 0) {
+    showLog(`Received ${receivedCount}/${totalChunks} chunks`);
+    saveFileBtn.disabled = false;
+  }
+  
+  cleanupVideoResources();
+}
+
+function saveFile() {
+  if (!fileMetadata || !Object.keys(chunks).length) {
+    return;
+  }
+  
+  try {
+    const sortedChunks = [];
+    
+    // Collect chunks in order
+    for (let setIndex = 1; setIndex <= fileMetadata.total_sets; setIndex++) {
+      const set = sets[setIndex];
+      if (!set) continue;
+      
+      for (let chunkIndex = 1; chunkIndex <= set.chunks_expected; chunkIndex++) {
+        const chunkKey = `${setIndex}_${chunkIndex}`;
+        if (chunks[chunkKey]) {
+          sortedChunks.push(chunks[chunkKey]);
+        }
+      }
+    }
+    
+    // Combine base64 chunks and convert to binary
+    const base64 = sortedChunks.join('');
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    
+    // Convert to byte array
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    
+    // Create blob and trigger download
+    const blob = new Blob([bytes], {type: 'application/octet-stream'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    
+    a.href = url;
+    a.download = fileMetadata.file_name;
+    a.click();
+    
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+    showLog(`File saved: ${fileMetadata.file_name}`);
+  } catch (error) {
+    showLog(`Save error: ${error.message}`);
+  }
+}
+
+// Event listeners
+// Camera tab
+cameraStartBtn.addEventListener('click', startCamera);
+cameraStopBtn.addEventListener('click', stopCamera);
+recordStartBtn.addEventListener('click', startRecording);
+recordStopBtn.addEventListener('click', stopRecording);
+downloadBtn.addEventListener('click', downloadRecording);
+
+// Process tab
+loadVideoBtn.addEventListener('click', () => fileInput.click());
+loadUrlBtn.addEventListener('click', toggleUrlInput);
+fileInput.addEventListener('change', e => loadVideoFile(e.target.files[0]));
+processStartBtn.addEventListener('click', startProcessing);
+processPauseBtn.addEventListener('click', togglePause);
+saveFileBtn.addEventListener('click', saveFile);
+
+// URL input handling
+urlInput.addEventListener('keypress', e => {
+  if (e.key === 'Enter') {
+    loadVideoFromUrl();
+  }
+});
+
+// Tap to play fallback
+video.addEventListener('click', () => {
+  if (video.paused && mediaStream) {
+    video.play().catch(() => {});
+  }
+});
+
+// Add debug info for video
+video.addEventListener('loadeddata', () => {
+  console.log(`Video dimensions: ${video.videoWidth}x${video.videoHeight}`);
+});
+
+// Initialization
+showLog('Ready - Click "Start Camera"');
+</script>
+</body>
+</html>

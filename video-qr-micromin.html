@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>QR</title>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<style>*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;width:100%;overflow:hidden;font-family:sans-serif}
+body{display:flex;flex-direction:column;height:100%}
+.h{padding:5px;background:#222;color:#fff;display:flex;justify-content:space-between;z-index:100}
+.m{flex:1;position:relative;background:#000;overflow:hidden}
+#c{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1}
+#v{width:100%;height:100%;display:block;background:#000}
+#b{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:200px;height:200px;border:3px solid red;z-index:10;pointer-events:none}
+.f{padding:5px;background:#222;z-index:100}
+button{padding:5px 10px;background:#07f;color:#fff;border:none;border-radius:3px;margin-right:5px;cursor:pointer}
+button:disabled{background:#555}
+.t{display:flex}
+.a{padding:5px 10px;background:#444;color:#fff;cursor:pointer;margin-left:5px}
+.a.active{background:#07f}
+#p{position:absolute;top:0;left:0;width:100%;height:100%;background:#111;display:none;flex-direction:column;z-index:5}
+#i{flex:1;display:flex;justify-content:center;align-items:center}
+#e{max-width:100%;max-height:100%}
+.g{height:5px;width:100%;background:#333}
+.r{height:100%;width:0%;background:#07f}
+.s{display:flex;justify-content:space-around;background:#222;color:#fff;padding:2px 0}
+#l{position:fixed;bottom:40px;left:0;right:0;padding:5px;background:rgba(0,0,0,.8);color:#fff;max-height:100px;overflow-y:auto;z-index:1000;display:none}
+#z{position:absolute;top:5px;right:5px;background:rgba(0,0,0,.5);color:red;padding:5px;border-radius:3px;z-index:10;display:none}
+canvas{display:none}
+</style>
+</head>
+<body>
+<div class="h">
+  <span>QR</span>
+  <div class="t">
+    <div class="a active" data-tab="1">Cam</div>
+    <div class="a" data-tab="2">Proc</div>
+  </div>
+</div>
+
+<div class="m">
+  <div id="c">
+    <video id="v" autoplay playsinline></video>
+    <div id="b"></div>
+    <div id="z">00:00</div>
+  </div>
+  
+  <div id="p">
+    <div id="i">
+      <img id="e" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+    </div>
+    <div class="g">
+      <div class="r" id="o"></div>
+    </div>
+    <div class="s">
+      <div>F:<span id="fc">0</span></div>
+      <div>Q:<span id="qc">0</span></div>
+      <div>C:<span id="cc">0</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="f" id="d1">
+  <button id="A">Cam</button>
+  <button id="B" disabled>Stop</button>
+  <button id="C" disabled>Rec</button>
+  <button id="D" disabled>Stop</button>
+  <button id="E" disabled>Save</button>
+</div>
+
+<div class="f" id="d2" style="display:none">
+  <button id="F">Load</button>
+  <button id="G">URL</button>
+  <button id="H" disabled>Proc</button>
+  <button id="I" disabled>Pause</button>
+  <button id="J" disabled>Save</button>
+</div>
+
+<input type="file" id="f" accept="video/*" style="display:none">
+<input type="text" id="u" placeholder="URL" style="display:none;width:100%;padding:5px;margin-top:5px">
+<div id="l"></div>
+<canvas id="k"></canvas>
+<canvas id="w"></canvas>
+
+<script>
+// DOM elements
+const $=id=>document.getElementById(id),
+c=$('c'),p=$('p'),v=$('v'),k=$('k'),w=$('w'),e=$('e'),o=$('o'),
+fc=$('fc'),qc=$('qc'),cc=$('cc'),d1=$('d1'),d2=$('d2'),
+z=$('z'),l=$('l'),f=$('f'),u=$('u'),ctx=k.getContext('2d'),
+wctx=w.getContext('2d'),A=$('A'),B=$('B'),C=$('C'),D=$('D'),
+E=$('E'),F=$('F'),G=$('G'),H=$('H'),I=$('I'),J=$('J');
+
+// State
+let S=null,R=null,Q=[],T=0,N=null,V=null,U=null,
+P=!1,M=!1,X=null,Y=null,Z=null,K={},L={},a=0,b=0,d=0;
+
+// Tab switching
+document.querySelectorAll('.a').forEach(t=>{
+  t.addEventListener('click',()=>{
+    const isCam=t.dataset.tab==='1';
+    document.querySelectorAll('.a').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    c.style.zIndex=isCam?10:1;
+    p.style.display=isCam?'none':'flex';
+    d1.style.display=isCam?'block':'none';
+    d2.style.display=isCam?'none':'block';
+    if(!isCam&&S)stopCam();
+    if(isCam&&P){M=!0;if(X)X.pause();clean();}
+  });
+});
+
+// Utils
+function log(m){
+  const t=new Date().toLocaleTimeString();
+  l.innerHTML+=`[${t}] ${m}<br>`;
+  l.scrollTop=l.scrollHeight;
+  l.style.display='block';
+  setTimeout(()=>l.style.display='none',3000);
+  console.log(m);
+}
+
+function fmt(ms){
+  const s=Math.floor(ms/1000),m=Math.floor(s/60);
+  return`${m.toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
+}
+
+function upd(c,t){o.style.width=`${Math.min(100,(c/t*100)||0)}%`;}
+
+function clean(){
+  if(X){X.pause();X.removeAttribute('src');X.load();X=null;}
+  ctx.clearRect(0,0,k.width,k.height);
+  wctx.clearRect(0,0,w.width,w.height);
+  e.src='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+}
+
+// Camera
+async function startCam(){
+  try{
+    A.disabled=true;
+    if(S)S.getTracks().forEach(t=>t.stop());
+    S=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}
+    });
+    v.srcObject=S;
+    
+    try{
+      await v.play();
+      log('Video playing');
+    }catch(err){
+      log('Tap to play: '+err.message);
+      v.addEventListener('click',()=>v.play().catch(e=>{}));
+      document.body.addEventListener('click',()=>{
+        if(v.paused&&S)v.play().catch(e=>{});
+      },{once:true});
+    }
+    
+    A.disabled=true;
+    B.disabled=false;
+    C.disabled=false;
+    
+    v.onloadeddata=()=>log(`Video: ${v.videoWidth}x${v.videoHeight}`);
+  }catch(e){log('Camera error: '+e.message);A.disabled=false;}
+}
+
+function stopCam(){
+  if(!S)return;
+  S.getTracks().forEach(t=>t.stop());
+  v.srcObject=null;
+  S=null;
+  A.disabled=false;
+  B.disabled=true;
+  C.disabled=true;
+  log('Camera stopped');
+}
+
+// Recording
+function startRec(){
+  if(!S)return;
+  try{
+    const opt={};
+    if(MediaRecorder.isTypeSupported('video/webm;codecs=vp9'))
+      opt.mimeType='video/webm;codecs=vp9';
+    else if(MediaRecorder.isTypeSupported('video/webm'))
+      opt.mimeType='video/webm';
+    
+    R=new MediaRecorder(S,opt);
+    Q=[];
+    
+    R.ondataavailable=e=>{if(e.data.size>0)Q.push(e.data);};
+    R.onstop=()=>{
+      V=new Blob(Q,{type:R.mimeType||'video/webm'});
+      E.disabled=false;
+      clearInterval(N);
+      log(`Recording: ${(V.size/1024/1024).toFixed(1)}MB`);
+    };
+    
+    R.start(1000);
+    T=Date.now();
+    z.style.display='block';
+    
+    N=setInterval(()=>{z.textContent=fmt(Date.now()-T);},1000);
+    C.disabled=true;
+    D.disabled=false;
+  }catch(e){log('Recording error: '+e.message);}
+}
+
+function stopRec(){
+  if(R&&R.state!=='inactive'){
+    R.stop();
+    C.disabled=false;
+    D.disabled=true;
+    z.style.display='none';
+    if(N){clearInterval(N);N=null;}
+  }
+}
+
+function saveRec(){
+  if(!V)return;
+  const url=URL.createObjectURL(V);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=`qr-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.webm`;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),100);
+}
+
+// Processing
+function loadFile(file){
+  if(!file)return;
+  if(U)URL.revokeObjectURL(U);
+  V=file;
+  U=URL.createObjectURL(V);
+  log(`Video: ${file.name}`);
+  H.disabled=false;
+  reset();
+}
+
+function toggleUrl(){
+  u.style.display=u.style.display==='block'?'none':'block';
+  if(u.style.display==='block')u.focus();
+}
+
+async function fetchUrl(){
+  const url=u.value.trim();
+  if(!url)return;
+  try{
+    log(`Fetching: ${url}`);
+    G.disabled=true;
+    const r=await fetch(url);
+    if(!r.ok)throw Error(`Failed: ${r.status}`);
+    const b=await r.blob();
+    if(U)URL.revokeObjectURL(U);
+    V=b;
+    U=URL.createObjectURL(V);
+    log('URL loaded');
+    H.disabled=false;
+    u.style.display='none';
+    reset();
+  }catch(e){log(`Error: ${e.message}`);}
+  finally{G.disabled=false;}
+}
+
+function reset(){
+  Z=null;K={};L={};a=0;b=0;d=0;
+  fc.textContent='0';qc.textContent='0';cc.textContent='0';
+  o.style.width='0';
+}
+
+function startProc(){
+  if(!U||P)return;
+  P=true;
+  M=false;
+  
+  H.disabled=true;
+  I.disabled=false;
+  I.textContent='Pause';
+  
+  log('Processing...');
+  if(X)X.remove();
+  X=document.createElement('video');
+  X.src=U;
+  X.muted=true;
+  
+  X.onloadedmetadata=()=>{
+    const max=1280,s=Math.min(1,max/Math.max(X.videoWidth,X.videoHeight));
+    k.width=X.videoWidth*s;
+    k.height=X.videoHeight*s;
+    w.width=k.width;
+    w.height=k.height;
+    
+    X.play();
+    
+    const du=X.duration,
+    fps=du>180?3:du>60?5:10,
+    tf=Math.floor(du*fps),
+    fi=du*1000/tf,
+    bs=Math.min(100,tf);
+    
+    log(`${tf} frames @ ${fps}fps`);
+    upd(0,tf);
+    
+    function batch(s,end){
+      let i=s;
+      Y=setInterval(()=>{
+        if(M)return;
+        if(i>=end||i>=tf||X.currentTime>=du){
+          clearInterval(Y);
+          if(i<tf&&X.currentTime<du){
+            setTimeout(()=>{batch(i,Math.min(i+bs,tf));},300);
+          }else{finishProc();}
+          return;
+        }
+        const t=(i*du)/tf;
+        X.currentTime=t;
+        setTimeout(()=>{proc(i,tf);i++;},100);
+      },fi);
+    }
+    batch(0,bs);
+  };
+  
+  X.onerror=()=>{
+    log('Video error');
+    if(Y)clearInterval(Y);
+    P=false;
+    H.disabled=false;
+    I.disabled=true;
+  };
+}
+
+function proc(i,t){
+  ctx.drawImage(X,0,0,k.width,k.height);
+  const img=ctx.getImageData(0,0,k.width,k.height);
+  
+  i%5===0&&(e.src=k.toDataURL('image/jpeg',0.5));
+  
+  try{
+    const q=jsQR(img.data,k.width,k.height,{inversionAttempts:"dontInvert"});
+    if(q){pQR(q.data);b++;qc.textContent=b;}
+  }catch(e){}
+  
+  a++;fc.textContent=a;upd(a,t);
+}
+
+function pQR(data){
+  try{
+    const j=JSON.parse(data);
+    
+    if(j.type==="metadata"){
+      Z=j;
+      log(`File: ${j.file_name}`);
+      J.disabled=true;
+    }
+    else if(j.type==="set_header"){
+      if(!L[j.set_index]){
+        L[j.set_index]={
+          chunks_expected:j.chunks_in_set,
+          chunks_received:0,
+          chunks:{}
+        };
+      }
+    }
+    else if(j.type==="chunk"){
+      if(!Z)return;
+      
+      const si=j.set_index,ci=j.chunk_index,ck=`${si}_${ci}`;
+      
+      if(K[ck])return;
+      
+      K[ck]=j.data;
+      d++;
+      cc.textContent=d;
+      
+      if(!L[si]){
+        L[si]={
+          chunks_expected:Z.chunks_per_set||0,
+          chunks_received:0,
+          chunks:{}
+        };
+      }
+      
+      L[si].chunks[ci]=1;
+      L[si].chunks_received=Object.keys(L[si].chunks).length;
+      
+      checkDone();
+    }
+  }catch(e){}
+}
+
+function checkDone(){
+  if(!Z)return;
+  
+  const tc=Z.total_chunks||Object.keys(L).reduce((a,k)=>a+L[k].chunks_expected,0),
+  rc=Object.keys(K).length;
+  
+  if(rc>0){J.disabled=false;}
+  
+  if(rc===tc){
+    log('All chunks received!');
+    if(Y){
+      clearInterval(Y);
+      P=false;
+      H.disabled=!U;
+      I.disabled=true;
+    }
+  }
+}
+
+function togglePause(){
+  M=!M;
+  I.textContent=M?'Resume':'Pause';
+}
+
+function finishProc(){
+  if(Y){clearInterval(Y);Y=null;}
+  P=false;
+  log('Processing done');
+  H.disabled=!U;
+  I.disabled=true;
+  
+  const tc=Z?Z.total_chunks:0,
+  rc=Object.keys(K).length;
+  
+  rc>0&&(log(`Got ${rc}/${tc} chunks`),J.disabled=false);
+  clean();
+}
+
+function saveFile(){
+  if(!Z||!Object.keys(K).length)return;
+  
+  try{
+    const sc=[];
+    
+    for(let si=1;si<=Z.total_sets;si++){
+      const s=L[si];
+      if(!s)continue;
+      
+      for(let ci=1;ci<=s.chunks_expected;ci++){
+        const ck=`${si}_${ci}`;
+        K[ck]&&sc.push(K[ck]);
+      }
+    }
+    
+    const b64=sc.join(''),
+    bin=atob(b64),
+    ua=new Uint8Array(bin.length);
+    
+    for(let i=0;i<bin.length;i++)ua[i]=bin.charCodeAt(i);
+    
+    const b=new Blob([ua],{type:'application/octet-stream'}),
+    url=URL.createObjectURL(b),
+    a=document.createElement('a');
+    
+    a.href=url;
+    a.download=Z.file_name;
+    a.click();
+    
+    setTimeout(()=>URL.revokeObjectURL(url),100);
+    log(`File saved: ${Z.file_name}`);
+  }catch(e){log(`Save error: ${e.message}`);}
+}
+
+// Tap to play
+v.addEventListener('click',()=>{
+  if(v.paused&&S)v.play().catch(()=>{});
+});
+
+// Event listeners
+A.addEventListener('click',startCam);
+B.addEventListener('click',stopCam);
+C.addEventListener('click',startRec);
+D.addEventListener('click',stopRec);
+E.addEventListener('click',saveRec);
+F.addEventListener('click',()=>f.click());
+G.addEventListener('click',toggleUrl);
+f.addEventListener('change',e=>loadFile(e.target.files[0]));
+u.addEventListener('keypress',e=>{e.key==='Enter'&&fetchUrl();});
+u.addEventListener('blur',()=>{u.value.trim()===''&&(u.style.display='none');});
+H.addEventListener('click',startProc);
+I.addEventListener('click',togglePause);
+J.addEventListener('click',saveFile);
+
+log('Ready - Click "Cam"');
+</script>
+</body>
+</html>
