@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Video QR Code Decoder</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            font-family: system-ui, -apple-system, sans-serif;
+            line-height: 1.5;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+            height: calc(100vh - 130px);
+        }
+        
+        /* Responsive styles for mobile */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            h1 {
+                font-size: 1.5rem;
+                text-align: center;
+            }
+            
+            .container {
+                flex-direction: column;
+                height: auto;
+            }
+            
+            .capture-container {
+                flex: none !important;
+            }
+            
+            .info-container {
+                flex: none !important;
+            }
+            
+            .camera-view {
+                height: 60vh !important;
+            }
+            
+            .video-controls {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            
+            button {
+                padding: 8px 12px !important;
+                font-size: 0.9rem !important;
+            }
+        }
+
+        .capture-container {
+            flex: 6;
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .info-container {
+            flex: 4;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .panel {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .camera-view {
+            position: relative;
+            background: #000;
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 4px;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .detection-box {
+            position: absolute;
+            border: 3px solid red;
+            width: 200px;
+            height: 200px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .video-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            padding: 12px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .progress-container {
+            width: 100%;
+            background: #f0f0f0;
+            border-radius: 4px;
+            overflow: hidden;
+            height: 20px;
+            position: relative;
+            margin-top: 10px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: #007bff;
+            width: 0;
+            transition: width 0.3s;
+        }
+
+        .progress-text {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #000;
+            font-weight: bold;
+            text-shadow: 0 0 3px rgba(255, 255, 255, 0.5);
+        }
+
+        .info-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 5px;
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .grid-cell {
+            background: #ddd;
+            border-radius: 3px;
+            padding: 5px;
+            text-align: center;
+            font-size: 12px;
+        }
+
+        .grid-cell.received {
+            background: #a3e4a3;
+        }
+
+        .grid-cell.current {
+            background: #f8e07e;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .info-label {
+            font-weight: bold;
+        }
+
+        #logPanel {
+            background: #222;
+            color: #a3e4a3;
+            font-family: monospace;
+            padding: 10px;
+            font-size: 12px;
+            min-height: 100px;
+            flex: 1;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            border-radius: 4px;
+        }
+
+        .tabs {
+            display: flex;
+            margin-bottom: 5px;
+        }
+
+        .tab {
+            padding: 8px 15px;
+            background: #eee;
+            cursor: pointer;
+            border-radius: 4px 4px 0 0;
+            border: 1px solid #ddd;
+            border-bottom: none;
+            font-size: 14px;
+        }
+
+        .tab.active {
+            background: #fff;
+            font-weight: bold;
+        }
+
+        .tab-content {
+            display: none;
+            height: 100%;
+            flex-direction: column;
+        }
+
+        .tab-content.active {
+            display: flex;
+        }
+
+        .recording-timer {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: red;
+            font-size: 18px;
+            font-weight: bold;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        canvas {
+            display: none;
+        }
+
+        .frame-container {
+            position: relative;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            background: #000;
+            flex: 1;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .frame-overlay {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        #currentFrame {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .stats-row {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+        }
+
+        .stat-box {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            flex: 1;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Video QR Code Decoder</h1>
+
+    <div class="container" id="mainContainer">
+        <div class="capture-container">
+            <div class="tabs">
+                <div class="tab active" data-tab="capture">Capture</div>
+                <div class="tab" data-tab="process">Process</div>
+            </div>
+
+            <div class="tab-content active" data-tab-content="capture">
+                <div class="camera-view">
+                    <video id="video" autoplay playsinline muted></video>
+                    <div class="detection-box" id="detectionBox"></div>
+                    <div class="recording-timer" id="recordingTimer">00:00</div>
+                </div>
+                <div class="video-controls">
+                    <button id="startCameraBtn">Start Camera</button>
+                    <button id="startRecordingBtn" disabled>Start Recording</button>
+                    <button id="stopRecordingBtn" disabled>Stop Recording</button>
+                    <button id="downloadBtn" disabled>Download Recording</button>
+                </div>
+            </div>
+
+            <div class="tab-content" data-tab-content="process">
+                <div class="frame-container">
+                    <canvas id="frameCanvas"></canvas>
+                    <canvas id="workCanvas"></canvas>
+                    <img id="currentFrame" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=" />
+                    <div class="frame-overlay" id="frameOverlay">Frame: 0 / 0</div>
+                </div>
+                <div class="video-controls">
+                    <button id="loadVideoBtn">Load Local Video</button>
+                    <button id="loadUrlBtn">Load URL Video</button>
+                    <button id="startProcessingBtn" disabled>Start Processing</button>
+                    <button id="pauseProcessingBtn" disabled>Pause</button>
+                    <button id="saveFileBtn" disabled>Save File</button>
+                </div>
+                <div id="urlInputContainer" style="margin-top: 10px; display: none;">
+                    <input type="text" id="videoUrlInput" placeholder="Enter video URL (MP4/WebM format)" style="width: 80%; padding: 8px; margin-right: 10px;" />
+                    <button id="fetchUrlBtn">Fetch</button>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar" id="processingProgress"></div>
+                    <div class="progress-text" id="processingProgressText">0%</div>
+                </div>
+                <div class="stats-row">
+                    <div class="stat-box">
+                        <div>Frames Processed</div>
+                        <div class="stat-value" id="framesProcessed">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div>QR Codes Found</div>
+                        <div class="stat-value" id="qrCodesFound">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div>Chunks Retrieved</div>
+                        <div class="stat-value" id="chunksRetrieved">0</div>
+                    </div>
+                </div>
+                <input type="file" id="videoFileInput" accept="video/*" style="display: none;" />
+            </div>
+        </div>
+
+        <div class="info-container">
+            <div class="panel info-panel">
+                <h3>File Information</h3>
+                <div class="info-row">
+                    <span class="info-label">File Name:</span>
+                    <span id="fileNameInfo">None</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">File Size:</span>
+                    <span id="fileSizeInfo">0 bytes</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Total Sets:</span>
+                    <span id="totalSetsInfo">0</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Total Chunks:</span>
+                    <span id="totalChunksInfo">0</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Recovery Status:</span>
+                    <span id="recoveryStatusInfo">Not started</span>
+                </div>
+                <h4>Set Status</h4>
+                <div class="info-grid" id="setGrid"></div>
+            </div>
+
+            <div id="logPanel"></div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const video = document.getElementById('video');
+        const frameCanvas = document.getElementById('frameCanvas');
+        const workCanvas = document.getElementById('workCanvas');
+        const currentFrameImg = document.getElementById('currentFrame');
+        const frameOverlay = document.getElementById('frameOverlay');
+        const detectionBox = document.getElementById('detectionBox');
+        const recordingTimer = document.getElementById('recordingTimer');
+        const logPanel = document.getElementById('logPanel');
+        const setGrid = document.getElementById('setGrid');
+        const videoFileInput = document.getElementById('videoFileInput');
+        const processingProgress = document.getElementById('processingProgress');
+        const processingProgressText = document.getElementById('processingProgressText');
+        const urlInputContainer = document.getElementById('urlInputContainer');
+        const videoUrlInput = document.getElementById('videoUrlInput');
+        const fetchUrlBtn = document.getElementById('fetchUrlBtn');
+
+        // Info elements
+        const fileNameInfo = document.getElementById('fileNameInfo');
+        const fileSizeInfo = document.getElementById('fileSizeInfo');
+        const totalSetsInfo = document.getElementById('totalSetsInfo');
+        const totalChunksInfo = document.getElementById('totalChunksInfo');
+        const recoveryStatusInfo = document.getElementById('recoveryStatusInfo');
+        const framesProcessed = document.getElementById('framesProcessed');
+        const qrCodesFound = document.getElementById('qrCodesFound');
+        const chunksRetrieved = document.getElementById('chunksRetrieved');
+
+        // Buttons
+        const startCameraBtn = document.getElementById('startCameraBtn');
+        const startRecordingBtn = document.getElementById('startRecordingBtn');
+        const stopRecordingBtn = document.getElementById('stopRecordingBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const loadVideoBtn = document.getElementById('loadVideoBtn');
+        const loadUrlBtn = document.getElementById('loadUrlBtn');
+        const startProcessingBtn = document.getElementById('startProcessingBtn');
+        const pauseProcessingBtn = document.getElementById('pauseProcessingBtn');
+        const saveFileBtn = document.getElementById('saveFileBtn');
+
+        // Tab functionality
+        const tabs = document.querySelectorAll('.tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                const tabContents = document.querySelectorAll('.tab-content');
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                });
+
+                const targetContent = document.querySelector(`.tab-content[data-tab-content="${tab.dataset.tab}"]`);
+                targetContent.classList.add('active');
+            });
+        });
+
+        // State variables
+        let mediaStream = null;
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let recordingStartTime = 0;
+        let timerInterval = null;  // Renamed from recordingTimer to avoid conflict
+        let videoBlob = null;
+        let videoObjectURL = null;
+        let isProcessing = false;
+        let processingPaused = false;
+        let videoElement = null;
+        let captureInterval = null;
+
+        // File recovery state
+        let fileMetadata = null;
+        let chunks = {};
+        let sets = {};
+        let processedFrameCount = 0;
+        let detectedQRCount = 0;
+        let retrievedChunkCount = 0;
+
+        // Initialize canvas contexts
+        const frameCtx = frameCanvas.getContext('2d');
+        const workCtx = workCanvas.getContext('2d');
+
+        // Event listeners
+        startCameraBtn.addEventListener('click', startCamera);
+        startRecordingBtn.addEventListener('click', startRecording);
+        stopRecordingBtn.addEventListener('click', stopRecording);
+        downloadBtn.addEventListener('click', downloadRecording);
+        loadVideoBtn.addEventListener('click', () => videoFileInput.click());
+        loadUrlBtn.addEventListener('click', () => {
+            urlInputContainer.style.display = urlInputContainer.style.display === 'none' ? 'block' : 'none';
+        });
+        fetchUrlBtn.addEventListener('click', handleVideoUrlFetch);
+        videoFileInput.addEventListener('change', handleVideoFileSelect);
+        startProcessingBtn.addEventListener('click', startProcessing);
+        pauseProcessingBtn.addEventListener('click', togglePauseProcessing);
+        saveFileBtn.addEventListener('click', saveRecoveredFile);
+
+        // Logging function
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logPanel.textContent += `[${timestamp}] ${message}\n`;
+            logPanel.scrollTop = logPanel.scrollHeight;
+        }
+
+        function updateProgress(current, total) {
+            const percent = Math.round((current / total) * 100) || 0;
+            processingProgress.style.width = `${percent}%`;
+            processingProgressText.textContent = `${percent}%`;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' bytes';
+            else if (bytes < 1048576) return (bytes / 1024).toFixed(2) + ' KB';
+            else if (bytes < 1073741824) return (bytes / 1048576).toFixed(2) + ' MB';
+            else return (bytes / 1073741824).toFixed(2) + ' GB';
+        }
+
+        function formatTime(milliseconds) {
+            const totalSeconds = Math.floor(milliseconds / 1000);
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        // Camera and Recording Functions
+        async function startCamera() {
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment" }
+                });
+                video.srcObject = mediaStream;
+                detectionBox.style.display = 'block';
+                startCameraBtn.disabled = true;
+                startRecordingBtn.disabled = false;
+                log('Camera started successfully');
+            } catch (error) {
+                log(`Error starting camera: ${error.message}`);
+                console.error('Camera error:', error);
+            }
+        }
+
+        function startRecording() {
+            if (!mediaStream) {
+                log('No camera available for recording');
+                return;
+            }
+
+            try {
+                mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'video/webm' });
+                recordedChunks = [];
+
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) {
+                        recordedChunks.push(e.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    videoBlob = new Blob(recordedChunks, { type: 'video/webm' });
+                    downloadBtn.disabled = false;
+                    clearInterval(timerInterval);
+                    log(`Recording stopped. Size: ${formatFileSize(videoBlob.size)}`);
+                };
+
+                mediaRecorder.start(1000); // Collect data every second
+                recordingStartTime = Date.now();
+                recordingTimer.style.display = 'block';
+
+                timerInterval = setInterval(() => {
+                    const elapsed = Date.now() - recordingStartTime;
+                    document.getElementById('recordingTimer').textContent = formatTime(elapsed);
+                }, 1000);
+
+                startRecordingBtn.disabled = true;
+                stopRecordingBtn.disabled = false;
+                log('Recording started');
+            } catch (error) {
+                log(`Error starting recording: ${error.message}`);
+                console.error('Recording error:', error);
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                startRecordingBtn.disabled = false;
+                stopRecordingBtn.disabled = true;
+                recordingTimer.style.display = 'none';
+                
+                if (timerInterval) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                }
+            }
+        }
+
+        function downloadRecording() {
+            if (!videoBlob) {
+                log('No recording available to download');
+                return;
+            }
+
+            const url = URL.createObjectURL(videoBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `qr-recording-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.webm`;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 100);
+        }
+
+        // Video Processing Functions
+        function handleVideoFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (videoObjectURL) {
+                URL.revokeObjectURL(videoObjectURL);
+            }
+
+            videoBlob = file;
+            videoObjectURL = URL.createObjectURL(file);
+            log(`Video loaded: ${file.name} (${formatFileSize(file.size)})`);
+            startProcessingBtn.disabled = false;
+
+            // Reset processing state
+            resetProcessingState();
+        }
+        
+        async function handleVideoUrlFetch() {
+            const url = videoUrlInput.value.trim();
+            if (!url) {
+                log('Please enter a valid URL', true);
+                return;
+            }
+            
+            log(`Fetching video from URL: ${url}...`);
+            
+            try {
+                // Show loading indicator
+                fetchUrlBtn.disabled = true;
+                fetchUrlBtn.textContent = 'Fetching...';
+                
+                // Check if it's a valid URL
+                try {
+                    new URL(url);
+                } catch (e) {
+                    throw new Error('Invalid URL format');
+                }
+                
+                // Fetch the video
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch video: ${response.status} ${response.statusText}`);
+                }
+                
+                // Get the content type to verify it's a video
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('video/')) {
+                    log(`Warning: Resource might not be a video (${contentType})`);
+                }
+                
+                // Get the blob
+                const blob = await response.blob();
+                
+                // Revoke previous URL if exists
+                if (videoObjectURL) {
+                    URL.revokeObjectURL(videoObjectURL);
+                }
+                
+                // Create a new video object URL
+                videoBlob = blob;
+                videoObjectURL = URL.createObjectURL(blob);
+                
+                const fileName = url.split('/').pop() || 'video-from-url';
+                log(`Video loaded from URL: ${fileName} (${formatFileSize(blob.size)})`);
+                startProcessingBtn.disabled = false;
+                
+                // Hide the URL input container
+                urlInputContainer.style.display = 'none';
+                
+                // Reset processing state
+                resetProcessingState();
+                
+            } catch (error) {
+                log(`Error fetching video: ${error.message}`, true);
+                console.error('Fetch error:', error);
+            } finally {
+                // Reset button
+                fetchUrlBtn.disabled = false;
+                fetchUrlBtn.textContent = 'Fetch';
+            }
+        }
+
+        function resetProcessingState() {
+            fileMetadata = null;
+            chunks = {};
+            sets = {};
+            processedFrameCount = 0;
+            detectedQRCount = 0;
+            retrievedChunkCount = 0;
+            framesProcessed.textContent = '0';
+            qrCodesFound.textContent = '0';
+            chunksRetrieved.textContent = '0';
+            fileNameInfo.textContent = 'None';
+            fileSizeInfo.textContent = '0 bytes';
+            totalSetsInfo.textContent = '0';
+            totalChunksInfo.textContent = '0';
+            recoveryStatusInfo.textContent = 'Not started';
+            setGrid.innerHTML = '';
+            updateProgress(0, 100);
+            isProcessing = false;
+            processingPaused = false;
+            saveFileBtn.disabled = true;
+        }
+
+        function startProcessing() {
+            if (!videoObjectURL || isProcessing) return;
+
+            isProcessing = true;
+            processingPaused = false;
+            startProcessingBtn.disabled = true;
+            pauseProcessingBtn.disabled = false;
+            pauseProcessingBtn.textContent = 'Pause';
+            recoveryStatusInfo.textContent = 'Processing...';
+
+            log('Starting video processing...');
+
+            // Create video element for processing
+            if (videoElement) {
+                videoElement.remove();
+            }
+
+            videoElement = document.createElement('video');
+            videoElement.src = videoObjectURL;
+            videoElement.muted = true;
+
+            videoElement.onloadedmetadata = () => {
+                // Setup canvas dimensions
+                const videoWidth = videoElement.videoWidth;
+                const videoHeight = videoElement.videoHeight;
+                frameCanvas.width = videoWidth;
+                frameCanvas.height = videoHeight;
+                workCanvas.width = videoWidth;
+                workCanvas.height = videoHeight;
+
+                // Start video and begin frame capture
+                videoElement.play();
+                log(`Video dimensions: ${videoWidth}x${videoHeight}, duration: ${videoElement.duration.toFixed(2)}s`);
+
+                // Process frames at regular intervals
+                const totalFrames = Math.floor(videoElement.duration * 10); // Capture at 10fps
+                const captureInterval = videoElement.duration * 1000 / totalFrames;
+
+                updateProgress(0, totalFrames);
+
+                let frameIndex = 0;
+                captureInterval = setInterval(() => {
+                    if (processingPaused) {
+                        return;
+                    }
+
+                    if (frameIndex >= totalFrames || videoElement.currentTime >= videoElement.duration) {
+                        finishProcessing();
+                        return;
+                    }
+
+                    const targetTime = (frameIndex * videoElement.duration) / totalFrames;
+                    videoElement.currentTime = targetTime;
+
+                    setTimeout(() => {
+                        captureAndProcessFrame(frameIndex, totalFrames);
+                        frameIndex++;
+                    }, 100); // Wait for the currentTime to update
+                }, captureInterval);
+            };
+
+            videoElement.onerror = (error) => {
+                log(`Error loading video: ${error}`);
+                clearInterval(captureInterval);
+                isProcessing = false;
+                startProcessingBtn.disabled = false;
+                pauseProcessingBtn.disabled = true;
+            };
+        }
+
+        function captureAndProcessFrame(frameIndex, totalFrames) {
+            // Draw current video frame to canvas
+            frameCtx.drawImage(videoElement, 0, 0, frameCanvas.width, frameCanvas.height);
+            
+            // Get image data from canvas
+            const imageData = frameCtx.getImageData(0, 0, frameCanvas.width, frameCanvas.height);
+            
+            // Update current frame display
+            currentFrameImg.src = frameCanvas.toDataURL('image/jpeg', 0.7);
+            frameOverlay.textContent = `Frame: ${frameIndex + 1} / ${totalFrames}`;
+            
+            // Process frame to find QR codes
+            try {
+                const code = jsQR(imageData.data, frameCanvas.width, frameCanvas.height, {
+                    inversionAttempts: "dontInvert"
+                });
+                
+                if (code) {
+                    processQRCode(code.data);
+                    detectedQRCount++;
+                    qrCodesFound.textContent = detectedQRCount;
+                }
+            } catch (error) {
+                console.error('QR processing error:', error);
+            }
+            
+            // Update progress
+            processedFrameCount++;
+            framesProcessed.textContent = processedFrameCount;
+            updateProgress(processedFrameCount, totalFrames);
+        }
+
+        function processQRCode(qrData) {
+            try {
+                const data = JSON.parse(qrData);
+                
+                if (data.type === "metadata") {
+                    // Process metadata frame
+                    fileMetadata = data;
+                    log(`Detected file metadata: ${data.file_name} (${formatFileSize(data.file_size)})`);
+                    
+                    fileNameInfo.textContent = data.file_name;
+                    fileSizeInfo.textContent = formatFileSize(data.file_size);
+                    totalSetsInfo.textContent = data.total_sets;
+                    totalChunksInfo.textContent = data.total_chunks;
+                    
+                    // Initialize set tracking grid
+                    updateSetGrid();
+                    
+                } else if (data.type === "set_header") {
+                    // Process set header
+                    if (!sets[data.set_index]) {
+                        sets[data.set_index] = {
+                            chunks_expected: data.chunks_in_set,
+                            chunks_received: 0,
+                            chunks: {}
+                        };
+                    }
+                    
+                } else if (data.type === "chunk") {
+                    // Process data chunk
+                    if (!fileMetadata) {
+                        log('Received chunk before metadata, skipping');
+                        return;
+                    }
+                    
+                    const setId = data.set_index;
+                    const chunkId = data.chunk_index;
+                    const chunkKey = `${setId}_${chunkId}`;
+                    
+                    // Skip if we already have this chunk
+                    if (chunks[chunkKey]) {
+                        return;
+                    }
+                    
+                    // Store the chunk
+                    chunks[chunkKey] = data.data;
+                    retrievedChunkCount++;
+                    chunksRetrieved.textContent = retrievedChunkCount;
+                    
+                    // Update set tracking
+                    if (!sets[setId]) {
+                        sets[setId] = {
+                            chunks_expected: fileMetadata.chunks_per_set,
+                            chunks_received: 0,
+                            chunks: {}
+                        };
+                    }
+                    
+                    sets[setId].chunks[chunkId] = true;
+                    sets[setId].chunks_received = Object.keys(sets[setId].chunks).length;
+                    
+                    // Update UI
+                    updateSetGrid();
+                    
+                    // Check if we have all chunks
+                    checkCompletion();
+                }
+                
+            } catch (error) {
+                // Not valid JSON or processing error
+                console.error('QR data processing error:', error);
+            }
+        }
+
+        function updateSetGrid() {
+            if (!fileMetadata) return;
+            
+            setGrid.innerHTML = '';
+            
+            for (let i = 1; i <= fileMetadata.total_sets; i++) {
+                const setCell = document.createElement('div');
+                setCell.className = 'grid-cell';
+                
+                if (sets[i] && sets[i].chunks_received === sets[i].chunks_expected) {
+                    setCell.classList.add('received');
+                }
+                
+                setCell.textContent = `Set ${i}`;
+                setGrid.appendChild(setCell);
+            }
+        }
+
+        function checkCompletion() {
+            if (!fileMetadata) return;
+            
+            const expectedTotalChunks = fileMetadata.total_chunks;
+            const receivedChunks = Object.keys(chunks).length;
+            
+            recoveryStatusInfo.textContent = `${receivedChunks} / ${expectedTotalChunks} chunks`;
+            
+            // Check if file is complete
+            if (receivedChunks === expectedTotalChunks) {
+                log('All chunks received! File is ready for reconstruction.');
+                recoveryStatusInfo.textContent = 'Complete';
+                saveFileBtn.disabled = false;
+                
+                if (captureInterval) {
+                    clearInterval(captureInterval);
+                    isProcessing = false;
+                    startProcessingBtn.disabled = !videoObjectURL;
+                    pauseProcessingBtn.disabled = true;
+                }
+            }
+        }
+
+        function togglePauseProcessing() {
+            processingPaused = !processingPaused;
+            pauseProcessingBtn.textContent = processingPaused ? 'Resume' : 'Pause';
+            
+            if (processingPaused) {
+                log('Processing paused');
+                recoveryStatusInfo.textContent = 'Paused';
+            } else {
+                log('Processing resumed');
+                recoveryStatusInfo.textContent = 'Processing...';
+            }
+        }
+
+        function finishProcessing() {
+            clearInterval(captureInterval);
+            isProcessing = false;
+            
+            log('Video processing complete');
+            startProcessingBtn.disabled = !videoObjectURL;
+            pauseProcessingBtn.disabled = true;
+            
+            const totalChunks = fileMetadata ? fileMetadata.total_chunks : 0;
+            const receivedChunks = Object.keys(chunks).length;
+            
+            if (receivedChunks === totalChunks && totalChunks > 0) {
+                log('All chunks received successfully!');
+                recoveryStatusInfo.textContent = 'Complete';
+                saveFileBtn.disabled = false;
+            } else if (receivedChunks > 0) {
+                log(`Processing finished with ${receivedChunks}/${totalChunks} chunks`);
+                recoveryStatusInfo.textContent = `Incomplete (${receivedChunks}/${totalChunks})`;
+                saveFileBtn.disabled = false; // Allow saving even if incomplete
+            } else {
+                log('Processing completed but no valid data was found');
+                recoveryStatusInfo.textContent = 'Failed - No data';
+            }
+        }
+
+        function saveRecoveredFile() {
+            if (!fileMetadata || Object.keys(chunks).length === 0) {
+                log('No file data available to save');
+                return;
+            }
+            
+            try {
+                // Sort chunks in correct order
+                const sortedChunks = [];
+                const expectedTotalChunks = fileMetadata.total_chunks;
+                
+                for (let setIdx = 1; setIdx <= fileMetadata.total_sets; setIdx++) {
+                    const set = sets[setIdx];
+                    if (!set) continue;
+                    
+                    for (let chunkIdx = 1; chunkIdx <= set.chunks_expected; chunkIdx++) {
+                        const chunkKey = `${setIdx}_${chunkIdx}`;
+                        if (chunks[chunkKey]) {
+                            sortedChunks.push(chunks[chunkKey]);
+                        }
+                    }
+                }
+                
+                // Combine all chunks and convert from base64
+                const base64Data = sortedChunks.join('');
+                const binaryData = atob(base64Data);
+                
+                // Convert to Uint8Array
+                const bytes = new Uint8Array(binaryData.length);
+                for (let i = 0; i < binaryData.length; i++) {
+                    bytes[i] = binaryData.charCodeAt(i);
+                }
+                
+                // Create blob and download
+                const blob = new Blob([bytes], { type: 'application/octet-stream' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileMetadata.file_name;
+                document.body.appendChild(a);
+                a.click();
+                
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
+                
+                log(`File saved: ${fileMetadata.file_name} (${formatFileSize(blob.size)})`);
+                
+            } catch (error) {
+                log(`Error saving file: ${error.message}`);
+                console.error('File save error:', error);
+            }
+        }
+
+        // Initialization function
+        function initializeApp() {
+            // Make sure tabs work correctly
+            const activateTab = (tabName) => {
+                const tab = document.querySelector(`.tab[data-tab="${tabName}"]`);
+                if (tab) {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    
+                    const tabContents = document.querySelectorAll('.tab-content');
+                    tabContents.forEach(content => {
+                        content.classList.remove('active');
+                    });
+                    
+                    const targetContent = document.querySelector(`.tab-content[data-tab-content="${tabName}"]`);
+                    if (targetContent) {
+                        targetContent.classList.add('active');
+                    }
+                }
+            };
+            
+            // Ensure the capture tab is active by default
+            activateTab('capture');
+            
+            // Ensure URL container is initially hidden
+            urlInputContainer.style.display = 'none';
+            
+            // Make sure video element is properly initialized
+            video.setAttribute('autoplay', true);
+            video.setAttribute('playsinline', true);
+            video.setAttribute('muted', true);
+            
+            // Set up grid for set display
+            updateSetGrid();
+            
+            log('QR Video Decoder ready');
+            log('Click "Start Camera" to begin, or use the Process tab to load a video');
+        }
+        
+        // Run initialization when page loads
+        window.addEventListener('DOMContentLoaded', initializeApp);
+    </script>
+</body>
+
+</html>

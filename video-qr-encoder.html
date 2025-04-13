@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Video QR Code Encoder</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            font-family: system-ui, -apple-system, sans-serif;
+            line-height: 1.5;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        .control-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .control-row {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .control-label {
+            min-width: 150px;
+            font-weight: bold;
+        }
+
+        input[type="file"] {
+            padding: 10px;
+            border: 2px dashed #ccc;
+            border-radius: 4px;
+            width: 100%;
+        }
+
+        input[type="range"] {
+            flex: 1;
+        }
+
+        .value-display {
+            min-width: 60px;
+            text-align: right;
+        }
+
+        button {
+            padding: 12px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .display-container {
+            position: relative;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        #qrDisplay {
+            position: relative;
+            border: 2px solid #333;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .progress-container {
+            width: 100%;
+            background: #f0f0f0;
+            border-radius: 4px;
+            overflow: hidden;
+            height: 20px;
+            position: relative;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: #007bff;
+            width: 0;
+            transition: width 0.3s;
+        }
+
+        .progress-text {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #000;
+            font-weight: bold;
+            text-shadow: 0 0 3px rgba(255,255,255,0.5);
+        }
+
+        #status {
+            font-family: monospace;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+
+        #debugView {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .frame-counter {
+            font-weight: bold;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+
+        .info-panel {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .info-label {
+            font-weight: bold;
+        }
+
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            background: #eee;
+            cursor: pointer;
+            border-radius: 4px 4px 0 0;
+            border: 1px solid #ddd;
+            border-bottom: none;
+        }
+
+        .tab.active {
+            background: #fff;
+            font-weight: bold;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 0 4px 4px 4px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Video QR Code Encoder</h1>
+
+    <div class="control-panel">
+        <div class="control-group">
+            <div class="control-row">
+                <div class="control-label">Select File(s):</div>
+                <input type="file" id="fileInput" multiple />
+            </div>
+        </div>
+
+        <div class="control-group">
+            <div class="control-row">
+                <div class="control-label">QR Display Speed:</div>
+                <input type="range" id="speedSlider" min="1" max="30" value="10" />
+                <div class="value-display" id="speedValue">10 fps</div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <div class="control-row">
+                <div class="control-label">QR Code Size:</div>
+                <input type="range" id="sizeSlider" min="150" max="500" value="300" />
+                <div class="value-display" id="sizeValue">300px</div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <div class="control-row">
+                <div class="control-label">Chunk Size:</div>
+                <input type="range" id="chunkSlider" min="100" max="1000" step="50" value="500" />
+                <div class="value-display" id="chunkValue">500 bytes</div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <div class="control-row">
+                <div class="control-label">Countdown Time:</div>
+                <input type="range" id="countdownSlider" min="1" max="10" value="5" />
+                <div class="value-display" id="countdownValue">5 seconds</div>
+            </div>
+        </div>
+
+        <div class="control-row">
+            <button id="generateBtn" disabled>Generate QR Codes</button>
+            <button id="startBtn" disabled>Start Display</button>
+            <button id="stopBtn" disabled>Stop Display</button>
+        </div>
+    </div>
+    
+    <div class="file-queue-panel" style="margin-top: 20px; background: #f5f5f5; padding: 15px; border-radius: 8px; display: none;">
+        <h3>File Queue</h3>
+        <div id="fileQueueList" style="margin-top: 10px; max-height: 150px; overflow-y: auto;"></div>
+        <div style="margin-top: 10px; display: flex; gap: 10px;">
+            <button id="moveUpBtn" disabled>Move Up</button>
+            <button id="moveDownBtn" disabled>Move Down</button>
+            <button id="removeFileBtn" disabled>Remove</button>
+        </div>
+    </div>
+    
+    <div class="tabs">
+        <div class="tab active" data-tab="display">QR Display</div>
+        <div class="tab" data-tab="debug">Debug View</div>
+    </div>
+
+    <div class="tab-content active" data-tab-content="display">
+        <div class="display-container" id="displayContainer">
+            <div class="frame-counter" id="frameCounter">Frame: 0 / 0</div>
+            <div id="qrDisplay" style="width: 300px; height: 300px;"></div>
+            <div class="progress-container">
+                <div class="progress-bar" id="progressBar"></div>
+                <div class="progress-text" id="progressText">0%</div>
+            </div>
+            <button id="fullscreenBtn" style="position: absolute; top: 10px; right: 10px; z-index: 100; display: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M5.828 10.172a.5.5 0 0 0-.707 0l-4.096 4.096V11.5a.5.5 0 0 0-1 0v3.975a.5.5 0 0 0 .5.5H4.5a.5.5 0 0 0 0-1H1.732l4.096-4.096a.5.5 0 0 0 0-.707zm4.344 0a.5.5 0 0 1 .707 0l4.096 4.096V11.5a.5.5 0 1 1 1 0v3.975a.5.5 0 0 1-.5.5H11.5a.5.5 0 0 1 0-1h2.768l-4.096-4.096a.5.5 0 0 1 0-.707zm0-4.344a.5.5 0 0 0 .707 0l4.096-4.096V4.5a.5.5 0 1 0 1 0V.525a.5.5 0 0 0-.5-.5H11.5a.5.5 0 0 0 0 1h2.768l-4.096 4.096a.5.5 0 0 0 0 .707zm-4.344 0a.5.5 0 0 1-.707 0L1.025 1.732V4.5a.5.5 0 0 1-1 0V.525a.5.5 0 0 1 .5-.5H4.5a.5.5 0 0 1 0 1H1.732l4.096 4.096a.5.5 0 0 1 0 .707z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+    
+    <div id="fullscreenOverlay" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 1000; justify-content: center; align-items: center; flex-direction: column;">
+        <div id="fullscreenQrDisplay" style="background: white; padding: 20px;"></div>
+        <div id="fullscreenCounter" style="color: white; margin-top: 15px; font-size: 18px;"></div>
+        <button id="exitFullscreenBtn" style="position: absolute; top: 20px; right: 20px; background: #ff4444; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">Exit</button>
+    </div>
+
+    <div class="sets-selection-panel" style="margin-top: 20px; background: #f5f5f5; padding: 15px; border-radius: 8px; display: none;">
+        <h3>Set Selection</h3>
+        <p style="margin-bottom: 10px;">Select which sets to include in the display:</p>
+        <div id="setsSelectionList" style="margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 8px; max-height: 300px; overflow-y: auto;"></div>
+        <div style="margin-top: 10px; display: flex; gap: 10px;">
+            <button id="selectAllSetsBtn">Select All</button>
+            <button id="deselectAllSetsBtn">Deselect All</button>
+            <button id="selectMissingSetsBtn" disabled>Select Missing Sets</button>
+        </div>
+    </div>
+
+    <div class="info-panel">
+        <div class="info-row">
+            <span class="info-label">File Name:</span>
+            <span id="fileNameInfo">None selected</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">File Size:</span>
+            <span id="fileSizeInfo">0 bytes</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Total Sets:</span>
+            <span id="totalSetsInfo">0</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Chunks Per Set:</span>
+            <span id="chunksPerSetInfo">0</span>
+        </div>
+    </div>
+
+    <div class="tab-content" data-tab-content="debug">
+        <div id="debugView"></div>
+    </div>
+
+    <div id="status">Ready to encode file...</div>
+
+    <script>
+        // Constants and configuration
+        const MAX_SET_SIZE = 100 * 1024; // 100KB per set
+        const DEFAULT_CHUNK_SIZE = 500; // Default bytes per chunk
+        const SET_SIZE_CHUNKS = 50; // Number of chunks per set
+        const COUNTDOWN_SECONDS = 5; // Countdown before display starts
+        const METADATA_DISPLAY_MULTIPLIER = 3; // Show metadata frames this many times longer
+        const SET_HEADER_DISPLAY_MULTIPLIER = 2; // Show set headers this many times longer
+
+        // DOM Elements
+        const fileInput = document.getElementById('fileInput');
+        const speedSlider = document.getElementById('speedSlider');
+        const sizeSlider = document.getElementById('sizeSlider');
+        const chunkSlider = document.getElementById('chunkSlider');
+        const speedValue = document.getElementById('speedValue');
+        const sizeValue = document.getElementById('sizeValue');
+        const chunkValue = document.getElementById('chunkValue');
+        const generateBtn = document.getElementById('generateBtn');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const qrDisplay = document.getElementById('qrDisplay');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const frameCounter = document.getElementById('frameCounter');
+        const statusEl = document.getElementById('status');
+        const debugView = document.getElementById('debugView');
+
+        // Info panel elements
+        const fileNameInfo = document.getElementById('fileNameInfo');
+        const fileSizeInfo = document.getElementById('fileSizeInfo');
+        const totalSetsInfo = document.getElementById('totalSetsInfo');
+        const chunksPerSetInfo = document.getElementById('chunksPerSetInfo');
+
+        // Tab functionality
+        const tabs = document.querySelectorAll('.tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                const tabContents = document.querySelectorAll('.tab-content');
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                });
+                
+                const targetContent = document.querySelector(`.tab-content[data-tab-content="${tab.dataset.tab}"]`);
+                targetContent.classList.add('active');
+            });
+        });
+
+        // State variables
+        let fileContent = null;
+        let fileName = '';
+        let fileSize = 0;
+        let chunks = [];
+        let sets = [];
+        let displayInterval = null;
+        let currentFrame = 0;
+        let totalFrames = 0;
+        let isPlaying = false;
+        let debugLogs = [];
+        let countdownTimer = null;
+        let countdownValue = 0;
+        let selectedSets = []; // Tracks which sets are selected for display
+        let fileQueue = []; // For multiple file transfers
+        let currentFileIndex = 0; // Currently active file in the queue
+        let frameTimingMultiplier = 1; // Used for varying frame display times
+
+        // Get fullscreen elements
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const fullscreenOverlay = document.getElementById('fullscreenOverlay');
+        const fullscreenQrDisplay = document.getElementById('fullscreenQrDisplay');
+        const fullscreenCounter = document.getElementById('fullscreenCounter');
+        const exitFullscreenBtn = document.getElementById('exitFullscreenBtn');
+        
+        let isFullscreen = false;
+        
+        // Function to enter fullscreen mode
+        function enterFullscreen() {
+            // Clone current QR code to fullscreen display
+            fullscreenQrDisplay.innerHTML = qrDisplay.innerHTML;
+            fullscreenCounter.textContent = frameCounter.textContent;
+            
+            // Show the overlay
+            fullscreenOverlay.style.display = 'flex';
+            isFullscreen = true;
+            
+            // Adjust QR code size to be bigger in fullscreen
+            const qrElement = fullscreenQrDisplay.querySelector('img');
+            if (qrElement) {
+                const size = Math.min(window.innerWidth, window.innerHeight) * 0.8;
+                qrElement.style.width = `${size}px`;
+                qrElement.style.height = `${size}px`;
+            }
+            
+            // Handle physical fullscreen if supported
+            if (document.documentElement.requestFullscreen) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log("Error attempting to enable fullscreen:", err);
+                });
+            }
+        }
+        
+        // Function to exit fullscreen mode
+        function exitFullscreen() {
+            fullscreenOverlay.style.display = 'none';
+            isFullscreen = false;
+            
+            // Exit physical fullscreen if active
+            if (document.fullscreenElement && document.exitFullscreen) {
+                document.exitFullscreen().catch(err => {
+                    console.log("Error attempting to exit fullscreen:", err);
+                });
+            }
+        }
+        
+        // Event listeners for fullscreen buttons
+        fullscreenBtn.addEventListener('click', enterFullscreen);
+        exitFullscreenBtn.addEventListener('click', exitFullscreen);
+        
+        // Event listeners for sliders
+        speedSlider.addEventListener('input', () => {
+            speedValue.textContent = `${speedSlider.value} fps`;
+            if (isPlaying) {
+                restartInterval();
+            }
+        });
+
+        sizeSlider.addEventListener('input', () => {
+            sizeValue.textContent = `${sizeSlider.value}px`;
+            qrDisplay.style.width = `${sizeSlider.value}px`;
+            qrDisplay.style.height = `${sizeSlider.value}px`;
+        });
+
+        chunkSlider.addEventListener('input', () => {
+            chunkValue.textContent = `${chunkSlider.value} bytes`;
+        });
+
+        // Get UI elements for queue and set selection
+        const fileQueuePanel = document.querySelector('.file-queue-panel');
+        const fileQueueList = document.getElementById('fileQueueList');
+        const moveUpBtn = document.getElementById('moveUpBtn');
+        const moveDownBtn = document.getElementById('moveDownBtn');
+        const removeFileBtn = document.getElementById('removeFileBtn');
+        
+        const setsSelectionPanel = document.querySelector('.sets-selection-panel');
+        const setsSelectionList = document.getElementById('setsSelectionList');
+        const selectAllSetsBtn = document.getElementById('selectAllSetsBtn');
+        const deselectAllSetsBtn = document.getElementById('deselectAllSetsBtn');
+        const selectMissingSetsBtn = document.getElementById('selectMissingSetsBtn');
+        
+        const countdownSlider = document.getElementById('countdownSlider');
+        const countdownValueDisplay = document.getElementById('countdownValue');
+        
+        countdownSlider.addEventListener('input', () => {
+            countdownValueDisplay.textContent = `${countdownSlider.value} seconds`;
+        });
+
+        // File input handling
+        fileInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            if (!files || files.length === 0) {
+                generateBtn.disabled = true;
+                fileQueuePanel.style.display = 'none';
+                return;
+            }
+            
+            // Show the file queue panel
+            fileQueuePanel.style.display = 'block';
+            
+            // Clear existing queue display
+            fileQueueList.innerHTML = '';
+            fileQueue = [];
+            
+            // Add all files to the queue
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                fileQueue.push({
+                    file: file,
+                    name: file.name,
+                    size: file.size,
+                    content: null,
+                    processed: false
+                });
+                
+                // Create file entry in the queue display
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-queue-item';
+                fileItem.dataset.index = i;
+                fileItem.style.padding = '5px';
+                fileItem.style.margin = '2px 0';
+                fileItem.style.backgroundColor = i === 0 ? '#e6f7ff' : 'transparent';
+                fileItem.style.borderRadius = '4px';
+                fileItem.style.cursor = 'pointer';
+                
+                fileItem.innerHTML = `
+                    <div>
+                        <strong>${file.name}</strong> (${formatFileSize(file.size)})
+                        <span class="file-status" style="float: right; font-size: 0.8em; color: #888;">Pending</span>
+                    </div>
+                `;
+                
+                fileItem.addEventListener('click', () => {
+                    const items = fileQueueList.querySelectorAll('.file-queue-item');
+                    items.forEach(item => item.style.backgroundColor = 'transparent');
+                    fileItem.style.backgroundColor = '#e6f7ff';
+                    
+                    currentFileIndex = parseInt(fileItem.dataset.index);
+                    updateQueueControls();
+                });
+                
+                fileQueueList.appendChild(fileItem);
+            }
+            
+            // Start loading the first file
+            loadFileContent(0);
+            
+            // Update UI
+            updateQueueControls();
+            generateBtn.disabled = fileQueue.length === 0;
+        });
+        
+        // Function to load a file's content from the queue
+        function loadFileContent(index) {
+            if (index >= fileQueue.length) return;
+            
+            const fileItem = fileQueue[index];
+            updateFileStatus(index, 'Loading...');
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                fileItem.content = e.target.result;
+                fileItem.processed = true;
+                updateFileStatus(index, 'Ready');
+                
+                // If this is the current file, update the display
+                if (index === currentFileIndex) {
+                    fileName = fileItem.name;
+                    fileSize = fileItem.size;
+                    fileContent = fileItem.content;
+                    
+                    fileNameInfo.textContent = fileName;
+                    fileSizeInfo.textContent = formatFileSize(fileSize);
+                    log(`File ready: ${fileName} (${formatFileSize(fileSize)})`);
+                }
+                
+                // Load the next file
+                loadFileContent(index + 1);
+            };
+            
+            reader.onerror = () => {
+                updateFileStatus(index, 'Error');
+                log(`Error reading file: ${fileItem.name}`, true);
+                loadFileContent(index + 1);
+            };
+            
+            reader.readAsArrayBuffer(fileItem.file);
+        }
+        
+        // Update status display for a file in the queue
+        function updateFileStatus(index, status) {
+            const fileItem = fileQueueList.querySelectorAll('.file-queue-item')[index];
+            if (fileItem) {
+                const statusElement = fileItem.querySelector('.file-status');
+                statusElement.textContent = status;
+                
+                // Update color based on status
+                let color = '#888';
+                if (status === 'Ready') color = '#4caf50';
+                else if (status === 'Error') color = '#f44336';
+                else if (status === 'Loading...') color = '#2196f3';
+                else if (status === 'Active') color = '#ff9800';
+                
+                statusElement.style.color = color;
+            }
+        }
+        
+        // Update queue control buttons
+        function updateQueueControls() {
+            moveUpBtn.disabled = currentFileIndex <= 0;
+            moveDownBtn.disabled = currentFileIndex >= fileQueue.length - 1;
+            removeFileBtn.disabled = fileQueue.length === 0;
+            
+            // Update current file information
+            if (fileQueue.length > 0) {
+                const currentFile = fileQueue[currentFileIndex];
+                fileName = currentFile.name;
+                fileSize = currentFile.size;
+                fileContent = currentFile.content;
+                
+                fileNameInfo.textContent = fileName;
+                fileSizeInfo.textContent = formatFileSize(fileSize);
+                
+                // Mark current file as active
+                const fileItems = fileQueueList.querySelectorAll('.file-queue-item');
+                fileItems.forEach((item, idx) => {
+                    updateFileStatus(idx, idx === currentFileIndex ? 'Active' : (fileQueue[idx].processed ? 'Ready' : 'Pending'));
+                });
+            }
+        }
+        
+        // Queue control buttons
+        moveUpBtn.addEventListener('click', () => {
+            if (currentFileIndex <= 0) return;
+            
+            // Swap files in queue
+            const temp = fileQueue[currentFileIndex];
+            fileQueue[currentFileIndex] = fileQueue[currentFileIndex - 1];
+            fileQueue[currentFileIndex - 1] = temp;
+            
+            currentFileIndex--;
+            refreshQueueDisplay();
+        });
+        
+        moveDownBtn.addEventListener('click', () => {
+            if (currentFileIndex >= fileQueue.length - 1) return;
+            
+            // Swap files in queue
+            const temp = fileQueue[currentFileIndex];
+            fileQueue[currentFileIndex] = fileQueue[currentFileIndex + 1];
+            fileQueue[currentFileIndex + 1] = temp;
+            
+            currentFileIndex++;
+            refreshQueueDisplay();
+        });
+        
+        removeFileBtn.addEventListener('click', () => {
+            if (fileQueue.length === 0) return;
+            
+            // Remove current file
+            fileQueue.splice(currentFileIndex, 1);
+            
+            if (currentFileIndex >= fileQueue.length) {
+                currentFileIndex = Math.max(0, fileQueue.length - 1);
+            }
+            
+            refreshQueueDisplay();
+            generateBtn.disabled = fileQueue.length === 0;
+        });
+        
+        function refreshQueueDisplay() {
+            fileQueueList.innerHTML = '';
+            
+            fileQueue.forEach((fileItem, index) => {
+                const fileElement = document.createElement('div');
+                fileElement.className = 'file-queue-item';
+                fileElement.dataset.index = index;
+                fileElement.style.padding = '5px';
+                fileElement.style.margin = '2px 0';
+                fileElement.style.backgroundColor = index === currentFileIndex ? '#e6f7ff' : 'transparent';
+                fileElement.style.borderRadius = '4px';
+                fileElement.style.cursor = 'pointer';
+                
+                fileElement.innerHTML = `
+                    <div>
+                        <strong>${fileItem.name}</strong> (${formatFileSize(fileItem.size)})
+                        <span class="file-status" style="float: right; font-size: 0.8em;">
+                            ${index === currentFileIndex ? 'Active' : (fileItem.processed ? 'Ready' : 'Pending')}
+                        </span>
+                    </div>
+                `;
+                
+                fileElement.addEventListener('click', () => {
+                    const items = fileQueueList.querySelectorAll('.file-queue-item');
+                    items.forEach(item => item.style.backgroundColor = 'transparent');
+                    fileElement.style.backgroundColor = '#e6f7ff';
+                    
+                    currentFileIndex = parseInt(fileElement.dataset.index);
+                    updateQueueControls();
+                });
+                
+                fileQueueList.appendChild(fileElement);
+            });
+            
+            updateQueueControls();
+        }
+
+        // Initialize QR code generator
+        generateBtn.addEventListener('click', generateQRCodes);
+        startBtn.addEventListener('click', startDisplay);
+        stopBtn.addEventListener('click', stopDisplay);
+
+        // Utility functions
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' bytes';
+            else if (bytes < 1048576) return (bytes / 1024).toFixed(2) + ' KB';
+            else if (bytes < 1073741824) return (bytes / 1048576).toFixed(2) + ' MB';
+            else return (bytes / 1073741824).toFixed(2) + ' GB';
+        }
+
+        function log(message, isError = false) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logMessage = `[${timestamp}] ${message}`;
+            
+            statusEl.textContent = message;
+            
+            if (isError) {
+                console.error(logMessage);
+                statusEl.style.color = 'red';
+            } else {
+                console.log(logMessage);
+                statusEl.style.color = 'black';
+            }
+            
+            debugLogs.push(logMessage);
+            debugView.textContent = debugLogs.join('\n');
+            debugView.scrollTop = debugView.scrollHeight;
+        }
+
+        function updateProgress(current, total) {
+            const percent = Math.round((current / total) * 100);
+            progressBar.style.width = `${percent}%`;
+            progressText.textContent = `${percent}%`;
+            frameCounter.textContent = `Frame: ${current} / ${total}`;
+        }
+
+        // Core functionality
+        async function generateQRCodes() {
+            try {
+                if (!fileQueue.length || currentFileIndex >= fileQueue.length) {
+                    log('No valid files to process', true);
+                    return;
+                }
+                
+                const currentFile = fileQueue[currentFileIndex];
+                if (!currentFile.processed || !currentFile.content) {
+                    log('Current file is not yet loaded completely', true);
+                    return;
+                }
+                
+                log(`Preparing file chunks for ${currentFile.name}...`);
+                
+                // Convert ArrayBuffer to Uint8Array
+                const bytes = new Uint8Array(currentFile.content);
+                
+                // Convert to base64 string for efficient QR encoding
+                let binary = '';
+                for (let i = 0; i < bytes.byteLength; i++) {
+                    binary += String.fromCharCode(bytes[i]);
+                }
+                const base64Content = btoa(binary);
+                
+                // Calculate chunk sizes
+                const chunkSize = parseInt(chunkSlider.value);
+                chunks = [];
+                
+                // Split into chunks
+                for (let i = 0; i < base64Content.length; i += chunkSize) {
+                    chunks.push(base64Content.substring(i, i + chunkSize));
+                }
+                
+                // Organize chunks into sets
+                sets = [];
+                let currentSet = [];
+                
+                for (let i = 0; i < chunks.length; i++) {
+                    currentSet.push(chunks[i]);
+                    
+                    if (currentSet.length >= SET_SIZE_CHUNKS || i === chunks.length - 1) {
+                        sets.push(currentSet);
+                        currentSet = [];
+                    }
+                }
+                
+                // Show set selection panel
+                setsSelectionPanel.style.display = 'block';
+                setsSelectionList.innerHTML = '';
+                
+                // Initially select all sets
+                selectedSets = Array(sets.length).fill(1);
+                
+                // Create set selection UI
+                sets.forEach((set, index) => {
+                    const setCheckbox = document.createElement('div');
+                    setCheckbox.className = 'set-checkbox';
+                    setCheckbox.style.backgroundColor = '#e6f7ff';
+                    setCheckbox.style.padding = '8px 12px';
+                    setCheckbox.style.borderRadius = '4px';
+                    setCheckbox.style.margin = '3px';
+                    setCheckbox.style.cursor = 'pointer';
+                    setCheckbox.style.border = '1px solid #1890ff';
+                    
+                    setCheckbox.innerHTML = `Set ${index + 1} <small>(${set.length} chunks)</small>`;
+                    
+                    // Toggle selection when clicked
+                    setCheckbox.addEventListener('click', () => {
+                        selectedSets[index] = selectedSets[index] ? 0 : 1;
+                        setCheckbox.style.backgroundColor = selectedSets[index] ? '#e6f7ff' : '#f5f5f5';
+                        setCheckbox.style.border = selectedSets[index] ? '1px solid #1890ff' : '1px solid #d9d9d9';
+                        
+                        // Update total frames calculation
+                        updateTotalFramesCount();
+                    });
+                    
+                    setsSelectionList.appendChild(setCheckbox);
+                });
+                
+                // Set selection controls
+                selectAllSetsBtn.addEventListener('click', () => {
+                    selectedSets = Array(sets.length).fill(1);
+                    const checkboxes = setsSelectionList.querySelectorAll('.set-checkbox');
+                    checkboxes.forEach(checkbox => {
+                        checkbox.style.backgroundColor = '#e6f7ff';
+                        checkbox.style.border = '1px solid #1890ff';
+                    });
+                    updateTotalFramesCount();
+                });
+                
+                deselectAllSetsBtn.addEventListener('click', () => {
+                    selectedSets = Array(sets.length).fill(0);
+                    const checkboxes = setsSelectionList.querySelectorAll('.set-checkbox');
+                    checkboxes.forEach(checkbox => {
+                        checkbox.style.backgroundColor = '#f5f5f5';
+                        checkbox.style.border = '1px solid #d9d9d9';
+                    });
+                    updateTotalFramesCount();
+                });
+                
+                // Update info panel
+                totalSetsInfo.textContent = sets.length;
+                chunksPerSetInfo.textContent = SET_SIZE_CHUNKS;
+                
+                // Calculate total frames based on selected sets
+                updateTotalFramesCount();
+                
+                // Enable start button
+                startBtn.disabled = false;
+                generateBtn.disabled = true;
+                
+            } catch (error) {
+                log(`Error generating QR codes: ${error.message}`, true);
+                console.error(error);
+            }
+        }
+        
+        function updateTotalFramesCount() {
+            // Count how many chunks are in selected sets
+            let selectedChunksCount = 0;
+            let selectedSetsCount = 0;
+            
+            selectedSets.forEach((isSelected, index) => {
+                if (isSelected) {
+                    selectedSetsCount++;
+                    selectedChunksCount += sets[index].length;
+                }
+            });
+            
+            // Calculate total frames (metadata + selected set headers + selected chunks + end frame)
+            totalFrames = 1 + selectedSetsCount + selectedChunksCount + 1;
+            
+            log(`Selected ${selectedSetsCount} sets with ${selectedChunksCount} chunks`);
+            log(`Total frames to display: ${totalFrames}`);
+            
+            updateProgress(0, totalFrames);
+        }
+
+        function startDisplay() {
+            if (isPlaying || !chunks.length) return;
+            
+            // Start with countdown
+            countdownValue = parseInt(countdownSlider.value);
+            
+            // Disable buttons during countdown
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            generateBtn.disabled = true;
+            
+            // Show countdown on QR display
+            qrDisplay.innerHTML = '';
+            
+            const countdownDiv = document.createElement('div');
+            countdownDiv.style.fontSize = '48px';
+            countdownDiv.style.fontWeight = 'bold';
+            countdownDiv.style.display = 'flex';
+            countdownDiv.style.alignItems = 'center';
+            countdownDiv.style.justifyContent = 'center';
+            countdownDiv.style.width = '100%';
+            countdownDiv.style.height = '100%';
+            countdownDiv.textContent = countdownValue;
+            
+            qrDisplay.appendChild(countdownDiv);
+            
+            log(`Starting countdown: ${countdownValue} seconds before QR display...`);
+            
+            // Start countdown timer
+            countdownTimer = setInterval(() => {
+                countdownValue--;
+                countdownDiv.textContent = countdownValue;
+                
+                if (countdownValue <= 0) {
+                    clearInterval(countdownTimer);
+                    
+                    // Start the actual display
+                    isPlaying = true;
+                    currentFrame = 0;
+                    
+                    log('Starting QR code display...');
+                    
+                    // Clear display
+                    qrDisplay.innerHTML = '';
+                    
+                    // Start display loop
+                    displayFrame();
+                    restartInterval();
+                }
+            }, 1000);
+        }
+
+        function stopDisplay() {
+            if (!isPlaying) return;
+            
+            isPlaying = false;
+            clearInterval(displayInterval);
+            
+            log('Display stopped');
+            
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+
+        function restartInterval() {
+            if (displayInterval) {
+                clearInterval(displayInterval);
+            }
+            
+            // Calculate base interval from fps setting
+            const fps = parseInt(speedSlider.value);
+            const baseInterval = Math.floor(1000 / fps);
+            
+            // Set up next frame using timeout to handle variable frame times
+            function scheduleNextFrame() {
+                // Determine frame type for current frame
+                let frameType = 'normal';
+                if (currentFrame === 0) {
+                    frameType = 'metadata';
+                } else if (isSetHeaderFrame(currentFrame)) {
+                    frameType = 'setheader';
+                } else if (currentFrame === totalFrames - 1) {
+                    frameType = 'endframe';
+                }
+                
+                // Calculate timing multiplier based on frame type
+                let intervalMultiplier = 1;
+                if (frameType === 'metadata') {
+                    intervalMultiplier = METADATA_DISPLAY_MULTIPLIER;
+                } else if (frameType === 'setheader') {
+                    intervalMultiplier = SET_HEADER_DISPLAY_MULTIPLIER;
+                } else if (frameType === 'endframe') {
+                    intervalMultiplier = METADATA_DISPLAY_MULTIPLIER;
+                }
+                
+                // Display the current frame
+                displayFrame(frameType);
+                
+                // Schedule the next frame with appropriate interval
+                const actualInterval = baseInterval * intervalMultiplier;
+                
+                displayInterval = setTimeout(() => {
+                    currentFrame++;
+                    
+                    if (currentFrame >= totalFrames) {
+                        currentFrame = 0;
+                    }
+                    
+                    if (isPlaying) {
+                        scheduleNextFrame();
+                    }
+                }, actualInterval);
+            }
+            
+            // Start the scheduling
+            scheduleNextFrame();
+        }
+        
+        // Helper function to check if current frame is a set header
+        function isSetHeaderFrame(frameIndex) {
+            // Calculate which frames are set headers based on selected sets
+            let metadataAndSetHeaderCount = 1; // Start with 1 for metadata frame
+            
+            for (let i = 0; i < selectedSets.length; i++) {
+                if (selectedSets[i]) {
+                    if (frameIndex === metadataAndSetHeaderCount) {
+                        return true;
+                    }
+                    metadataAndSetHeaderCount++;
+                }
+            }
+            
+            return false;
+        }
+
+        function displayFrame(frameType) {
+            if (!isPlaying) return;
+            
+            qrDisplay.innerHTML = '';
+            
+            // Determine which frame to display
+            let frameContent;
+            let frameLabel;
+            
+            if (currentFrame === 0) {
+                // Metadata frame
+                const includeFileQueueInfo = fileQueue.length > 1;
+                
+                const metadata = {
+                    type: "metadata",
+                    file_name: fileName,
+                    file_size: fileSize,
+                    total_sets: selectedSets.filter(Boolean).length, // Count of selected sets
+                    total_selected_sets: selectedSets.filter(Boolean).length,
+                    chunks_per_set: SET_SIZE_CHUNKS,
+                    timestamp: Date.now()
+                };
+                
+                // Add file queue information if multiple files
+                if (includeFileQueueInfo) {
+                    metadata.file_index = currentFileIndex + 1;
+                    metadata.total_files = fileQueue.length;
+                }
+                
+                // Add selected sets information
+                metadata.selected_sets = selectedSets.map((selected, index) => 
+                    selected ? index + 1 : null).filter(Boolean);
+                
+                frameContent = JSON.stringify(metadata);
+                frameLabel = "Metadata";
+                
+                // Add emphasis for metadata frame
+                qrDisplay.style.border = '3px solid red';
+                
+            } else {
+                // Reset border for non-metadata frames
+                qrDisplay.style.border = '2px solid #333';
+                
+                // Track position in the selected sets
+                let currentPosition = 1; // Start after metadata
+                let selectedSetIndices = selectedSets
+                    .map((selected, index) => selected ? index : -1)
+                    .filter(index => index !== -1);
+                
+                if (currentPosition <= currentFrame && 
+                    currentFrame < currentPosition + selectedSetIndices.length) {
+                    // Set header frame
+                    const selectedSetIndex = currentFrame - currentPosition;
+                    const actualSetIndex = selectedSetIndices[selectedSetIndex];
+                    const setChunks = sets[actualSetIndex] || [];
+                    
+                    const setHeader = {
+                        type: "set_header",
+                        set_index: actualSetIndex + 1,
+                        total_sets: selectedSets.filter(Boolean).length,
+                        chunks_in_set: setChunks.length
+                    };
+                    
+                    frameContent = JSON.stringify(setHeader);
+                    frameLabel = `Set ${actualSetIndex + 1} Header`;
+                    
+                    // Highlight set header frames
+                    qrDisplay.style.border = '2px solid orange';
+                    
+                } else {
+                    // Advance position past set headers
+                    currentPosition += selectedSetIndices.length;
+                    
+                    // End frame
+                    if (currentFrame === totalFrames - 1) {
+                        const endData = {
+                            type: "end",
+                            file_name: fileName,
+                            file_size: fileSize,
+                            selected_sets: selectedSets.map((selected, index) => 
+                                selected ? index + 1 : null).filter(Boolean),
+                            timestamp: Date.now()
+                        };
+                        
+                        if (fileQueue.length > 1) {
+                            endData.file_index = currentFileIndex + 1;
+                            endData.total_files = fileQueue.length;
+                        }
+                        
+                        frameContent = JSON.stringify(endData);
+                        frameLabel = "End Frame";
+                        
+                        // Highlight end frame
+                        qrDisplay.style.border = '3px solid red';
+                        
+                    } else {
+                        // Chunk frame - map from frame index to actual chunk index
+                        let chunkPositionInStream = currentFrame - currentPosition;
+                        let actualChunkIndex = -1;
+                        let runningTotal = 0;
+                        
+                        // Find which set and chunk this corresponds to
+                        for (let i = 0; i < selectedSets.length; i++) {
+                            if (!selectedSets[i]) continue;
+                            
+                            const setSize = sets[i].length;
+                            if (chunkPositionInStream < runningTotal + setSize) {
+                                // Found the set - calculate chunk index
+                                const localChunkIndex = chunkPositionInStream - runningTotal;
+                                actualChunkIndex = i * SET_SIZE_CHUNKS + localChunkIndex;
+                                
+                                // Create chunk data
+                                const chunkData = {
+                                    type: "chunk",
+                                    set_index: i + 1,
+                                    chunk_index: localChunkIndex + 1,
+                                    chunks_in_set: setSize,
+                                    data: chunks[actualChunkIndex]
+                                };
+                                
+                                frameContent = JSON.stringify(chunkData);
+                                frameLabel = `Set ${i + 1}, Chunk ${localChunkIndex + 1}`;
+                                break;
+                            }
+                            
+                            runningTotal += setSize;
+                        }
+                        
+                        if (actualChunkIndex === -1) {
+                            // Error case - shouldn't happen with proper indexing
+                            frameContent = JSON.stringify({ error: "Invalid chunk index" });
+                            frameLabel = "Error";
+                        }
+                    }
+                }
+            }
+            
+            // Create QR code
+            new QRCode(qrDisplay, {
+                text: frameContent,
+                width: parseInt(sizeSlider.value),
+                height: parseInt(sizeSlider.value),
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.L
+            });
+            
+            // Add frame label below QR code
+            const labelElement = document.createElement('div');
+            labelElement.style.marginTop = '10px';
+            labelElement.style.textAlign = 'center';
+            labelElement.style.fontWeight = 'bold';
+            
+            // Style label according to frame type
+            if (frameType === 'metadata' || frameType === 'endframe') {
+                labelElement.style.color = 'red';
+            } else if (frameType === 'setheader') {
+                labelElement.style.color = 'orange';
+            }
+            
+            labelElement.textContent = frameLabel;
+            qrDisplay.appendChild(labelElement);
+            
+            // Update progress
+            updateProgress(currentFrame + 1, totalFrames);
+            
+            // Update fullscreen display if active
+            if (isFullscreen) {
+                fullscreenQrDisplay.innerHTML = qrDisplay.innerHTML;
+                fullscreenCounter.textContent = frameCounter.textContent;
+                
+                // Adjust QR code size to be bigger in fullscreen
+                const qrElement = fullscreenQrDisplay.querySelector('img');
+                if (qrElement) {
+                    const size = Math.min(window.innerWidth, window.innerHeight) * 0.8;
+                    qrElement.style.width = `${size}px`;
+                    qrElement.style.height = `${size}px`;
+                }
+            }
+            
+            // Show fullscreen button when playing
+            if (isPlaying && !fullscreenBtn.style.display) {
+                fullscreenBtn.style.display = 'block';
+            }
+        }
+    </script>
+</body>
+
+</html>

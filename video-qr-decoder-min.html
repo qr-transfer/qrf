@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QR Video Decoder Mini</title>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<style>
+body,html{width:100%;height:100%;margin:0;padding:0;font-family:system-ui,sans-serif;overflow:hidden}
+.container{display:flex;flex-direction:column;height:100vh;background:#111}
+.header{background:#007bff;color:#fff;padding:10px;display:flex;justify-content:space-between;align-items:center}
+.tabs{display:flex}
+.tab{padding:4px 8px;cursor:pointer;border-bottom:2px solid transparent}
+.tab.active{border-bottom:2px solid #fff}
+.camera-view{position:relative;flex:1}
+#video{position:absolute;width:100%;height:100%;object-fit:cover}
+.detection-box{position:absolute;border:3px solid #ff3a3a;width:200px;height:200px;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}
+.recording-timer{position:absolute;top:10px;right:10px;color:#fff;font-weight:bold;background:rgba(0,0,0,0.6);padding:5px;border-radius:4px;display:none}
+.controls{padding:10px;display:flex;justify-content:center;gap:5px;flex-wrap:wrap;background:#222;border-bottom:1px solid #333}
+.info-view{background:#222;color:#fff;padding:5px;overflow:auto;max-height:30vh;display:none;font-size:12px;font-family:monospace}
+.processor{display:none;flex:1;flex-direction:column;background:#222}
+.frame-container{position:relative;flex:1;background:#000;display:flex;justify-content:center;align-items:center}
+#currentFrame{max-width:100%;max-height:100%}
+.progress-bar{height:10px;width:100%;background:#333}
+.progress-inner{height:100%;width:0;background:#007bff;transition:width 0.3s}
+.stats{display:flex;gap:5px;padding:5px;font-size:12px;color:#fff;justify-content:space-between}
+.stat{background:#333;flex:1;padding:3px;border-radius:3px;text-align:center}
+.btn{padding:6px 8px;background:#007bff;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:12px}
+.btn:disabled{background:#555;cursor:not-allowed}
+#urlInput{display:none;width:100%;padding:5px;margin-bottom:5px}
+canvas{display:none}
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div>QR Video Decoder</div>
+        <div class="tabs">
+            <div class="tab active" data-tab="capture">Capture</div>
+            <div class="tab" data-tab="process">Process</div>
+        </div>
+    </div>
+    
+    <div class="camera-view" id="captureView">
+        <video id="video" autoplay playsinline muted></video>
+        <div class="detection-box"></div>
+        <div class="recording-timer">00:00</div>
+    </div>
+    
+    <div class="processor" id="processView">
+        <div class="frame-container">
+            <canvas id="frameCanvas"></canvas>
+            <canvas id="workCanvas"></canvas>
+            <img id="currentFrame" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=">
+        </div>
+        <div class="progress-bar"><div class="progress-inner" id="progress"></div></div>
+        <div class="stats">
+            <div class="stat">Frames: <span id="frameCount">0</span></div>
+            <div class="stat">QR: <span id="qrCount">0</span></div>
+            <div class="stat">Chunks: <span id="chunkCount">0</span></div>
+        </div>
+    </div>
+    
+    <div class="controls" id="captureControls">
+        <button class="btn" id="startCameraBtn">Start Camera</button>
+        <button class="btn" id="startRecordingBtn" disabled>Record</button>
+        <button class="btn" id="stopRecordingBtn" disabled>Stop</button>
+        <button class="btn" id="downloadBtn" disabled>Save Recording</button>
+    </div>
+    
+    <div class="controls" id="processControls" style="display:none">
+        <button class="btn" id="loadFileBtn">Load Video</button>
+        <button class="btn" id="loadUrlBtn">URL</button>
+        <button class="btn" id="startProcessingBtn" disabled>Process</button>
+        <button class="btn" id="pauseBtn" disabled>Pause</button>
+        <button class="btn" id="saveFileBtn" disabled>Save File</button>
+    </div>
+    
+    <input type="text" id="urlInput" placeholder="Enter video URL">
+    <input type="file" id="fileInput" style="display:none" accept="video/*">
+    
+    <div class="info-view" id="log"></div>
+</div>
+
+<script>
+// Minimalist implementation for QR video decoding
+
+// DOM Elements
+const captureView = document.getElementById('captureView');
+const processView = document.getElementById('processView');
+const captureControls = document.getElementById('captureControls');
+const processControls = document.getElementById('processControls');
+const video = document.getElementById('video');
+const frameCanvas = document.getElementById('frameCanvas');
+const workCanvas = document.getElementById('workCanvas');
+const currentFrame = document.getElementById('currentFrame');
+const recordingTimer = document.querySelector('.recording-timer');
+const logView = document.getElementById('log');
+const progress = document.getElementById('progress');
+const frameCount = document.getElementById('frameCount');
+const qrCount = document.getElementById('qrCount');
+const chunkCount = document.getElementById('chunkCount');
+const urlInput = document.getElementById('urlInput');
+const fileInput = document.getElementById('fileInput');
+
+// Buttons
+const startCameraBtn = document.getElementById('startCameraBtn');
+const startRecordingBtn = document.getElementById('startRecordingBtn');
+const stopRecordingBtn = document.getElementById('stopRecordingBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const loadFileBtn = document.getElementById('loadFileBtn');
+const loadUrlBtn = document.getElementById('loadUrlBtn');
+const startProcessingBtn = document.getElementById('startProcessingBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const saveFileBtn = document.getElementById('saveFileBtn');
+
+// Canvas contexts
+const frameCtx = frameCanvas.getContext('2d');
+const workCtx = workCanvas.getContext('2d');
+
+// State variables
+let mediaStream = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordingStartTime = 0;
+let timerInterval = null;
+let videoBlob = null;
+let videoObjectURL = null;
+let isProcessing = false;
+let processingPaused = false;
+let videoElement = null;
+let captureInterval = null;
+
+// File recovery state
+let fileMetadata = null;
+let chunks = {};
+let sets = {};
+let processedFrameCount = 0;
+let detectedQRCount = 0;
+let retrievedChunkCount = 0;
+
+// Tab switching
+const tabs = document.querySelectorAll('.tab');
+tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        if(tab.dataset.tab === 'capture') {
+            captureView.style.display = 'block';
+            processView.style.display = 'none';
+            captureControls.style.display = 'flex';
+            processControls.style.display = 'none';
+        } else {
+            captureView.style.display = 'none';
+            processView.style.display = 'flex';
+            captureControls.style.display = 'none';
+            processControls.style.display = 'flex';
+        }
+    });
+});
+
+// Utility functions
+function log(message) {
+    const time = new Date().toLocaleTimeString();
+    logView.textContent += `[${time}] ${message}\n`;
+    logView.scrollTop = logView.scrollHeight;
+    
+    // Show log for a moment
+    logView.style.display = 'block';
+    setTimeout(() => {
+        if (logView.style.display === 'block') {
+            logView.style.display = 'none';
+        }
+    }, 5000);
+}
+
+function formatTime(ms) {
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes.toString().padStart(2,'0')}:${(seconds % 60).toString().padStart(2,'0')}`;
+}
+
+function updateProgress(current, total) {
+    const percent = Math.min(100, Math.round((current / total) * 100) || 0);
+    progress.style.width = `${percent}%`;
+}
+
+// Camera and Recording Functions
+async function startCamera() {
+    try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}});
+        video.srcObject = mediaStream;
+        startCameraBtn.disabled = true;
+        startRecordingBtn.disabled = false;
+        log('Camera started');
+    } catch (error) {
+        log(`Camera error: ${error.message}`);
+    }
+}
+
+function startRecording() {
+    if (!mediaStream) return;
+    
+    try {
+        mediaRecorder = new MediaRecorder(mediaStream, {mimeType: 'video/webm'});
+        recordedChunks = [];
+        
+        mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) recordedChunks.push(e.data);
+        };
+        
+        mediaRecorder.onstop = () => {
+            videoBlob = new Blob(recordedChunks, {type: 'video/webm'});
+            downloadBtn.disabled = false;
+            clearInterval(timerInterval);
+            log(`Recording stopped (${(videoBlob.size/1024/1024).toFixed(1)}MB)`);
+        };
+        
+        mediaRecorder.start(1000);
+        recordingStartTime = Date.now();
+        recordingTimer.style.display = 'block';
+        
+        timerInterval = setInterval(() => {
+            recordingTimer.textContent = formatTime(Date.now() - recordingStartTime);
+        }, 1000);
+        
+        startRecordingBtn.disabled = true;
+        stopRecordingBtn.disabled = false;
+    } catch (error) {
+        log(`Recording error: ${error.message}`);
+    }
+}
+
+function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+        startRecordingBtn.disabled = false;
+        stopRecordingBtn.disabled = true;
+        recordingTimer.style.display = 'none';
+        
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+    }
+}
+
+function downloadRecording() {
+    if (!videoBlob) return;
+    
+    const url = URL.createObjectURL(videoBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `qr-recording-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.webm`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+}
+
+// Video Processing Functions
+function handleVideoFile(file) {
+    if (!file) return;
+    
+    if (videoObjectURL) URL.revokeObjectURL(videoObjectURL);
+    
+    videoBlob = file;
+    videoObjectURL = URL.createObjectURL(file);
+    log(`Video loaded: ${file.name}`);
+    startProcessingBtn.disabled = false;
+    
+    resetProcessingState();
+}
+
+function handleVideoUrl() {
+    if (urlInput.style.display === 'block') {
+        urlInput.style.display = 'none';
+        return;
+    }
+    
+    urlInput.style.display = 'block';
+    urlInput.focus();
+}
+
+async function fetchVideoFromUrl() {
+    const url = urlInput.value.trim();
+    if (!url) return;
+    
+    try {
+        log(`Fetching: ${url}`);
+        loadUrlBtn.disabled = true;
+        
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Failed: ${response.status}`);
+        
+        const blob = await response.blob();
+        if (videoObjectURL) URL.revokeObjectURL(videoObjectURL);
+        
+        videoBlob = blob;
+        videoObjectURL = URL.createObjectURL(blob);
+        
+        log(`Video loaded from URL`);
+        startProcessingBtn.disabled = false;
+        urlInput.style.display = 'none';
+        
+        resetProcessingState();
+    } catch (error) {
+        log(`Error: ${error.message}`);
+    } finally {
+        loadUrlBtn.disabled = false;
+    }
+}
+
+function resetProcessingState() {
+    fileMetadata = null;
+    chunks = {};
+    sets = {};
+    processedFrameCount = 0;
+    detectedQRCount = 0;
+    retrievedChunkCount = 0;
+    frameCount.textContent = '0';
+    qrCount.textContent = '0';
+    chunkCount.textContent = '0';
+    progress.style.width = '0';
+}
+
+function startProcessing() {
+    if (!videoObjectURL || isProcessing) return;
+    
+    isProcessing = true;
+    processingPaused = false;
+    startProcessingBtn.disabled = true;
+    pauseBtn.disabled = false;
+    
+    log('Processing started');
+    
+    if (videoElement) videoElement.remove();
+    
+    videoElement = document.createElement('video');
+    videoElement.src = videoObjectURL;
+    videoElement.muted = true;
+    
+    videoElement.onloadedmetadata = () => {
+        frameCanvas.width = videoElement.videoWidth;
+        frameCanvas.height = videoElement.videoHeight;
+        workCanvas.width = videoElement.videoWidth;
+        workCanvas.height = videoElement.videoHeight;
+        
+        videoElement.play();
+        
+        const totalFrames = Math.floor(videoElement.duration * 10);
+        const captureInterval = videoElement.duration * 1000 / totalFrames;
+        
+        let frameIndex = 0;
+        captureInterval = setInterval(() => {
+            if (processingPaused) return;
+            
+            if (frameIndex >= totalFrames || videoElement.currentTime >= videoElement.duration) {
+                finishProcessing();
+                return;
+            }
+            
+            const targetTime = (frameIndex * videoElement.duration) / totalFrames;
+            videoElement.currentTime = targetTime;
+            
+            setTimeout(() => {
+                captureAndProcessFrame(frameIndex, totalFrames);
+                frameIndex++;
+            }, 100);
+        }, captureInterval);
+    };
+    
+    videoElement.onerror = (error) => {
+        log(`Video error`);
+        clearInterval(captureInterval);
+        isProcessing = false;
+        startProcessingBtn.disabled = false;
+        pauseBtn.disabled = true;
+    };
+}
+
+function captureAndProcessFrame(frameIndex, totalFrames) {
+    frameCtx.drawImage(videoElement, 0, 0, frameCanvas.width, frameCanvas.height);
+    
+    const imageData = frameCtx.getImageData(0, 0, frameCanvas.width, frameCanvas.height);
+    currentFrame.src = frameCanvas.toDataURL('image/jpeg', 0.7);
+    
+    try {
+        const code = jsQR(imageData.data, frameCanvas.width, frameCanvas.height, {
+            inversionAttempts: "dontInvert"
+        });
+        
+        if (code) {
+            processQRCode(code.data);
+            detectedQRCount++;
+            qrCount.textContent = detectedQRCount;
+        }
+    } catch (error) {}
+    
+    processedFrameCount++;
+    frameCount.textContent = processedFrameCount;
+    updateProgress(processedFrameCount, totalFrames);
+}
+
+function processQRCode(qrData) {
+    try {
+        const data = JSON.parse(qrData);
+        
+        if (data.type === "metadata") {
+            fileMetadata = data;
+            log(`File: ${data.file_name}`);
+        } else if (data.type === "set_header") {
+            if (!sets[data.set_index]) {
+                sets[data.set_index] = {
+                    chunks_expected: data.chunks_in_set,
+                    chunks_received: 0,
+                    chunks: {}
+                };
+            }
+        } else if (data.type === "chunk") {
+            if (!fileMetadata) return;
+            
+            const setId = data.set_index;
+            const chunkId = data.chunk_index;
+            const chunkKey = `${setId}_${chunkId}`;
+            
+            if (chunks[chunkKey]) return;
+            
+            chunks[chunkKey] = data.data;
+            retrievedChunkCount++;
+            chunkCount.textContent = retrievedChunkCount;
+            
+            if (!sets[setId]) {
+                sets[setId] = {
+                    chunks_expected: fileMetadata.chunks_per_set || 0,
+                    chunks_received: 0,
+                    chunks: {}
+                };
+            }
+            
+            sets[setId].chunks[chunkId] = true;
+            sets[setId].chunks_received = Object.keys(sets[setId].chunks).length;
+            
+            checkCompletion();
+        }
+    } catch (error) {}
+}
+
+function checkCompletion() {
+    if (!fileMetadata) return;
+    
+    const expectedTotalChunks = fileMetadata.total_chunks;
+    const receivedChunks = Object.keys(chunks).length;
+    
+    if (receivedChunks === expectedTotalChunks) {
+        log('All chunks received!');
+        saveFileBtn.disabled = false;
+        
+        if (captureInterval) {
+            clearInterval(captureInterval);
+            isProcessing = false;
+            startProcessingBtn.disabled = !videoObjectURL;
+            pauseBtn.disabled = true;
+        }
+    }
+}
+
+function togglePause() {
+    processingPaused = !processingPaused;
+    pauseBtn.textContent = processingPaused ? 'Resume' : 'Pause';
+}
+
+function finishProcessing() {
+    clearInterval(captureInterval);
+    isProcessing = false;
+    
+    log('Processing complete');
+    startProcessingBtn.disabled = !videoObjectURL;
+    pauseBtn.disabled = true;
+    
+    const totalChunks = fileMetadata ? fileMetadata.total_chunks : 0;
+    const receivedChunks = Object.keys(chunks).length;
+    
+    if (receivedChunks > 0) {
+        log(`Received ${receivedChunks}/${totalChunks} chunks`);
+        saveFileBtn.disabled = false;
+    }
+}
+
+function saveRecoveredFile() {
+    if (!fileMetadata || Object.keys(chunks).length === 0) return;
+    
+    try {
+        const sortedChunks = [];
+        
+        for (let setIdx = 1; setIdx <= fileMetadata.total_sets; setIdx++) {
+            const set = sets[setIdx];
+            if (!set) continue;
+            
+            for (let chunkIdx = 1; chunkIdx <= set.chunks_expected; chunkIdx++) {
+                const chunkKey = `${setIdx}_${chunkIdx}`;
+                if (chunks[chunkKey]) {
+                    sortedChunks.push(chunks[chunkKey]);
+                }
+            }
+        }
+        
+        const base64Data = sortedChunks.join('');
+        const binaryData = atob(base64Data);
+        
+        const bytes = new Uint8Array(binaryData.length);
+        for (let i = 0; i < binaryData.length; i++) {
+            bytes[i] = binaryData.charCodeAt(i);
+        }
+        
+        const blob = new Blob([bytes], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileMetadata.file_name;
+        a.click();
+        
+        setTimeout(() => URL.revokeObjectURL(url), 100);
+        log(`File saved: ${fileMetadata.file_name}`);
+    } catch (error) {
+        log(`Error saving: ${error.message}`);
+    }
+}
+
+// Event Listeners
+startCameraBtn.addEventListener('click', startCamera);
+startRecordingBtn.addEventListener('click', startRecording);
+stopRecordingBtn.addEventListener('click', stopRecording);
+downloadBtn.addEventListener('click', downloadRecording);
+loadFileBtn.addEventListener('click', () => fileInput.click());
+loadUrlBtn.addEventListener('click', handleVideoUrl);
+fileInput.addEventListener('change', e => handleVideoFile(e.target.files[0]));
+urlInput.addEventListener('keypress', e => { if (e.key === 'Enter') fetchVideoFromUrl(); });
+urlInput.addEventListener('blur', () => { if (urlInput.value.trim() === '') urlInput.style.display = 'none'; });
+startProcessingBtn.addEventListener('click', startProcessing);
+pauseBtn.addEventListener('click', togglePause);
+saveFileBtn.addEventListener('click', saveRecoveredFile);
+
+// Initialize
+log('QR Video Decoder ready');
+</script>
+</body>
+</html>
