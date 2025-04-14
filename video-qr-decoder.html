@@ -484,6 +484,12 @@
         let framesReceived = [];
         let lastQrData = null;
         let lastQrTime = 0;
+        
+        // Set-specific tracking variables
+        let setsData = [];
+        let setsReceived = [];
+        let chunksPerSelectedSet = [];
+        let setMetadataReceived = [];
 
         // Persistent data storage for handling repeated videos
         let fileHistory = {};  // Object to store file metadata and frame status
@@ -559,6 +565,12 @@
                 lastQrTime = 0;
                 currentFileId = '';
                 isFileComplete = false;
+                
+                // Reset set-specific data
+                setsData = [];
+                setsReceived = [];
+                chunksPerSelectedSet = [];
+                setMetadataReceived = [];
             }
 
             if (type === 'live') {
@@ -2764,12 +2776,31 @@ Estimated Total QR Count: ~${estimatedQRCount}
         // Global variable for tracking chunk counts per set (moved to global scope)
         let chunksPerSelectedSet = [];
 
-        // Initialize support for enhanced processing on page load
-        document.addEventListener('DOMContentLoaded', function () {
-            window.setsData = [];
-            window.setsReceived = [];
-            window.chunksPerSelectedSet = [];
-            window.setMetadataReceived = [];
+        // Declare namespaced QRDecoder object for better organization
+        const QRDecoder = {
+            // Core processing state
+            state: {
+                isInitialized: false
+            },
+            
+            // Initialize all components
+            initialize: function() {
+                if (this.state.isInitialized) return;
+                this.state.isInitialized = true;
+                
+                // Log initialization
+                console.log('QR Decoder initialized with proper namespacing');
+            },
+            
+            // Process incoming data with proper error handling
+            processData: function(data, type) {
+                return processQrData(data, type);
+            }
+        };
+        
+        // Initialize on DOM load
+        document.addEventListener('DOMContentLoaded', function() {
+            QRDecoder.initialize();
         });
 
         function processQrData(data, type = 'live') {
@@ -2804,20 +2835,25 @@ Estimated Total QR Count: ~${estimatedQRCount}
             lastQrData = data;
             lastQrTime = now;
 
+            // Initialize jsonData outside all try blocks for proper scope
+            let jsonData = null;
+            
             try {
-                let jsonData;
+                // First try: clean JSON parsing
                 try {
                     jsonData = JSON.parse(data);
-                } catch (err) {
-                    // Attempt to extract JSON from any wrapping text
+                } catch (parseErr) {
+                    // Second try: extract JSON from any wrapping text
                     const jsonMatch = data.match(/\{.*\}/);
                     if (jsonMatch) {
                         try {
                             jsonData = JSON.parse(jsonMatch[0]);
-                        } catch (e) {
-                            return; // Still not valid JSON, ignore
+                        } catch (extractErr) {
+                            // Both parse attempts failed
+                            return; // Not valid JSON, ignore
                         }
                     } else {
+                        // No JSON pattern found
                         return; // Not valid JSON, ignore
                     }
                 }
@@ -2910,7 +2946,7 @@ Estimated Total QR Count: ~${estimatedQRCount}
                                 showLog(`File organized in ${setCount} sets`, type);
 
                                 // Track which sets need metadata
-                                window.setMetadataReceived = Array(setCount).fill(false);
+                                setMetadataReceived = Array(setCount).fill(false);
                             }
 
                             // Store chunks per set information
@@ -2989,6 +3025,7 @@ Estimated Total QR Count: ~${estimatedQRCount}
 
                         if (setIndex >= 0 && setIndex < setsData.length) {
                             // Store metadata for this set
+                            // Store in local setsData array
                             setsData[setIndex] = {
                                 index: setIndex,
                                 chunksCount: jsonData.chunks_in_set,
@@ -2998,8 +3035,8 @@ Estimated Total QR Count: ~${estimatedQRCount}
                             };
 
                             // Mark that we've received this set's metadata
-                            if (window.setMetadataReceived && setIndex < window.setMetadataReceived.length) {
-                                window.setMetadataReceived[setIndex] = true;
+                            if (setMetadataReceived && setIndex < setMetadataReceived.length) {
+                                setMetadataReceived[setIndex] = true;
                             }
 
                             // Update chunksPerSelectedSet if not already set
@@ -3821,9 +3858,9 @@ Estimated Total QR Count: ~${estimatedQRCount}
         });
 
         document.addEventListener('DOMContentLoaded', function () {
-            // Setup global variable for chunks per set tracking
-            window.chunksPerSelectedSet = [];
-
+            // Initialize the app components
+            initializeApp();
+            
             // Apply UI enhancements
             enhanceUIVisibility();
 
@@ -4027,14 +4064,23 @@ Estimated Total QR Count: ~${estimatedQRCount}
             window.updateReceivedFilesList();
         }
 
-        // Start initializing these features when the DOM is loaded
-        document.addEventListener('DOMContentLoaded', function () {
+        // Initialize the application and all its components
+        function initializeApp() {
+            // Initialize core state variables
+            setsData = [];
+            setsReceived = [];
+            chunksPerSelectedSet = [];
+            setMetadataReceived = [];
+            
             // Initialize the full screen camera
             setTimeout(initializeFullScreenCamera, 500);
 
             // Initialize the multiple file support
             setTimeout(enhanceMultipleFileSupport, 700);
+        }
 
+        // Start initializing these features when the DOM is loaded
+        document.addEventListener('DOMContentLoaded', function () {
             // Add keyboard shortcuts for QR code scanning
             document.addEventListener('keydown', function (e) {
                 // Space bar to start/stop camera
