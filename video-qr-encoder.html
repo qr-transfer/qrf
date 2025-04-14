@@ -509,7 +509,7 @@
     <!-- Moved QR display to the top for better visibility -->
     <div class="display-container" id="displayContainer">
         <div class="frame-counter" id="frameCounter">Frame: 0 / 0</div>
-        <div id="qrDisplay" style="width: 300px; height: 300px;"></div>
+        <div id="qrDisplay" style="width: 500px; height: 500px;"></div>
         <div class="progress-container">
             <div class="progress-bar" id="progressBar"></div>
             <div class="progress-text" id="progressText">0%</div>
@@ -541,8 +541,10 @@
         <div class="control-group">
             <div class="control-row">
                 <div class="control-label">QR Code Size:</div>
-                <input type="range" id="sizeSlider" min="150" max="500" value="300" />
-                <div class="value-display" id="sizeValue">300px</div>
+                <input type="range" id="sizeSlider" min="200" max="800" value="500" />
+                <div class="value-display" id="sizeValue">500px</div>
+                <button id="resetSizeBtn" style="padding: 2px 8px; font-size: 12px; margin-left: 10px;">Reset to 500px</button>
+                <button id="showSizeBtn" style="padding: 2px 8px; font-size: 12px; margin-left: 5px; background-color: #f0f0f0; color: #333;">Show Size</button>
             </div>
         </div>
 
@@ -581,6 +583,7 @@
             <button id="generateBtn" disabled>Generate QR Codes</button>
             <button id="startBtn" disabled>Start Display</button>
             <button id="stopBtn" disabled>Stop Display</button>
+            <button id="resetAllBtn" style="background-color: #f5f5f5; color: #333; border: 1px solid #ddd;">Reset All Settings</button>
         </div>
     </div>
     
@@ -680,6 +683,9 @@
         const generateBtn = document.getElementById('generateBtn');
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
+        const resetSizeBtn = document.getElementById('resetSizeBtn');
+        const showSizeBtn = document.getElementById('showSizeBtn');
+        const resetAllBtn = document.getElementById('resetAllBtn');
         const qrDisplay = document.getElementById('qrDisplay');
         const progressBar = document.getElementById('progressBar');
         const progressText = document.getElementById('progressText');
@@ -757,7 +763,10 @@
         sizeSlider.addEventListener('input', () => {
             const size = sizeSlider.value;
             sizeValue.textContent = `${size}px`;
-            updateQRContainerSize();
+            
+            // Use a flag to indicate this is a manual size update
+            const manualUpdate = true;
+            updateQRContainerSize(manualUpdate);
         });
         
         gridLayoutSelect.addEventListener('change', () => {
@@ -778,9 +787,12 @@
             updateQRContainerSize();
         });
 
-        // Function to update QR container size based on grid layout
-        function updateQRContainerSize() {
-            const size = parseInt(sizeSlider.value);
+        // Function to update QR container size based on grid layout and available screen space
+        function updateQRContainerSize(isManualUpdate = false) {
+            // Make sure slider value is up to date in the display
+            sizeValue.textContent = `${sizeSlider.value}px`;
+            
+            const sliderSize = parseInt(sizeSlider.value);
             const qrCount = parseInt(gridLayoutSelect.value);
             
             // Calculate rows and columns
@@ -795,13 +807,63 @@
                 default: cols = 1; rows = 1;
             }
             
-            // Calculate grid dimensions with some padding
+            // Calculate maximum available space based on viewport
+            const viewportWidth = Math.max(document.documentElement.clientWidth, window.innerWidth || 0);
+            const viewportHeight = Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
+            
+            // For single QR code, use maximum possible size within bounds of slider
+            // For multiple QR codes, maintain spacing proportions but size dynamically
             const padding = 20; // Pixels between QR codes
+            const containerPadding = 40; // Padding around the entire QR display
+            
+            // Always respect manual updates from the slider
+            let size = sliderSize;
+            
+            // Only apply automatic sizing when not manually updated
+            if (!isManualUpdate) {
+                // For a single QR, suggest optimal size but don't enforce it
+                if (qrCount === 1) {
+                    // For single QR, calculate optimal size (90% of smallest viewport dimension)
+                    const maxSingleSize = Math.min(viewportWidth * 0.9, viewportHeight * 0.9) - (containerPadding * 2);
+                    // But don't exceed the slider max value
+                    const sliderMax = parseInt(sizeSlider.max);
+                    const optimalSize = Math.min(maxSingleSize, sliderMax);
+                    
+                    // Just log the calculated optimal size for reference, but use slider value
+                    if (Math.abs(optimalSize - sliderSize) > 50) { // Only log if difference is significant
+                        log(`Optimal size for single QR would be ${Math.round(optimalSize)}px (current: ${sliderSize}px)`, false);
+                    }
+                } else {
+                    // For multiple QRs, calculate what will fit on screen while maintaining the grid
+                    const maxWidth = viewportWidth * 0.95 - (containerPadding * 2);
+                    const maxHeight = viewportHeight * 0.8 - (containerPadding * 2);
+                    
+                    // Calculate maximum size that will fit while maintaining grid proportions
+                    const maxSizeByWidth = (maxWidth - (padding * (cols - 1))) / cols;
+                    const maxSizeByHeight = (maxHeight - (padding * (rows - 1))) / rows;
+                    const maxSize = Math.min(maxSizeByWidth, maxSizeByHeight);
+                    
+                    // For multi-QR grids, we do enforce max size constraints for proper display
+                    if (sliderSize > maxSize) {
+                        size = maxSize;
+                        log(`Limiting grid QR size to ${Math.round(size)}px to fit on screen (requested: ${sliderSize}px)`, false);
+                    }
+                }
+            }
+            
+            // Calculate final grid dimensions with padding
             const totalWidth = (size * cols) + (padding * (cols - 1));
             const totalHeight = (size * rows) + (padding * (rows - 1));
             
-            // Add extra padding around the QR codes (40px on each side)
-            const containerPadding = 40;
+            // Force size to update by applying a temporary different size first (fixes stuck size issue)
+            if (isManualUpdate) {
+                const tempSize = totalWidth + 1;
+                qrDisplay.style.width = `${tempSize}px`;
+                qrDisplay.style.height = `${tempSize}px`;
+                
+                // Force a layout recalculation
+                qrDisplay.offsetHeight;
+            }
             
             // Update container size with padding
             qrDisplay.style.width = `${totalWidth}px`;
@@ -824,6 +886,9 @@
                 countdownFrame.style.width = `${totalWidth + (containerPadding * 2)}px`;
                 countdownFrame.style.height = `${totalHeight + (containerPadding * 2)}px`;
             }
+            
+            // Log the actual size being used
+            log(`QR size: ${size}px, Grid: ${cols}×${rows}, Total size: ${totalWidth}×${totalHeight}px`);
             
             // Update time estimates based on new grid size
             updateEstimatedTime();
@@ -1779,13 +1844,16 @@ Estimated transfer:
                     canvasContext.fillRect(0, 0, placeholderCanvas.width, placeholderCanvas.height);
                     
                     // Use QRCode library to render to our existing canvas
+                    // For single QR mode, use maximum error correction and slightly larger margin
+                    // For multi-QR modes, optimize for space with minimal margins
+                    const isMultiQR = parseInt(gridLayoutSelect.value) > 1;
                     QRCode.toCanvas(
                         placeholderCanvas,
                         subFrameData.content || 'ERROR',
                         {
                             width: parseInt(sizeSlider.value),
-                            margin: 1,
-                            errorCorrectionLevel: 'L',
+                            margin: isMultiQR ? 1 : 4, // Larger margin for single QR for better scanning
+                            errorCorrectionLevel: isMultiQR ? 'L' : 'M', // Higher error correction for single QR
                             color: {
                                 dark: '#000000',
                                 light: '#FFFFFF'
@@ -2168,10 +2236,12 @@ Estimated transfer:
             qrWrapper.insertBefore(presentationCanvas, loadingIndicator);
             
             // Use QRCode.toCanvas to create a fresh QR code with appropriate size
+            // For presentation mode, use higher error correction level and adaptive margin based on content size
+            const isMultiQR = parseInt(gridLayoutSelect.value) > 1;
             QRCode.toCanvas(document.createElement('canvas'), frameContent || 'ERROR', {
                 width: size - 40, // Slightly smaller to ensure it fits
-                margin: 4,
-                errorCorrectionLevel: 'L',
+                margin: isMultiQR ? 4 : 10, // Larger margin for single QR in presentation mode
+                errorCorrectionLevel: isMultiQR ? 'M' : 'H', // Highest error correction for presentation mode
                 color: {
                     dark: '#000000',
                     light: '#FFFFFF'
@@ -2287,6 +2357,192 @@ Estimated transfer:
             debugView.textContent = debugLogs.join('\n');
             debugView.scrollTop = debugView.scrollHeight;
         }
+
+        // Add window resize handler to automatically adjust QR size when window changes
+        window.addEventListener('resize', () => {
+            // Only adjust if we have content to display
+            if (fileName && !isPlaying) {
+                // Delay the update slightly to avoid performance issues during resize
+                clearTimeout(window.resizeTimer);
+                window.resizeTimer = setTimeout(() => {
+                    log("Window resized, adjusting QR display size");
+                    updateQRContainerSize();
+                }, 250);
+            }
+        });
+        
+        // Set initial QR display size based on default slider value
+        window.addEventListener('DOMContentLoaded', () => {
+            const defaultSize = parseInt(sizeSlider.value);
+            qrDisplay.style.width = `${defaultSize}px`;
+            qrDisplay.style.height = `${defaultSize}px`;
+            log(`Initial QR display size set to ${defaultSize}px`);
+        });
+        
+        // Reset size button handler 
+        resetSizeBtn.addEventListener('click', (e) => {
+            e.preventDefault(); // Prevent form submission
+            
+            // Reset to default size (500px)
+            resetQRSize();
+        });
+        
+        // Show size button handler
+        showSizeBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            
+            // Get the actual current dimensions
+            const computedStyle = window.getComputedStyle(qrDisplay);
+            const actualWidth = qrDisplay.offsetWidth;
+            const actualHeight = qrDisplay.offsetHeight;
+            const actualPadding = parseInt(computedStyle.padding);
+            const totalWidth = actualWidth + (actualPadding * 2);
+            const totalHeight = actualHeight + (actualPadding * 2);
+            
+            // Create a temporary "Size" indicator on the QR display
+            const sizeIndicator = document.createElement('div');
+            sizeIndicator.style.position = 'absolute';
+            sizeIndicator.style.top = '0';
+            sizeIndicator.style.left = '0';
+            sizeIndicator.style.width = '100%';
+            sizeIndicator.style.padding = '10px';
+            sizeIndicator.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+            sizeIndicator.style.color = 'white';
+            sizeIndicator.style.textAlign = 'center';
+            sizeIndicator.style.fontSize = '14px';
+            sizeIndicator.style.zIndex = '100';
+            sizeIndicator.style.borderRadius = '4px 4px 0 0';
+            sizeIndicator.innerHTML = `
+                Size: ${actualWidth}×${actualHeight}px<br>
+                With padding: ${totalWidth}×${totalHeight}px
+            `;
+            
+            // Make sure qrDisplay has position relative
+            const originalPosition = qrDisplay.style.position;
+            if (qrDisplay.style.position !== 'relative') {
+                qrDisplay.style.position = 'relative';
+            }
+            
+            // Add to display
+            qrDisplay.appendChild(sizeIndicator);
+            
+            // Show in the log
+            log(`Current QR size: ${actualWidth}×${actualHeight}px (with padding: ${totalWidth}×${totalHeight}px)`);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                qrDisplay.removeChild(sizeIndicator);
+                qrDisplay.style.position = originalPosition;
+            }, 3000);
+        });
+        
+        // Function to reset QR size to default with visual feedback
+        function resetQRSize() {
+            const defaultSize = 500;
+            
+            // Update slider and display
+            sizeSlider.value = defaultSize;
+            sizeValue.textContent = `${defaultSize}px`;
+            
+            // Visual indication of reset by adding a highlight effect
+            const originalBorder = qrDisplay.style.border;
+            const originalBackground = qrDisplay.style.backgroundColor;
+            
+            // Flash effect to show reset is happening
+            qrDisplay.style.transition = 'all 0.3s ease';
+            qrDisplay.style.border = '4px solid #4CAF50'; // Green highlight
+            qrDisplay.style.backgroundColor = '#f0fff0'; // Light green background
+            
+            // Set size directly with a small delay to let the visual effect be seen
+            setTimeout(() => {
+                // Reset to exact dimensions
+                qrDisplay.style.width = `${defaultSize}px`;
+                qrDisplay.style.height = `${defaultSize}px`;
+                qrDisplay.style.padding = '40px';
+                
+                // Force a browser reflow
+                void qrDisplay.offsetWidth;
+                
+                // Clear any potential interfering styles
+                qrDisplay.style.maxWidth = '';
+                qrDisplay.style.maxHeight = '';
+                qrDisplay.style.minWidth = '';
+                qrDisplay.style.minHeight = '';
+                
+                // Update QR display with manual flag
+                updateQRContainerSize(true);
+                
+                // Restore original styling with slight delay
+                setTimeout(() => {
+                    qrDisplay.style.border = originalBorder || '4px solid rgba(255, 0, 0, 0.6)';
+                    qrDisplay.style.backgroundColor = originalBackground || '#ffffff';
+                    qrDisplay.style.transition = '';
+                }, 500);
+                
+                // Log the outcome
+                log(`QR size reset to default (${defaultSize}px)`);
+                
+                // Add a size indicator that shows the actual dimensions
+                const actualWidth = qrDisplay.offsetWidth;
+                const indicator = document.createElement('div');
+                indicator.style.position = 'absolute';
+                indicator.style.top = '5px';
+                indicator.style.left = '0';
+                indicator.style.width = '100%';
+                indicator.style.textAlign = 'center';
+                indicator.style.color = '#4CAF50';
+                indicator.style.fontWeight = 'bold';
+                indicator.style.zIndex = '100';
+                indicator.textContent = `Size reset to ${actualWidth}px`;
+                
+                // Make sure qrDisplay has position relative
+                if (qrDisplay.style.position !== 'relative') {
+                    qrDisplay.style.position = 'relative';
+                }
+                
+                qrDisplay.appendChild(indicator);
+                
+                // Remove indicator after 2 seconds
+                setTimeout(() => {
+                    qrDisplay.removeChild(indicator);
+                }, 2000);
+            }, 100);
+        }
+        
+        // Reset all settings button handler
+        resetAllBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            
+            // Confirm before resetting everything
+            if (isPlaying) {
+                log("Please stop the display before resetting settings", true);
+                return;
+            }
+            
+            // Reset all sliders to their default values
+            speedSlider.value = 10;
+            speedValue.textContent = "10 fps";
+            
+            // Reset QR size
+            resetQRSize();
+            
+            // Reset grid layout
+            gridLayoutSelect.value = "1";
+            gridValue.textContent = "1 QR per frame";
+            
+            // Reset chunk size
+            chunkSlider.value = 500;
+            chunkValue.textContent = "500 bytes";
+            
+            // Reset countdown
+            countdownSlider.value = 5;
+            countdownValueEl.textContent = "5 seconds";
+            
+            // Update display to reflect new settings
+            updateQRContainerSize(true);
+            
+            log("All settings reset to defaults");
+        });
 
         // Initialize
         log('Ready to encode files. Select a file and click "Generate QR Codes".');

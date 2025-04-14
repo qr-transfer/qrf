@@ -108,8 +108,46 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            pointer-events: none;
             z-index: 6;
+            cursor: move;
+            transition: border-color 0.2s;
+        }
+        
+        .scan-region:hover {
+            border-color: lime;
+            border-width: 3px;
+        }
+        
+        .scan-region-handle {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border: 2px solid red;
+            border-radius: 50%;
+            bottom: -8px;
+            right: -8px;
+            cursor: se-resize;
+            z-index: 7;
+        }
+        
+        .scan-region-info {
+            position: absolute;
+            bottom: -30px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 12px;
+            color: white;
+            background: rgba(0,0,0,0.5);
+            padding: 2px 4px;
+            border-radius: 4px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        .scan-region:hover .scan-region-info {
+            opacity: 1;
         }
 
         .right-panel {
@@ -319,10 +357,14 @@
                     <div class="controls">
                         <button id="startLiveBtn">Start Camera</button>
                         <button id="stopLiveBtn" disabled>Stop Camera</button>
+                        <button id="resetScanRegionBtn" title="Reset scan region to center">Reset Region</button>
                     </div>
                     <div class="video-container">
                         <video id="liveVideo" playsinline></video>
-                        <div class="scan-region"></div>
+                        <div class="scan-region">
+                            <div class="scan-region-handle"></div>
+                            <div class="scan-region-info">Drag to move, resize handle to adjust</div>
+                        </div>
                     </div>
                 </div>
                 <div class="right-panel">
@@ -810,9 +852,28 @@
         // Live scanning functions
         async function startLiveScanning() {
             try {
+                // Request highest resolution camera with preferred settings
+                // This improves QR code detection significantly
                 liveStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'environment' }
+                    video: {
+                        facingMode: 'environment',
+                        width: { min: 640, ideal: 1920 },
+                        height: { min: 400, ideal: 1080 },
+                        aspectRatio: { ideal: 1.7777777778 }
+                    }
                 });
+                
+                // Get camera capabilities
+                const videoTrack = liveStream.getVideoTracks()[0];
+                if (videoTrack) {
+                    const capabilities = videoTrack.getCapabilities();
+                    showLog(`Camera: ${videoTrack.label}`);
+                    if (capabilities) {
+                        const actualWidth = capabilities.width?.max || 'unknown';
+                        const actualHeight = capabilities.height?.max || 'unknown';
+                        showLog(`Camera resolution: ${actualWidth}x${actualHeight}`);
+                    }
+                }
                 
                 liveVideo.srcObject = liveStream;
                 liveVideo.setAttribute('playsinline', 'true');
@@ -838,6 +899,27 @@
                 requestAnimationFrame(scanLiveFrame);
             } catch (err) {
                 showLog('Error starting camera: ' + err.message);
+                
+                // Try fallback to less demanding constraints
+                try {
+                    showLog('Trying fallback camera settings...');
+                    liveStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'environment' }
+                    });
+                    
+                    liveVideo.srcObject = liveStream;
+                    await liveVideo.play();
+                    
+                    liveVideo.style.display = 'block';
+                    isLiveScanning = true;
+                    startLiveBtn.disabled = true;
+                    stopLiveBtn.disabled = false;
+                    
+                    showLog('Camera started with fallback settings');
+                    requestAnimationFrame(scanLiveFrame);
+                } catch (fallbackErr) {
+                    showLog('Error with fallback camera: ' + fallbackErr.message);
+                }
             }
         }
 
@@ -852,6 +934,45 @@
             resetState('live');
         }
 
+        // Extract region of interest (ROI) from the full frame
+        function extractROI(canvas, scanRegion) {
+            // Get the scan region element and its dimensions
+            const scanRegionEl = document.querySelector('.scan-region');
+            
+            // Calculate the actual coordinates of the scan region in the video
+            const videoRect = liveVideo.getBoundingClientRect();
+            const scanRect = scanRegionEl.getBoundingClientRect();
+            
+            // Convert from screen coordinates to video coordinates
+            const scaleX = canvas.width / videoRect.width;
+            const scaleY = canvas.height / videoRect.height;
+            
+            // Calculate the center of the scan region relative to the video
+            const centerX = ((scanRect.left + scanRect.width/2) - videoRect.left) * scaleX;
+            const centerY = ((scanRect.top + scanRect.height/2) - videoRect.top) * scaleY;
+            
+            // Calculate ROI dimensions in video coordinates
+            const roiWidth = scanRect.width * scaleX;
+            const roiHeight = scanRect.height * scaleY;
+            
+            // Calculate top-left corner of ROI
+            const roiLeft = Math.max(0, centerX - roiWidth/2);
+            const roiTop = Math.max(0, centerY - roiHeight/2);
+            
+            // Ensure ROI stays within canvas bounds
+            const actualWidth = Math.min(roiWidth, canvas.width - roiLeft);
+            const actualHeight = Math.min(roiHeight, canvas.height - roiTop);
+            
+            // Extract the region of interest
+            try {
+                return ctx.getImageData(roiLeft, roiTop, actualWidth, actualHeight);
+            } catch(err) {
+                console.error("Error extracting ROI:", err);
+                // Fallback to full frame if ROI extraction fails
+                return ctx.getImageData(0, 0, canvas.width, canvas.height);
+            }
+        }
+        
         function scanLiveFrame() {
             if (!isLiveScanning) return;
             
@@ -864,20 +985,56 @@
                 liveFramesCounter.textContent = capturedFramesCount;
                 
                 try {
-                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                    const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
-                        inversionAttempts: 'attemptBoth', // Try both non-inverted and inverted for better detection
-                        canOverwriteImage: true, // Allow overwriting the image data for performance
-                        maxModuleCount: 177  // Support high capacity QR codes (version 40)
-                    });
+                    // First try scanning just the ROI (region of interest)
+                    const roiData = extractROI(canvas);
+                    let qrCode = null;
                     
+                    // Try to detect QR in the ROI first
+                    try {
+                        qrCode = jsQR(roiData.data, roiData.width, roiData.height, {
+                            inversionAttempts: 'attemptBoth', // Try both non-inverted and inverted for better detection
+                            canOverwriteImage: true, // Allow overwriting the image data for performance
+                            maxModuleCount: 177  // Support high capacity QR codes (version 40)
+                        });
+                    } catch (roiErr) {
+                        console.error("Error processing ROI:", roiErr);
+                    }
+                    
+                    // If ROI detection fails, try the full frame every 10 frames as a fallback
+                    if (!qrCode && capturedFramesCount % 10 === 0) {
+                        const fullImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        qrCode = jsQR(fullImageData.data, fullImageData.width, fullImageData.height, {
+                            inversionAttempts: 'attemptBoth',
+                            canOverwriteImage: true,
+                            maxModuleCount: 177
+                        });
+                        
+                        // If found in full frame but not ROI, log it
+                        if (qrCode) {
+                            console.log("QR detected in full frame but not in ROI");
+                        }
+                    }
+                    
+                    // If QR code found, process it
                     if (qrCode) {
                         framesCapturedWithQR++;
                         liveQrCounter.textContent = framesCapturedWithQR;
                         processQrData(qrCode.data, 'live');
+                        
+                        // Visually mark the detected QR code
+                        ctx.strokeStyle = 'lime';
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        ctx.moveTo(qrCode.location.topLeftCorner.x, qrCode.location.topLeftCorner.y);
+                        ctx.lineTo(qrCode.location.topRightCorner.x, qrCode.location.topRightCorner.y);
+                        ctx.lineTo(qrCode.location.bottomRightCorner.x, qrCode.location.bottomRightCorner.y);
+                        ctx.lineTo(qrCode.location.bottomLeftCorner.x, qrCode.location.bottomLeftCorner.y);
+                        ctx.lineTo(qrCode.location.topLeftCorner.x, qrCode.location.topLeftCorner.y);
+                        ctx.stroke();
                     }
                 } catch (err) {
                     // Silent catch - continue scanning
+                    console.error("Error in scanLiveFrame:", err);
                 }
             }
             
@@ -1751,6 +1908,31 @@ Estimated Total QR Count: ~${estimatedQRCount}
             processNextFrameBatch();
         }
         
+        // Extract region of interest for video frames
+        function extractVideoROI(canvas, videoElement) {
+            // Define ROI size - make it adaptive to video size
+            // For typical videos, use a centered region that's about 70% of the video size
+            // This helps focus on the center where QR codes are most likely to be
+            const roiWidthPct = 0.7;
+            const roiHeightPct = 0.7;
+            
+            const roiWidth = Math.floor(canvas.width * roiWidthPct);
+            const roiHeight = Math.floor(canvas.height * roiHeightPct);
+            
+            // Calculate the top-left corner to center the ROI
+            const roiLeft = Math.floor((canvas.width - roiWidth) / 2);
+            const roiTop = Math.floor((canvas.height - roiHeight) / 2);
+            
+            // Extract the region of interest
+            try {
+                return ctx.getImageData(roiLeft, roiTop, roiWidth, roiHeight);
+            } catch(err) {
+                console.error("Error extracting video ROI:", err);
+                // Fallback to full frame if ROI extraction fails
+                return ctx.getImageData(0, 0, canvas.width, canvas.height);
+            }
+        }
+        
         // Capture and process a single frame at the current time position
         function captureAndProcessFrame(timePosition) {
             canvas.width = processingVideo.videoWidth;
@@ -1774,33 +1956,66 @@ Estimated Total QR Count: ~${estimatedQRCount}
                     saveFrameForDiagnostics(canvas, capturedFramesCount, timePosition);
                 }
                 
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                
                 // Array to hold detected QR codes
                 const qrCodes = [];
                 
-                // Try to detect metadata with grid size information
-                tryDetectMetadataWithGridSize(imageData, timePosition);
+                // First try with ROI (Region of Interest)
+                const roiData = extractVideoROI(canvas, processingVideo);
+                
+                // Try to detect metadata with grid size information in ROI
+                // This is more efficient than scanning the whole frame
+                tryDetectMetadataWithGridSize(roiData, timePosition);
                 
                 // If we know we're in grid mode, try to detect QRs in a grid layout
                 let foundInGrid = false;
                 if (qrGridSize > 1) {
-                    foundInGrid = detectQRCodesInGrid(imageData, qrCodes, timePosition);
+                    // For grid layouts, we might need the full frame
+                    // as the QR codes could be distributed throughout
+                    const fullImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    foundInGrid = detectQRCodesInGrid(fullImageData, qrCodes, timePosition);
+                } else {
+                    // For single QR, try the ROI first
+                    // Use optimized parameters for QR detection
+                    const qrCode = jsQR(roiData.data, roiData.width, roiData.height, {
+                        inversionAttempts: 'attemptBoth', // Try both non-inverted and inverted
+                        canOverwriteImage: true, // Allow overwriting for performance
+                        maxModuleCount: 177  // Support high capacity QR codes (version 40)
+                    });
+                    
+                    if (qrCode) {
+                        // Adjust QR code coordinates to match the full canvas
+                        const roiOffsetX = Math.floor((canvas.width - roiData.width) / 2);
+                        const roiOffsetY = Math.floor((canvas.height - roiData.height) / 2);
+                        adjustQRCodeCoordinates(qrCode, roiOffsetX, roiOffsetY);
+                        
+                        qrCodes.push(qrCode);
+                        updateQRSizeStats(qrCode);
+                        trackFrameRate(timePosition);
+                        foundInGrid = true; // Mark as found so we don't do the full frame scan
+                    }
                 }
                 
-                // If not found in grid or grid size is 1, try regular detection
-                if (!foundInGrid) {
+                // If not found in ROI or grid, try full frame scan
+                if (!foundInGrid && qrCodes.length === 0) {
+                    // Try with the full frame
+                    const fullImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    
                     // Use optimized parameters for QR detection
-                    const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
-                        inversionAttempts: 'attemptBoth', // Try both non-inverted and inverted for better detection
-                        canOverwriteImage: true, // Allow overwriting the image data for performance
-                        maxModuleCount: 177  // Support high capacity QR codes (version 40)
+                    const qrCode = jsQR(fullImageData.data, fullImageData.width, fullImageData.height, {
+                        inversionAttempts: 'attemptBoth',
+                        canOverwriteImage: true,
+                        maxModuleCount: 177
                     });
                     
                     if (qrCode) {
                         qrCodes.push(qrCode);
                         updateQRSizeStats(qrCode);
                         trackFrameRate(timePosition);
+                        
+                        // If we find in full frame but not ROI, log it to help tune ROI size
+                        if (capturedFramesCount % 20 === 0) {
+                            console.log("QR found in full frame but not in ROI - may need to adjust ROI size");
+                        }
                     }
                 }
                 
@@ -1808,7 +2023,10 @@ Estimated Total QR Count: ~${estimatedQRCount}
                 if (qrCodes.length === 0 && capturedFramesCount % 10 === 0) {
                     try {
                         // Only try enhancement periodically to save performance
-                        const enhancedImageData = enhanceImageForQRDetection(imageData);
+                        const enhancedImageData = enhanceImageForQRDetection(
+                            qrCodes.length === 0 ? roiData : ctx.getImageData(0, 0, canvas.width, canvas.height)
+                        );
+                        
                         const enhancedQrCode = jsQR(enhancedImageData.data, enhancedImageData.width, enhancedImageData.height, {
                             inversionAttempts: 'attemptBoth',
                             canOverwriteImage: true,
@@ -1816,6 +2034,13 @@ Estimated Total QR Count: ~${estimatedQRCount}
                         });
                         
                         if (enhancedQrCode) {
+                            // If we used ROI for enhancement, adjust coordinates
+                            if (qrCodes.length === 0) {
+                                const roiOffsetX = Math.floor((canvas.width - roiData.width) / 2);
+                                const roiOffsetY = Math.floor((canvas.height - roiData.height) / 2);
+                                adjustQRCodeCoordinates(enhancedQrCode, roiOffsetX, roiOffsetY);
+                            }
+                            
                             qrCodes.push(enhancedQrCode);
                             showLog(`QR detected after image enhancement! Frame ${capturedFramesCount}`, 'video');
                         }
@@ -1898,11 +2123,10 @@ Estimated Total QR Count: ~${estimatedQRCount}
                             showLog(`Consolidated ${foundQRTimeRanges.length} time ranges to avoid memory issues`, 'video');
                         }
                     }
-                    
-                    processQrData(qrCode.data, 'video');
                 }
             } catch (err) {
                 // Silent catch - continue processing
+                console.error("Error in captureAndProcessFrame:", err);
             }
         }
 
@@ -2798,6 +3022,130 @@ ${jsonData.selected_sets ? `🎯 Selected Sets: ${jsonData.selected_sets.length}
             }
         }
 
+        // Make scan region draggable and resizable
+        function initializeScanRegionControls() {
+            const scanRegion = document.querySelector('.scan-region');
+            const resizeHandle = document.querySelector('.scan-region-handle');
+            const infoDisplay = document.querySelector('.scan-region-info');
+            const videoContainer = document.querySelector('.video-container');
+            const resetScanRegionBtn = document.getElementById('resetScanRegionBtn');
+            
+            let isDragging = false;
+            let isResizing = false;
+            let dragOffset = { x: 0, y: 0 };
+            let initialSize = { width: 0, height: 0 };
+            let initialMousePos = { x: 0, y: 0 };
+            
+            // Update info display
+            function updateInfoDisplay() {
+                const width = parseInt(scanRegion.style.width || 200);
+                const height = parseInt(scanRegion.style.height || 200);
+                infoDisplay.textContent = `Size: ${width}×${height}px - Drag to move, resize handle to adjust`;
+            }
+            
+            // Reset scan region to center
+            function resetScanRegion() {
+                scanRegion.style.width = '200px';
+                scanRegion.style.height = '200px';
+                scanRegion.style.left = '50%';
+                scanRegion.style.top = '50%';
+                scanRegion.style.transform = 'translate(-50%, -50%)';
+                updateInfoDisplay();
+                showLog('Scan region reset to center', 'live');
+            }
+            
+            // Add reset button event listener
+            resetScanRegionBtn.addEventListener('click', resetScanRegion);
+            
+            // Start dragging
+            scanRegion.addEventListener('mousedown', (e) => {
+                if (e.target === resizeHandle) return; // Handle by resize handler
+                
+                e.preventDefault();
+                isDragging = true;
+                
+                // Calculate offset from mouse position to region's top-left
+                const regionRect = scanRegion.getBoundingClientRect();
+                dragOffset.x = e.clientX - regionRect.left;
+                dragOffset.y = e.clientY - regionRect.top;
+                
+                // Add temporary event listeners for dragging
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+            });
+            
+            // Start resizing
+            resizeHandle.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                isResizing = true;
+                
+                // Store initial size and mouse position
+                initialSize.width = scanRegion.offsetWidth;
+                initialSize.height = scanRegion.offsetHeight;
+                initialMousePos.x = e.clientX;
+                initialMousePos.y = e.clientY;
+                
+                // Add temporary event listeners for resizing
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+            });
+            
+            // Handle mouse move for both dragging and resizing
+            function handleMouseMove(e) {
+                e.preventDefault();
+                
+                if (isDragging) {
+                    // Calculate new position
+                    const containerRect = videoContainer.getBoundingClientRect();
+                    const newLeft = e.clientX - containerRect.left - dragOffset.x;
+                    const newTop = e.clientY - containerRect.top - dragOffset.y;
+                    
+                    // Ensure region stays within container bounds
+                    const maxLeft = containerRect.width - scanRegion.offsetWidth;
+                    const maxTop = containerRect.height - scanRegion.offsetHeight;
+                    
+                    scanRegion.style.left = `${Math.max(0, Math.min(newLeft, maxLeft))}px`;
+                    scanRegion.style.top = `${Math.max(0, Math.min(newTop, maxTop))}px`;
+                    scanRegion.style.transform = 'none'; // Override the centering transform
+                }
+                else if (isResizing) {
+                    // Calculate size change
+                    const deltaX = e.clientX - initialMousePos.x;
+                    const deltaY = e.clientY - initialMousePos.y;
+                    
+                    // Apply size constraints (minimum 100px, maximum container size)
+                    const containerRect = videoContainer.getBoundingClientRect();
+                    const newWidth = Math.max(100, Math.min(initialSize.width + deltaX, containerRect.width - parseInt(scanRegion.style.left || 0)));
+                    const newHeight = Math.max(100, Math.min(initialSize.height + deltaY, containerRect.height - parseInt(scanRegion.style.top || 0)));
+                    
+                    scanRegion.style.width = `${newWidth}px`;
+                    scanRegion.style.height = `${newHeight}px`;
+                    
+                    updateInfoDisplay();
+                }
+            }
+            
+            // End dragging or resizing
+            function handleMouseUp() {
+                isDragging = false;
+                isResizing = false;
+                
+                // Remove temporary event listeners
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+                
+                updateInfoDisplay();
+                
+                // Log region position and size for debugging
+                const regionRect = scanRegion.getBoundingClientRect();
+                console.log(`Scan region: ${Math.round(regionRect.width)}×${Math.round(regionRect.height)}px at (${Math.round(regionRect.left)},${Math.round(regionRect.top)})`);
+            }
+            
+            // Initialize with default size info
+            updateInfoDisplay();
+        }
+        
         // Event listeners
         startLiveBtn.addEventListener('click', startLiveScanning);
         stopLiveBtn.addEventListener('click', stopLiveScanning);
@@ -2806,6 +3154,9 @@ ${jsonData.selected_sets ? `🎯 Selected Sets: ${jsonData.selected_sets.length}
         quickAnalysisBtn.addEventListener('click', performQuickAnalysis);
         processVideoBtn.addEventListener('click', startVideoProcessing);
         stopProcessingBtn.addEventListener('click', stopVideoProcessing);
+        
+        // Initialize controls for the scan region
+        document.addEventListener('DOMContentLoaded', initializeScanRegionControls);
         
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
