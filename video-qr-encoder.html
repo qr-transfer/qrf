@@ -1,2552 +1,708 @@
-<!DOCTYPE html>
-<html lang="en">
+// 1. Set-by-Set Metadata Implementation
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video QR Code Encoder</title>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        html,
-        body {
-            width: 100%;
-            height: 100%;
-            font-family: system-ui, -apple-system, sans-serif;
-            line-height: 1.5;
-        }
-
-        body {
-            display: flex;
-            flex-direction: column;
-            overflow-x: hidden;
-        }
-
-        .control-panel {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            background: #f5f5f5;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 20px;
-        }
-
-        .control-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .control-row {
-            display: flex;
-            gap: 20px;
-            align-items: center;
-        }
-
-        .control-label {
-            min-width: 150px;
-            font-weight: bold;
-        }
-
-        input[type="file"] {
-            padding: 10px;
-            border: 2px dashed #ccc;
-            border-radius: 4px;
-            width: 100%;
-        }
-
-        input[type="range"] {
-            flex: 1;
-        }
-
-        .value-display {
-            min-width: 60px;
-            text-align: right;
-        }
-
-        button {
-            padding: 12px 20px;
-            background: #007bff;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: background 0.2s;
-        }
-
-        button:hover {
-            background: #0056b3;
-        }
-
-        button:disabled {
-            background: #cccccc;
-            cursor: not-allowed;
-        }
-
-        .display-container {
-            position: relative;
-            width: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            gap: 20px;
-            margin: 20px;
-            max-width: 95%;
-            align-self: center;
-        }
-
-        .display-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            margin: 20px auto;
-            padding: 20px;
-            background-color: #f0f0f0;
-            border-radius: 8px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
-            max-width: 95%;
-        }
-        
-        .display-container.presentation {
-            position: fixed;
-            left: 0;
-            top: 0;
-            width: 100vw;
-            height: 100vh;
-            background: #000;
-            z-index: 1000;
-            margin: 0;
-        }
-
-        #qrDisplay {
-            position: relative;
-            border: 2px solid #333;
-            background: white;
-            padding: 40px;
-            border-radius: 8px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            margin: 0 auto;
-            overflow: hidden; /* Prevent layout shifts */
-        }
-
-        .progress-container {
-            width: 100%;
-            background: #f0f0f0;
-            border-radius: 4px;
-            overflow: hidden;
-            height: 20px;
-            position: relative;
-        }
-
-        .progress-bar {
-            height: 100%;
-            background: #007bff;
-            width: 0;
-            transition: width 0.3s;
-        }
-
-        .progress-text {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #000;
-            font-weight: bold;
-        }
-
-        #status {
-            font-family: monospace;
-            padding: 10px;
-            background: #f0f0f0;
-            border-radius: 4px;
-            max-height: 200px;
-            overflow-y: auto;
-            margin: 20px;
-        }
-
-        #debugView {
-            margin-top: 20px;
-            padding: 15px;
-            background: #f8f8f8;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-family: monospace;
-            white-space: pre-wrap;
-            font-size: 12px;
-            max-height: 300px;
-            overflow-y: auto;
-            display: none;
-        }
-
-        .frame-counter {
-            font-weight: bold;
-            margin-bottom: 10px;
-            font-size: 1.2em;
-        }
-
-        .info-panel {
-            background: #f0f0f0;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 20px;
-            width: 100%;
-            max-width: 800px;
-            align-self: center;
-        }
-
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
-        }
-
-        .info-label {
-            font-weight: bold;
-        }
-
-        .tabs {
-            display: flex;
-            margin: 20px 20px 0 20px;
-        }
-
-        .tab {
-            padding: 10px 20px;
-            background: #eee;
-            cursor: pointer;
-            border-radius: 4px 4px 0 0;
-            border: 1px solid #ddd;
-            border-bottom: none;
-        }
-
-        .tab.active {
-            background: #fff;
-            font-weight: bold;
-        }
-
-        .tab-content {
-            display: none;
-            padding: 20px;
-            border: 1px solid #ddd;
-            border-radius: 0 4px 4px 4px;
-            margin: 0 20px 20px 20px;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        .sets-selection-panel {
-            margin-top: 20px;
-            background: #f5f5f5;
-            padding: 15px;
-            border-radius: 8px;
-        }
-
-        #setsSelectionList {
-            margin-top: 10px;
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-            gap: 8px;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-
-        .set-checkbox {
-            background-color: #e6f7ff;
-            padding: 8px 12px;
-            border-radius: 4px;
-            margin: 3px;
-            cursor: pointer;
-            border: 1px solid #1890ff;
-            text-align: center;
-        }
-
-        #presentationOverlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: #222;
-            z-index: 1000;
-            display: none;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-        }
-
-        #presentationQrDisplay {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            width: 100vw;
-            height: 100vh;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-
-        #presentationCounter {
-            position: absolute;
-            bottom: 5px;
-            left: 5px;
-            text-align: left;
-            color: #fff;
-            font-size: 16px;
-            padding: 5px 10px;
-            background: rgba(0,0,0,0.7);
-            border-radius: 4px;
-        }
-        
-        #presentationHeader {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            right: 10px;
-            text-align: center;
-            color: #fff;
-            font-size: 18px;
-            padding: 10px;
-            background: rgba(0,0,0,0.7);
-            border-radius: 4px;
-            display: flex;
-            justify-content: space-between;
-        }
-
-        #exitPresentationBtn {
-            position: absolute;
-            top: 70px; /* Move down below the header */
-            right: 10px;
-            background: rgba(255,30,30,0.7);
-            color: white;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 5px;
-            cursor: pointer;
-            z-index: 1010;
-            font-size: 14px;
-        }
-
-        #countdownOverlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.9);
-            z-index: 2000;
-            display: none;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-        }
-
-        #countdownDisplay {
-            font-size: 120px;
-            color: white;
-            font-weight: bold;
-            margin-bottom: 20px;
-        }
-        
-        #countdownFrame {
-            border: 20px solid #FF0000;
-            border-radius: 10px;
-            width: 70vmin;
-            height: 70vmin;
-            position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: #FFFFFF;
-            margin-top: 30px;
-            box-sizing: content-box; /* Ensure border is added outside the content area */
-        }
-        
-        #countdownInstructions {
-            position: absolute;
-            top: -40px;
-            left: 0;
-            right: 0;
-            text-align: center;
-            color: white;
-            font-size: 18px;
-        }
-        
-        /* Time estimate display styles */
-        .time-estimate {
-            margin-top: 10px;
-            padding: 8px 12px;
-            background-color: #f0f7ff;
-            border-radius: 4px;
-            border: 1px solid #d0e3ff;
-            font-size: 14px;
-            line-height: 1.5;
-        }
-        
-        /* Normal countdown overlay */
-        #normalCountdown {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.9);
-            color: white;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            font-size: 40px;
-            z-index: 100;
-            border-radius: 8px;
-        }
-        
-        /* Normal timer display */
-        #normalTimerDisplay {
-            width: 100%;
-            display: flex;
-            justify-content: space-between;
-            margin-top: 10px;
-            background-color: #e9f5ff;
-            border-radius: 4px;
-            padding: 8px 12px;
-            font-size: 14px;
-            border: 1px solid #b8e0ff;
-        }
-        
-        /* QR code animations */
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        
-        .qr-grid-cell {
-            animation: fadeIn 0.2s ease-in-out;
-        }
-
-        .file-queue-panel {
-            margin: 20px;
-            background: #f5f5f5;
-            padding: 15px;
-            border-radius: 8px;
-            display: none;
-        }
-
-        #fileQueueList {
-            margin-top: 10px;
-            max-height: 150px;
-            overflow-y: auto;
-        }
-
-        .file-queue-item {
-            padding: 5px;
-            margin: 2px 0;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .file-status {
-            float: right;
-            font-size: 0.8em;
-        }
-
-        h1 {
-            margin: 20px;
-        }
-
-        @media (max-width: 768px) {
-            .control-row {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            
-            .control-label {
-                margin-bottom: 5px;
-            }
-            
-            button {
-                width: 100%;
-                margin-top: 5px;
-            }
-        }
-
-        /* Ensure QR code is always visible and centered */
-        #qrDisplay img {
-            max-width: 100%;
-            height: auto;
-            display: block;
-            margin: 0 auto;
-        }
-
-        #presentationQrDisplay img {
-            max-width: 90vmin;
-            max-height: 90vmin;
-            display: block;
-        }
-    </style>
-</head>
-
-<body>
-    <h1>Video QR Code Encoder</h1>
-
-    <!-- Moved QR display to the top for better visibility -->
-    <div class="display-container" id="displayContainer">
-        <div class="frame-counter" id="frameCounter">Frame: 0 / 0</div>
-        <div id="qrDisplay" style="width: 500px; height: 500px;"></div>
-        <div class="progress-container">
-            <div class="progress-bar" id="progressBar"></div>
-            <div class="progress-text" id="progressText">0%</div>
-        </div>
-        <!-- Added toggle button for presentation mode -->
-        <div style="margin-top: 15px; text-align: center;">
-            <button id="togglePresentationBtn" disabled style="background-color: #4285f4; color: white; padding: 10px 15px; font-weight: bold; font-size: 16px; border-radius: 5px; border: none; cursor: pointer;">
-                <span id="togglePresentationText">Enter Full Screen Mode</span>
-            </button>
-        </div>
-    </div>
-
-    <div class="control-panel">
-        <div class="control-group">
-            <div class="control-row">
-                <div class="control-label">Select File(s):</div>
-                <input type="file" id="fileInput" multiple />
-            </div>
-        </div>
-
-        <div class="control-group">
-            <div class="control-row">
-                <div class="control-label">QR Display Speed:</div>
-                <input type="range" id="speedSlider" min="1" max="30" value="10" />
-                <div class="value-display" id="speedValue">10 fps</div>
-            </div>
-        </div>
-
-        <div class="control-group">
-            <div class="control-row">
-                <div class="control-label">QR Code Size:</div>
-                <input type="range" id="sizeSlider" min="200" max="800" value="500" />
-                <div class="value-display" id="sizeValue">500px</div>
-                <button id="resetSizeBtn" style="padding: 2px 8px; font-size: 12px; margin-left: 10px;">Reset to 500px</button>
-                <button id="showSizeBtn" style="padding: 2px 8px; font-size: 12px; margin-left: 5px; background-color: #f0f0f0; color: #333;">Show Size</button>
-            </div>
-        </div>
-
-        <div class="control-group">
-            <div class="control-row">
-                <div class="control-label">QR Grid Layout:</div>
-                <select id="gridLayoutSelect">
-                    <option value="1">1x1 (Single QR)</option>
-                    <option value="2">2x1 (2 QRs horizontally)</option>
-                    <option value="4">2x2 (4 QRs grid)</option>
-                    <option value="8">4x2 (8 QRs grid)</option>
-                    <option value="16">4x4 (16 QRs grid)</option>
-                    <option value="32">8x4 (32 QRs grid)</option>
-                </select>
-                <div class="value-display" id="gridValue">1 QR per frame</div>
-            </div>
-        </div>
-
-        <div class="control-group">
-            <div class="control-row">
-                <div class="control-label">Chunk Size:</div>
-                <input type="range" id="chunkSlider" min="100" max="1000" step="50" value="500" />
-                <div class="value-display" id="chunkValue">500 bytes</div>
-            </div>
-        </div>
-
-        <div class="control-group">
-            <div class="control-row">
-                <div class="control-label">Countdown Time:</div>
-                <input type="range" id="countdownSlider" min="1" max="10" value="5" />
-                <div class="value-display" id="countdownValue">5 seconds</div>
-            </div>
-        </div>
-
-        <div class="control-row">
-            <button id="generateBtn" disabled>Generate QR Codes</button>
-            <button id="startBtn" disabled>Start Display</button>
-            <button id="stopBtn" disabled>Stop Display</button>
-            <button id="resetAllBtn" style="background-color: #f5f5f5; color: #333; border: 1px solid #ddd;">Reset All Settings</button>
-        </div>
-    </div>
+// Restructure the metadata and frame generation system
+function updateTotalFramesCount() {
+    // Count how many chunks are in selected sets
+    let selectedChunksCount = 0;
+    let selectedSetsCount = 0;
     
-    <div class="file-queue-panel">
-        <h3>File Queue</h3>
-        <div id="fileQueueList"></div>
-        <div style="margin-top: 10px; display: flex; gap: 10px;">
-            <button id="moveUpBtn" disabled>Move Up</button>
-            <button id="moveDownBtn" disabled>Move Down</button>
-            <button id="removeFileBtn" disabled>Remove</button>
-        </div>
-    </div>
+    // Enhanced logging information
+    let setDetails = [];
     
-    <div class="tabs">
-        <div class="tab active" data-tab="display">QR Info</div>
-        <div class="tab" data-tab="debug">Debug View</div>
-    </div>
-
-    <div class="tab-content active" data-tab-content="display">
-        <div class="sets-selection-panel" style="display: none;">
-            <h3>Set Selection</h3>
-            <p style="margin-bottom: 10px;">Select which sets to include in the transmission:</p>
-            <div id="setsSelectionList"></div>
-            <div style="margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap;">
-                <button id="selectAllSetsBtn">Select All</button>
-                <button id="deselectAllSetsBtn">Deselect All</button>
-                <button id="selectMissingSetsBtn" disabled>Select Missing</button>
-            </div>
-        </div>
-
-        <div class="info-panel">
-            <div class="info-row">
-                <span class="info-label">File Name:</span>
-                <span id="fileNameInfo">None selected</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">File Size:</span>
-                <span id="fileSizeInfo">0 bytes</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Total Sets:</span>
-                <span id="totalSetsInfo">0</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Chunks Per Set:</span>
-                <span id="chunksPerSetInfo">0</span>
-            </div>
-        </div>
-    </div>
+    selectedSets.forEach((isSelected, index) => {
+        if (isSelected) {
+            selectedSetsCount++;
+            const setSize = sets[index].length;
+            selectedChunksCount += setSize;
+            setDetails.push(`Set ${index + 1}: ${setSize} chunks`);
+            log(`Set ${index + 1}: ${setSize} chunks included`, false);
+        }
+    });
     
-    <div class="tab-content" data-tab-content="debug">
-        <div id="debugView"></div>
-    </div>
+    // Show detailed set information
+    if (setDetails.length > 0) {
+        log(`Selected sets breakdown:\n${setDetails.join('\n')}`, false);
+    }
     
-    <div id="status">Ready to encode files...</div>
+    // Calculate total frames:
+    // 1 for global metadata + 1 per selected set metadata + all chunks + 1 end frame
+    totalFrames = 1 + selectedSetsCount + selectedChunksCount + 1;
     
-    <div id="presentationOverlay">
-        <div id="presentationHeader">
-            <span id="presentationFilename">Transmitting: filename.txt</span>
-            <div>
-                <span id="presentationEstTime">Est. Time: 00:00</span>
-                <span id="presentationRemaining" style="margin-left: 20px;">Remaining: 00:00</span>
-            </div>
-        </div>
-        <div id="presentationQrDisplay"></div>
-        <div id="presentationCounter"></div>
-        <button id="exitPresentationBtn">Exit</button>
-    </div>
+    log(`Selected ${selectedSetsCount} sets with ${selectedChunksCount} chunks`);
+    log(`Total frames to display: ${totalFrames}`);
+    log(`Frame breakdown: 1 global metadata + ${selectedSetsCount} set metadata + ${selectedChunksCount} chunks + 1 end frame`, false);
+    
+    updateProgress(0, totalFrames);
+}
 
-    <div id="countdownOverlay">
-        <div id="countdownDisplay">5</div>
-        <div id="countdownFrame">
-            <div id="countdownInstructions">Position camera to frame this red border</div>
-        </div>
-    </div>
-
-    <script>
-        // Constants and configuration
-        const MAX_SET_SIZE = 100 * 1024; // 100KB
-        const DEFAULT_CHUNK_SIZE = 500; // Default bytes per chunk
-        const SET_SIZE_CHUNKS = 50; // Number of chunks per set
-        const METADATA_DISPLAY_MULTIPLIER = 3; // Show metadata frames this many times longer
-        const SET_HEADER_DISPLAY_MULTIPLIER = 2; // Show set headers this many times longer
+// Enhanced getFrameContent function with set-specific metadata
+function getFrameContent(frameIndex) {
+    let frameContent = '';
+    let frameLabel = '';
+    let frameType = 'chunk';
+    
+    if (frameIndex === 0) {
+        // Global metadata frame
+        const includeFileQueueInfo = fileQueue.length > 1;
         
-        // DOM Elements
-        const fileInput = document.getElementById('fileInput');
-        const speedSlider = document.getElementById('speedSlider');
-        const sizeSlider = document.getElementById('sizeSlider');
-        const gridLayoutSelect = document.getElementById('gridLayoutSelect');
-        const chunkSlider = document.getElementById('chunkSlider');
-        const countdownSlider = document.getElementById('countdownSlider');
-        const speedValue = document.getElementById('speedValue');
-        const sizeValue = document.getElementById('sizeValue');
-        const gridValue = document.getElementById('gridValue');
-        const chunkValue = document.getElementById('chunkValue');
-        const countdownValueEl = document.getElementById('countdownValue');
-        const generateBtn = document.getElementById('generateBtn');
-        const startBtn = document.getElementById('startBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        const resetSizeBtn = document.getElementById('resetSizeBtn');
-        const showSizeBtn = document.getElementById('showSizeBtn');
-        const resetAllBtn = document.getElementById('resetAllBtn');
-        const qrDisplay = document.getElementById('qrDisplay');
-        const progressBar = document.getElementById('progressBar');
-        const progressText = document.getElementById('progressText');
-        const frameCounter = document.getElementById('frameCounter');
-        const statusEl = document.getElementById('status');
-        const togglePresentationBtn = document.getElementById('togglePresentationBtn');
-        const debugView = document.getElementById('debugView');
-        const fileQueuePanel = document.querySelector('.file-queue-panel');
-        const fileQueueList = document.getElementById('fileQueueList');
-        const moveUpBtn = document.getElementById('moveUpBtn');
-        const moveDownBtn = document.getElementById('moveDownBtn');
-        const removeFileBtn = document.getElementById('removeFileBtn');
-        const setsSelectionPanel = document.querySelector('.sets-selection-panel');
-        const setsSelectionList = document.getElementById('setsSelectionList');
-        const selectAllSetsBtn = document.getElementById('selectAllSetsBtn');
-        const deselectAllSetsBtn = document.getElementById('deselectAllSetsBtn');
-        const selectMissingSetsBtn = document.getElementById('selectMissingSetsBtn');
-        // countdownValueEl is already defined above
-        const fileNameInfo = document.getElementById('fileNameInfo');
-        const fileSizeInfo = document.getElementById('fileSizeInfo');
-        const totalSetsInfo = document.getElementById('totalSetsInfo');
-        const chunksPerSetInfo = document.getElementById('chunksPerSetInfo');
-        const presentationOverlay = document.getElementById('presentationOverlay');
-        const presentationQrDisplay = document.getElementById('presentationQrDisplay');
-        const presentationCounter = document.getElementById('presentationCounter');
-        const exitPresentationBtn = document.getElementById('exitPresentationBtn');
-        const countdownOverlay = document.getElementById('countdownOverlay');
-        const countdownDisplay = document.getElementById('countdownDisplay');
-        const displayContainer = document.getElementById('displayContainer');
-
-        // State variables
-        let fileContent = null;
-        let fileName = '';
-        let fileSize = 0;
-        let chunks = [];
-        let sets = [];
-        let displayInterval = null;
-        let currentFrame = 0;
-        let totalFrames = 0;
-        let isPlaying = false;
-        let debugLogs = [];
-        let countdownTimer = null;
-        let countdownValue = 0;
-        let selectedSets = []; // Tracks which sets are selected for display
-        let fileQueue = []; // For multiple file transfers
-        let currentFileIndex = 0; // Currently active file
-        let frameTimingMultiplier = 1; // Used for varying frame times
-        let isPresentation = false;
+        // Calculate exact number of chunks from selected sets
+        let selectedChunksCount = 0;
+        let selectedSetIndices = [];
         
-        // Tab functionality
-        const tabs = document.querySelectorAll('.tab');
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                tabs.forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                
-                const tabContents = document.querySelectorAll('.tab-content');
-                tabContents.forEach(content => {
-                    content.classList.remove('active');
-                });
-                
-                const targetContent = document.querySelector(`.tab-content[data-tab-content="${tab.dataset.tab}"]`);
-                targetContent.classList.add('active');
-            });
-        });
-
-        // UI event listeners
-        speedSlider.addEventListener('input', () => {
-            speedValue.textContent = `${speedSlider.value} fps`;
-            if (isPlaying) {
-                restartInterval();
+        selectedSets.forEach((isSelected, index) => {
+            if (isSelected) {
+                selectedChunksCount += sets[index].length;
+                selectedSetIndices.push(index);
             }
         });
-
-        sizeSlider.addEventListener('input', () => {
-            const size = sizeSlider.value;
-            sizeValue.textContent = `${size}px`;
+        
+        const metadata = {
+            type: "global_metadata",
+            file_name: fileName,
+            file_size: fileSize,
+            total_sets: sets.length,
+            total_selected_sets: selectedSets.filter(Boolean).length,
+            chunks_per_set: SET_SIZE_CHUNKS,
+            total_chunks: selectedChunksCount,
+            actual_chunks_count: selectedChunksCount,
+            timestamp: Date.now(),
+            qr_grid_size: parseInt(gridLayoutSelect.value),
+            chunks_per_selected_set: selectedSetIndices.map(idx => sets[idx].length),
+            version: "2.0" // Version to help decoder identify the protocol
+        };
+        
+        // Add file queue information if multiple files
+        if (includeFileQueueInfo) {
+            metadata.file_index = currentFileIndex + 1;
+            metadata.total_files = fileQueue.length;
+            metadata.remaining_files = fileQueue.length - currentFileIndex - 1;
+        }
+        
+        // Add selected sets information
+        metadata.selected_sets = selectedSets.map((selected, index) => 
+            selected ? index + 1 : null).filter(Boolean);
+        
+        frameContent = JSON.stringify(metadata);
+        frameLabel = "Global Metadata";
+        frameType = 'metadata';
+        
+    } else {
+        // Calculate set boundaries for new set-specific metadata placement
+        let currentFrame = 1; // Start after global metadata
+        let setMetadataIndices = [];
+        let setFirstChunkIndices = [];
+        let totalChunks = 0;
+        
+        // Calculate frame indices for set-specific metadata and first chunks
+        selectedSets.forEach((isSelected, setIndex) => {
+            if (!isSelected) return;
             
-            // Use a flag to indicate this is a manual size update
-            const manualUpdate = true;
-            updateQRContainerSize(manualUpdate);
+            // This is the index of the set metadata frame
+            setMetadataIndices.push(currentFrame);
+            currentFrame++;
+            
+            // This is the index of the first chunk in this set
+            setFirstChunkIndices.push(currentFrame);
+            currentFrame += sets[setIndex].length;
+            
+            totalChunks += sets[setIndex].length;
         });
         
-        gridLayoutSelect.addEventListener('change', () => {
-            const qrCount = parseInt(gridLayoutSelect.value);
-            let layoutDesc = "";
+        // Check if this is a set metadata frame
+        const setMetadataIndex = setMetadataIndices.indexOf(frameIndex);
+        if (setMetadataIndex !== -1) {
+            // This is a set metadata frame
+            const setIndex = selectedSets.findIndex((selected, idx) => 
+                selected && setMetadataIndices.indexOf(frameIndex) === setMetadataIndices.findIndex(i => 
+                    selectedSets[idx] && i === frameIndex
+                )
+            );
             
-            switch(qrCount) {
-                case 1: layoutDesc = "1 QR per frame"; break;
-                case 2: layoutDesc = "2 QRs horizontally"; break;
-                case 4: layoutDesc = "2×2 grid (4 QRs)"; break;
-                case 8: layoutDesc = "4×2 grid (8 QRs)"; break;
-                case 16: layoutDesc = "4×4 grid (16 QRs)"; break;
-                case 32: layoutDesc = "8×4 grid (32 QRs)"; break;
-                default: layoutDesc = `${qrCount} QRs per frame`;
-            }
-            
-            gridValue.textContent = layoutDesc;
-            updateQRContainerSize();
-        });
-
-        // Function to update QR container size based on grid layout and available screen space
-        function updateQRContainerSize(isManualUpdate = false) {
-            // Make sure slider value is up to date in the display
-            sizeValue.textContent = `${sizeSlider.value}px`;
-            
-            const sliderSize = parseInt(sizeSlider.value);
-            const qrCount = parseInt(gridLayoutSelect.value);
-            
-            // Calculate rows and columns
-            let cols, rows;
-            switch(qrCount) {
-                case 1: cols = 1; rows = 1; break;
-                case 2: cols = 2; rows = 1; break; 
-                case 4: cols = 2; rows = 2; break;
-                case 8: cols = 4; rows = 2; break;
-                case 16: cols = 4; rows = 4; break;
-                case 32: cols = 8; rows = 4; break;
-                default: cols = 1; rows = 1;
-            }
-            
-            // Calculate maximum available space based on viewport
-            const viewportWidth = Math.max(document.documentElement.clientWidth, window.innerWidth || 0);
-            const viewportHeight = Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
-            
-            // For single QR code, use maximum possible size within bounds of slider
-            // For multiple QR codes, maintain spacing proportions but size dynamically
-            const padding = 20; // Pixels between QR codes
-            const containerPadding = 40; // Padding around the entire QR display
-            
-            // Always respect manual updates from the slider
-            let size = sliderSize;
-            
-            // Only apply automatic sizing when not manually updated
-            if (!isManualUpdate) {
-                // For a single QR, suggest optimal size but don't enforce it
-                if (qrCount === 1) {
-                    // For single QR, calculate optimal size (90% of smallest viewport dimension)
-                    const maxSingleSize = Math.min(viewportWidth * 0.9, viewportHeight * 0.9) - (containerPadding * 2);
-                    // But don't exceed the slider max value
-                    const sliderMax = parseInt(sizeSlider.max);
-                    const optimalSize = Math.min(maxSingleSize, sliderMax);
-                    
-                    // Just log the calculated optimal size for reference, but use slider value
-                    if (Math.abs(optimalSize - sliderSize) > 50) { // Only log if difference is significant
-                        log(`Optimal size for single QR would be ${Math.round(optimalSize)}px (current: ${sliderSize}px)`, false);
-                    }
-                } else {
-                    // For multiple QRs, calculate what will fit on screen while maintaining the grid
-                    const maxWidth = viewportWidth * 0.95 - (containerPadding * 2);
-                    const maxHeight = viewportHeight * 0.8 - (containerPadding * 2);
-                    
-                    // Calculate maximum size that will fit while maintaining grid proportions
-                    const maxSizeByWidth = (maxWidth - (padding * (cols - 1))) / cols;
-                    const maxSizeByHeight = (maxHeight - (padding * (rows - 1))) / rows;
-                    const maxSize = Math.min(maxSizeByWidth, maxSizeByHeight);
-                    
-                    // For multi-QR grids, we do enforce max size constraints for proper display
-                    if (sliderSize > maxSize) {
-                        size = maxSize;
-                        log(`Limiting grid QR size to ${Math.round(size)}px to fit on screen (requested: ${sliderSize}px)`, false);
-                    }
+            // Get global chunk offset for this set
+            let globalChunkOffset = 0;
+            for (let i = 0; i < setIndex; i++) {
+                if (selectedSets[i]) {
+                    globalChunkOffset += sets[i].length;
                 }
             }
             
-            // Calculate final grid dimensions with padding
-            const totalWidth = (size * cols) + (padding * (cols - 1));
-            const totalHeight = (size * rows) + (padding * (rows - 1));
-            
-            // Force size to update by applying a temporary different size first (fixes stuck size issue)
-            if (isManualUpdate) {
-                const tempSize = totalWidth + 1;
-                qrDisplay.style.width = `${tempSize}px`;
-                qrDisplay.style.height = `${tempSize}px`;
-                
-                // Force a layout recalculation
-                qrDisplay.offsetHeight;
-            }
-            
-            // Update container size with padding
-            qrDisplay.style.width = `${totalWidth}px`;
-            qrDisplay.style.height = `${totalHeight}px`;
-            qrDisplay.style.padding = `${containerPadding}px`;
-            qrDisplay.style.boxSizing = 'content-box'; // Ensure padding adds to size
-            qrDisplay.style.backgroundColor = '#ffffff'; // Ensure white background
-            qrDisplay.style.border = '4px solid rgba(255, 0, 0, 0.6)'; // Red border
-            
-            // Update grid layout
-            qrDisplay.style.display = 'grid';
-            qrDisplay.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-            qrDisplay.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
-            qrDisplay.style.gap = `${padding}px`;
-            
-            // Update presentation frame border styling
-            const countdownFrame = document.getElementById('countdownFrame');
-            if (countdownFrame) {
-                // Make the frame match the qrDisplay size including padding
-                countdownFrame.style.width = `${totalWidth + (containerPadding * 2)}px`;
-                countdownFrame.style.height = `${totalHeight + (containerPadding * 2)}px`;
-            }
-            
-            // Log the actual size being used
-            log(`QR size: ${size}px, Grid: ${cols}×${rows}, Total size: ${totalWidth}×${totalHeight}px`);
-            
-            // Update time estimates based on new grid size
-            updateEstimatedTime();
-        }
-        
-        // Function to update the estimated transfer time display
-        function updateEstimatedTime() {
-            if (!totalFrames || !fileName || startBtn.disabled) return; // Only show when QR generation is ready
-            
-            const fps = parseInt(speedSlider.value);
-            const totalTimeSeconds = calculateEstimatedTime(totalFrames, fps);
-            const gridSize = parseInt(gridLayoutSelect.value);
-            const effectiveSpeed = fps * gridSize; // Effective QR codes per second
-            
-            // Calculate transfer rate in bytes per second
-            const bytesPerSecond = (fileSize / totalTimeSeconds).toFixed(2);
-            const transferRate = formatFileSize(bytesPerSecond) + '/sec';
-            
-            const infoText = `
-Estimated transfer:
-• ${totalFrames} frames at ${fps} fps
-• ${gridSize} QR${gridSize > 1 ? 's' : ''} per frame = ${effectiveSpeed} QR/sec
-• Time: ${formatTime(totalTimeSeconds)}
-• Transfer rate: ${transferRate}
-• File: ${formatFileSize(fileSize)}`;
-            
-            // Show in the status element
-            statusEl.innerHTML = infoText.replace(/\n/g, '<br>');
-            
-            // Create or update the time estimate display for normal view
-            let timeEstimateDisplay = document.getElementById('normalTimeEstimate');
-            if (!timeEstimateDisplay) {
-                timeEstimateDisplay = document.createElement('div');
-                timeEstimateDisplay.id = 'normalTimeEstimate';
-                timeEstimateDisplay.className = 'time-estimate';
-                timeEstimateDisplay.style.marginTop = '10px';
-                timeEstimateDisplay.style.padding = '8px 12px';
-                timeEstimateDisplay.style.backgroundColor = '#f0f7ff';
-                timeEstimateDisplay.style.borderRadius = '4px';
-                timeEstimateDisplay.style.border = '1px solid #d0e3ff';
-                timeEstimateDisplay.style.fontSize = '14px';
-                frameCounter.parentNode.insertBefore(timeEstimateDisplay, frameCounter);
-            }
-            
-            timeEstimateDisplay.innerHTML = `
-                <div><strong>Est. Time:</strong> ${formatTime(totalTimeSeconds)}</div>
-                <div><strong>Transfer Rate:</strong> ${transferRate}</div>
-                <div><strong>Grid Layout:</strong> ${gridValue.textContent}</div>
-            `;
-            
-            // Also update presentation estimate if it exists
-            const presentationEstTime = document.getElementById('presentationEstTime');
-            if (presentationEstTime) {
-                presentationEstTime.textContent = `Est. Time: ${formatTime(totalTimeSeconds)}`;
-            }
-        }
-
-        chunkSlider.addEventListener('input', () => {
-            chunkValue.textContent = `${chunkSlider.value} bytes`;
-            // Don't update time estimates here as chunk size doesn't directly affect display time
-        });
-
-        countdownSlider.addEventListener('input', () => {
-            countdownValueEl.textContent = `${countdownSlider.value} seconds`;
-        });
-        
-        // Update time estimates when parameters change
-        speedSlider.addEventListener('change', updateEstimatedTime);
-        gridLayoutSelect.addEventListener('change', updateEstimatedTime);
-
-        fileInput.addEventListener('change', (e) => {
-            const files = e.target.files;
-            if (!files || files.length === 0) {
-                generateBtn.disabled = true;
-                fileQueuePanel.style.display = 'none';
-                return;
-            }
-            
-            // Show the file queue panel
-            fileQueuePanel.style.display = 'block';
-            
-            // Clear existing queue display
-            fileQueueList.innerHTML = '';
-            fileQueue = [];
-            
-            // Add all files to the queue
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                fileQueue.push({
-                    file: file,
-                    name: file.name,
-                    size: file.size,
-                    content: null,
-                    processed: false
-                });
-                
-                // Create file entry in the queue display
-                const fileItem = document.createElement('div');
-                fileItem.className = 'file-queue-item';
-                fileItem.dataset.index = i;
-                fileItem.style.padding = '5px';
-                fileItem.style.margin = '2px 0';
-                fileItem.style.backgroundColor = i === 0 ? '#e6f7ff' : 'transparent';
-                fileItem.style.borderRadius = '4px';
-                fileItem.style.cursor = 'pointer';
-                
-                fileItem.innerHTML = `
-                    <div>
-                        <strong>${file.name}</strong> (${formatFileSize(file.size)})
-                        <span class="file-status" style="float: right; font-size: 0.8em; color: #888;">Pending</span>
-                    </div>
-                `;
-                
-                fileItem.addEventListener('click', () => {
-                    const items = fileQueueList.querySelectorAll('.file-queue-item');
-                    items.forEach(item => item.style.backgroundColor = 'transparent');
-                    fileItem.style.backgroundColor = '#e6f7ff';
-                    
-                    currentFileIndex = parseInt(fileItem.dataset.index);
-                    updateQueueControls();
-                });
-                
-                fileQueueList.appendChild(fileItem);
-            }
-            
-            // Start loading the first file
-            loadFileContent(0);
-            
-            // Update UI
-            updateQueueControls();
-            generateBtn.disabled = fileQueue.length === 0;
-        });
-
-        // Function to load a file's content from the queue
-        function loadFileContent(index) {
-            if (index >= fileQueue.length) return;
-            
-            const fileItem = fileQueue[index];
-            updateFileStatus(index, 'Loading...', '#2196f3');
-            
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                fileItem.content = e.target.result;
-                fileItem.processed = true;
-                updateFileStatus(index, 'Ready', '#4caf50');
-                
-                // If this is the current file, update the display
-                if (index === currentFileIndex) {
-                    fileName = fileItem.name;
-                    fileSize = fileItem.size;
-                    fileContent = fileItem.content;
-                    
-                    fileNameInfo.textContent = fileName;
-                    fileSizeInfo.textContent = formatFileSize(fileSize);
-                    log(`File ready: ${fileName} (${formatFileSize(fileSize)})`);
-                }
-                
-                // Load the next file
-                loadFileContent(index + 1);
+            const setMetadata = {
+                type: "set_metadata",
+                set_index: setIndex + 1,
+                total_sets: selectedSets.filter(Boolean).length,
+                chunks_in_set: sets[setIndex].length,
+                global_chunk_offset: globalChunkOffset,
+                file_name: fileName, // Include file info in each set metadata
+                timestamp: Date.now()
             };
             
-            reader.onerror = () => {
-                updateFileStatus(index, 'Error', '#f44336');
-                log(`Error reading file: ${fileItem.name}`, true);
-                loadFileContent(index + 1);
+            frameContent = JSON.stringify(setMetadata);
+            frameLabel = `Set ${setIndex + 1} Metadata`;
+            frameType = 'set_metadata';
+        }
+        // End frame check
+        else if (frameIndex === totalFrames - 1) {
+            // Enhanced end frame with verification data
+            const selectedChunksCount = selectedSets.reduce((count, selected, index) => 
+                selected ? count + sets[index].length : count, 0);
+            
+            const endData = {
+                type: "end",
+                file_name: fileName,
+                file_size: fileSize,
+                total_chunks_sent: selectedChunksCount,
+                selected_sets: selectedSets.map((selected, index) => 
+                    selected ? index + 1 : null).filter(Boolean),
+                chunks_per_selected_set: selectedSets.map((selected, index) => 
+                    selected ? sets[index].length : 0).filter(count => count > 0),
+                timestamp: Date.now(),
+                version: "2.0"
             };
             
-            reader.readAsArrayBuffer(fileItem.file);
+            frameContent = JSON.stringify(endData);
+            frameLabel = "End Frame";
+            frameType = 'end';
         }
-        
-        // Update status display for a file in the queue
-        function updateFileStatus(index, status, color) {
-            const fileItem = fileQueueList.querySelectorAll('.file-queue-item')[index];
-            if (fileItem) {
-                const statusElement = fileItem.querySelector('.file-status');
-                statusElement.textContent = status;
-                statusElement.style.color = color || '#888';
-            }
-        }
-        
-        // Update queue control buttons
-        function updateQueueControls() {
-            moveUpBtn.disabled = currentFileIndex <= 0;
-            moveDownBtn.disabled = currentFileIndex >= fileQueue.length - 1;
-            removeFileBtn.disabled = fileQueue.length === 0;
+        // Must be a chunk frame
+        else {
+            // Find which set and chunk this corresponds to
+            let currentPosition = 1; // Start after global metadata
+            let targetSet = -1;
+            let localChunkIndex = -1;
             
-            // Update current file information
-            if (fileQueue.length > 0) {
-                const currentFile = fileQueue[currentFileIndex];
-                fileName = currentFile.name;
-                fileSize = currentFile.size;
-                fileContent = currentFile.content;
+            for (let i = 0; i < selectedSets.length; i++) {
+                if (!selectedSets[i]) continue;
                 
-                fileNameInfo.textContent = fileName;
-                fileSizeInfo.textContent = formatFileSize(fileSize);
+                // Skip set metadata frame
+                currentPosition++;
                 
-                // Mark current file as active
-                const fileItems = fileQueueList.querySelectorAll('.file-queue-item');
-                fileItems.forEach((item, idx) => {
-                    updateFileStatus(
-                        idx, 
-                        idx === currentFileIndex ? 'Active' : (fileQueue[idx].processed ? 'Ready' : 'Pending'),
-                        idx === currentFileIndex ? '#ff9800' : (fileQueue[idx].processed ? '#4caf50' : '#888')
-                    );
+                // Check if the frameIndex is within this set's chunks
+                if (currentPosition <= frameIndex && frameIndex < currentPosition + sets[i].length) {
+                    targetSet = i;
+                    localChunkIndex = frameIndex - currentPosition;
+                    break;
+                }
+                
+                // Move past this set's chunks
+                currentPosition += sets[i].length;
+            }
+            
+            if (targetSet !== -1 && localChunkIndex !== -1) {
+                // Calculate global chunk index
+                let globalChunkIndex = 0;
+                for (let i = 0; i < targetSet; i++) {
+                    if (selectedSets[i]) {
+                        globalChunkIndex += sets[i].length;
+                    }
+                }
+                globalChunkIndex += localChunkIndex;
+                
+                // Create enhanced chunk data
+                const chunkData = {
+                    type: "chunk",
+                    set_index: targetSet + 1,
+                    chunk_index: localChunkIndex + 1,
+                    chunks_in_set: sets[targetSet].length,
+                    global_chunk_index: globalChunkIndex,
+                    data: sets[targetSet][localChunkIndex] || ""
+                };
+                
+                frameContent = JSON.stringify(chunkData);
+                frameLabel = `Set ${targetSet + 1}, Chunk ${localChunkIndex + 1}`;
+                frameType = 'chunk';
+            } else {
+                // Error case - shouldn't happen with proper indexing
+                frameContent = JSON.stringify({ 
+                    error: "Invalid chunk index", 
+                    index: frameIndex,
+                    totalFrames: totalFrames
                 });
+                frameLabel = "Error";
+                frameType = 'error';
             }
         }
-        
-        // Queue control buttons
-        moveUpBtn.addEventListener('click', () => {
-            if (currentFileIndex <= 0) return;
+    }
+    
+    return { content: frameContent, label: frameLabel, type: frameType };
+}
+
+// 2. Enhanced Set Selection Interface
+function enhanceSetSelectionInterface() {
+    // Make the sets selection panel more prominent
+    setsSelectionPanel.style.background = '#f0f7ff';
+    setsSelectionPanel.style.border = '2px solid #1890ff';
+    setsSelectionPanel.style.borderRadius = '8px';
+    setsSelectionPanel.style.padding = '15px';
+    setsSelectionPanel.style.margin = '20px 0';
+    setsSelectionPanel.style.boxShadow = '0 2px 8px rgba(24, 144, 255, 0.2)';
+    
+    // Add a clear title
+    const titleDiv = document.createElement('div');
+    titleDiv.innerHTML = `<h3 style="margin-top:0; color:#1890ff;">Set Selection for Transfer</h3>
+                          <p style="margin-bottom:15px;">Select which sets to include in the transmission. 
+                          Each set contains a portion of the file data.</p>`;
+    setsSelectionPanel.insertBefore(titleDiv, setsSelectionPanel.firstChild);
+    
+    // Add a "Resend Selected Sets" button
+    const resendButton = document.createElement('button');
+    resendButton.id = 'resendSetsBtn';
+    resendButton.textContent = 'Prepare Selected Sets for Transfer';
+    resendButton.style.marginTop = '15px';
+    resendButton.style.backgroundColor = '#52c41a';
+    resendButton.style.color = 'white';
+    resendButton.style.border = 'none';
+    resendButton.style.borderRadius = '4px';
+    resendButton.style.padding = '10px 15px';
+    resendButton.style.cursor = 'pointer';
+    resendButton.style.fontSize = '14px';
+    resendButton.style.fontWeight = 'bold';
+    resendButton.disabled = true;
+    
+    // Add button to the sets selection panel
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.display = 'flex';
+    buttonContainer.style.justifyContent = 'center';
+    buttonContainer.style.marginTop = '15px';
+    buttonContainer.appendChild(resendButton);
+    setsSelectionPanel.appendChild(buttonContainer);
+    
+    // Add event listener for the resend button
+    resendButton.addEventListener('click', function() {
+        // Recalculate frames based on current selection
+        updateTotalFramesCount();
+        // Enable start button
+        startBtn.disabled = false;
+        // Provide feedback to the user
+        log(`Prepared ${selectedSets.filter(Boolean).length} sets for transmission.`);
+        // Update time estimates
+        updateEstimatedTime();
+    });
+    
+    // Enhance the set checkboxes for better visibility
+    const enhanceSetCheckboxes = function() {
+        const checkboxes = setsSelectionList.querySelectorAll('.set-checkbox');
+        checkboxes.forEach((checkbox, index) => {
+            // Add more visual cues
+            checkbox.style.display = 'flex';
+            checkbox.style.flexDirection = 'column';
+            checkbox.style.alignItems = 'center';
+            checkbox.style.justifyContent = 'center';
+            checkbox.style.padding = '10px';
+            checkbox.style.height = '70px';
+            checkbox.style.transition = 'all 0.2s';
             
-            // Swap files in queue
-            const temp = fileQueue[currentFileIndex];
-            fileQueue[currentFileIndex] = fileQueue[currentFileIndex - 1];
-            fileQueue[currentFileIndex - 1] = temp;
-            
-            currentFileIndex--;
-            refreshQueueDisplay();
-        });
-        
-        moveDownBtn.addEventListener('click', () => {
-            if (currentFileIndex >= fileQueue.length - 1) return;
-            
-            // Swap files in queue
-            const temp = fileQueue[currentFileIndex];
-            fileQueue[currentFileIndex] = fileQueue[currentFileIndex + 1];
-            fileQueue[currentFileIndex + 1] = temp;
-            
-            currentFileIndex++;
-            refreshQueueDisplay();
-        });
-        
-        removeFileBtn.addEventListener('click', () => {
-            if (fileQueue.length === 0) return;
-            
-            // Remove current file
-            fileQueue.splice(currentFileIndex, 1);
-            
-            if (currentFileIndex >= fileQueue.length) {
-                currentFileIndex = Math.max(0, fileQueue.length - 1);
+            // Add set size information
+            if (sets[index]) {
+                const sizeText = document.createElement('div');
+                sizeText.style.fontSize = '11px';
+                sizeText.style.marginTop = '5px';
+                sizeText.textContent = `${sets[index].length} chunks`;
+                checkbox.appendChild(sizeText);
+                
+                // Add size indicator (approx. KB)
+                const totalSize = sets[index].reduce((size, chunk) => size + (chunk ? chunk.length : 0), 0);
+                const sizeKB = Math.round((totalSize * 3/4) / 1024); // Approximate base64 to binary conversion
+                
+                const sizeIndicator = document.createElement('div');
+                sizeIndicator.style.fontSize = '10px';
+                sizeIndicator.style.color = '#666';
+                sizeIndicator.textContent = `~${sizeKB} KB`;
+                checkbox.appendChild(sizeIndicator);
             }
             
-            refreshQueueDisplay();
-            generateBtn.disabled = fileQueue.length === 0;
-        });
-        
-        function refreshQueueDisplay() {
-            fileQueueList.innerHTML = '';
-            
-            fileQueue.forEach((fileItem, index) => {
-                const fileElement = document.createElement('div');
-                fileElement.className = 'file-queue-item';
-                fileElement.dataset.index = index;
-                fileElement.style.padding = '5px';
-                fileElement.style.margin = '2px 0';
-                fileElement.style.backgroundColor = index === currentFileIndex ? '#e6f7ff' : 'transparent';
-                fileElement.style.borderRadius = '4px';
-                fileElement.style.cursor = 'pointer';
-                
-                fileElement.innerHTML = `
-                    <div>
-                        <strong>${fileItem.name}</strong> (${formatFileSize(fileItem.size)})
-                        <span class="file-status" style="float: right; font-size: 0.8em;">
-                            ${index === currentFileIndex ? 'Active' : (fileItem.processed ? 'Ready' : 'Pending')}
-                        </span>
-                    </div>
-                `;
-                
-                fileElement.addEventListener('click', () => {
-                    const items = fileQueueList.querySelectorAll('.file-queue-item');
-                    items.forEach(item => item.style.backgroundColor = 'transparent');
-                    fileElement.style.backgroundColor = '#e6f7ff';
-                    
-                    currentFileIndex = parseInt(fileElement.dataset.index);
-                    updateQueueControls();
-                });
-                
-                fileQueueList.appendChild(fileElement);
+            // Enhance hover effect
+            checkbox.addEventListener('mouseenter', function() {
+                checkbox.style.transform = 'scale(1.05)';
+                checkbox.style.boxShadow = '0 0 8px rgba(24, 144, 255, 0.5)';
             });
             
-            updateQueueControls();
-        }
-
-        // Set selection controls
-        selectAllSetsBtn.addEventListener('click', () => {
-            selectedSets = Array(sets.length).fill(1);
-            const checkboxes = setsSelectionList.querySelectorAll('.set-checkbox');
-            checkboxes.forEach(checkbox => {
-                checkbox.style.backgroundColor = '#e6f7ff';
-                checkbox.style.border = '1px solid #1890ff';
+            checkbox.addEventListener('mouseleave', function() {
+                checkbox.style.transform = 'scale(1)';
+                checkbox.style.boxShadow = 'none';
             });
-            updateTotalFramesCount();
         });
         
-        deselectAllSetsBtn.addEventListener('click', () => {
-            selectedSets = Array(sets.length).fill(0);
-            const checkboxes = setsSelectionList.querySelectorAll('.set-checkbox');
-            checkboxes.forEach(checkbox => {
-                checkbox.style.backgroundColor = '#f5f5f5';
-                checkbox.style.border = '1px solid #d9d9d9';
-            });
-            updateTotalFramesCount();
-        });
-
-        // Button event handlers
-        generateBtn.addEventListener('click', generateQRCodes);
-        startBtn.addEventListener('click', startDisplay);
-        stopBtn.addEventListener('click', stopDisplay);
-        togglePresentationBtn.addEventListener('click', togglePresentationMode);
-        exitPresentationBtn.addEventListener('click', () => {
-            exitPresentationMode();
-            // No longer stop the display when exiting presentation mode
+        // Enable the resend button when at least one set is selected
+        const updateResendButton = function() {
+            const anySelected = selectedSets.some(Boolean);
+            resendButton.disabled = !anySelected;
+        };
+        
+        // Update button state when selection changes
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('click', updateResendButton);
         });
         
-        // Function to toggle between presentation mode and normal mode
-        function togglePresentationMode() {
-            const toggleText = document.getElementById('togglePresentationText');
-            
-            if (isPresentation) {
-                exitPresentationMode();
-                toggleText.textContent = 'Enter Full Screen Mode';
-                // Make sure normal view components are visible
-                qrDisplay.style.display = 'grid';
-            } else {
-                enterPresentationMode();
-                toggleText.textContent = 'Exit Full Screen Mode';
-            }
-        }
-
-        // Presentation mode functions
-        function enterPresentationMode() {
-            if (isPresentation) return;
-            
-            try {
-                // Store current frame/content before switching modes
-                const currentFrameNumber = currentFrame;
-                const currentContent = getFrameContent(currentFrame);
-                
-                // Setup presentation mode
-                presentationOverlay.style.display = 'flex';
-                isPresentation = true;
-                
-                // Update presentation info
-                presentationCounter.textContent = frameCounter.textContent;
-                
-                // Calculate and display estimated transmission time
-                const fps = parseInt(speedSlider.value);
-                const totalTimeSeconds = calculateEstimatedTime(totalFrames, fps);
-                const presentationFilename = document.getElementById('presentationFilename');
-                const presentationEstTime = document.getElementById('presentationEstTime');
-                const presentationRemaining = document.getElementById('presentationRemaining');
-                
-                presentationFilename.textContent = `Transmitting: ${fileName}`;
-                presentationEstTime.textContent = `Est. Time: ${formatTime(totalTimeSeconds)}`;
-                
-                // Update remaining time if we're already playing
-                if (isPlaying && remainingSeconds > 0) {
-                    if (presentationRemaining) {
-                        presentationRemaining.textContent = `Remaining: ${formatTime(remainingSeconds)}`;
-                    }
-                    // Update presentation with current content
-                    updatePresentationView(currentContent.content, currentContent.label);
-                }
-                
-                // Try to request fullscreen if supported (not required)
-                try {
-                    if (document.documentElement.requestFullscreen) {
-                        document.documentElement.requestFullscreen().catch(e => {
-                            log("Info: Fullscreen not available. " + e.message, false);
-                        });
-                    }
-                } catch (err) {
-                    log("Info: Fullscreen mode not supported by browser.", false);
-                    // Continue without fullscreen
-                }
-            } catch (error) {
-                log("Error entering presentation mode: " + error.message, true);
-                // Continue in regular mode
-            }
+        // Initial button state
+        updateResendButton();
+    };
+    
+    // Override the original updateGrid function to include our enhancements
+    const originalCreateSetSelection = window.createSetSelection || function() {};
+    
+    window.createSetSelection = function() {
+        // Call the original function if it exists
+        if (typeof originalCreateSetSelection === 'function') {
+            originalCreateSetSelection();
         }
         
-        function exitPresentationMode() {
-            if (!isPresentation) return;
-            
-            presentationOverlay.style.display = 'none';
-            isPresentation = false;
-            
-            // Ensure normal QR display reflects current state
-            if (isPlaying) {
-                // Temporarily store current frame to redisplay it in normal mode
-                const currentFrameContent = getFrameContent(currentFrame);
-                displayFrame(); // This will redisplay frame in normal mode
-            }
-            
-            // Exit fullscreen if we're in it
-            try {
-                if (document.fullscreenElement && document.exitFullscreen) {
-                    document.exitFullscreen().catch(err => {
-                        log("Note: Could not exit fullscreen mode.", false);
-                    });
-                }
-            } catch (err) {
-                // Just continue if there's an error exiting fullscreen
-            }
-        }
-
-        // Core functionality
-        async function generateQRCodes() {
-            try {
-                if (!fileQueue.length || currentFileIndex >= fileQueue.length) {
-                    log('No valid files to process', true);
-                    return;
-                }
-                
-                const currentFile = fileQueue[currentFileIndex];
-                if (!currentFile.processed || !currentFile.content) {
-                    log('Current file is not yet loaded completely', true);
-                    return;
-                }
-                
-                log(`Preparing file chunks for ${currentFile.name}...`);
-                
-                // Convert ArrayBuffer to Uint8Array and then to base64
-                const bytes = new Uint8Array(currentFile.content);
-                let binary = '';
-                
-                // Convert binary data to base64 string
-                try {
-                    for (let i = 0; i < bytes.byteLength; i++) {
-                        binary += String.fromCharCode(bytes[i]);
-                    }
-                    const base64Content = btoa(binary);
-                    
-                    // Calculate chunk sizes
-                    const chunkSize = parseInt(chunkSlider.value);
-                    chunks = [];
-                    
-                    // Split into chunks
-                    for (let i = 0; i < base64Content.length; i += chunkSize) {
-                        chunks.push(base64Content.substring(i, i + chunkSize));
-                    }
-                    
-                    log(`Created ${chunks.length} chunks of data`);
-                    
-                    // Organize chunks into sets
-                    sets = [];
-                    let currentSet = [];
-                    
-                    for (let i = 0; i < chunks.length; i++) {
-                        currentSet.push(chunks[i]);
-                        
-                        if (currentSet.length >= SET_SIZE_CHUNKS || i === chunks.length - 1) {
-                            sets.push([...currentSet]);
-                            currentSet = [];
-                        }
-                    }
-                    
-                    log(`Organized into ${sets.length} sets`);
-                    
-                    // Show set selection panel
-                    setsSelectionPanel.style.display = 'block';
-                    
-                    // Initially select all sets
-                    selectedSets = Array(sets.length).fill(1);
-                    
-                    // Create set selection UI
-                    setsSelectionList.innerHTML = '';
-                    sets.forEach((set, index) => {
-                        const setCheckbox = document.createElement('div');
-                        setCheckbox.className = 'set-checkbox';
-                        setCheckbox.style.backgroundColor = '#e6f7ff';
-                        setCheckbox.style.padding = '8px 12px';
-                        setCheckbox.style.borderRadius = '4px';
-                        setCheckbox.style.margin = '3px';
-                        setCheckbox.style.cursor = 'pointer';
-                        setCheckbox.style.border = '1px solid #1890ff';
-                        
-                        setCheckbox.innerHTML = `Set ${index + 1} <br><small>(${set.length})</small>`;
-                        
-                        // Toggle selection when clicked
-                        setCheckbox.addEventListener('click', () => {
-                            selectedSets[index] = selectedSets[index] ? 0 : 1;
-                            setCheckbox.style.backgroundColor = selectedSets[index] ? '#e6f7ff' : '#f5f5f5';
-                            setCheckbox.style.border = selectedSets[index] ? '1px solid #1890ff' : '1px solid #d9d9d9';
-                            
-                            // Update total frames calculation
-                            updateTotalFramesCount();
-                        });
-                        
-                        setsSelectionList.appendChild(setCheckbox);
-                    });
-                    
-                    // Update info panel
-                    totalSetsInfo.textContent = sets.length;
-                    chunksPerSetInfo.textContent = SET_SIZE_CHUNKS;
-                    
-                    // Calculate total frames based on selected sets
-                    updateTotalFramesCount();
-                    
-                    // Enable start button
-                    startBtn.disabled = false;
-                    generateBtn.disabled = true;
-                    togglePresentationBtn.disabled = false;
-                    
-                    // Update the estimated time display
-                    updateEstimatedTime();
-                    
-                    // Pre-size the QR display to match the grid layout
-                    updateQRContainerSize();
-                    
-                } catch (error) {
-                    log(`Error processing file: ${error.message}`, true);
-                    console.error(error);
-                }
-            } catch (error) {
-                log(`Error generating QR codes: ${error.message}`, true);
-                console.error(error);
-            }
-        }
-
-        function updateTotalFramesCount() {
-            // Count how many chunks are in selected sets
-            let selectedChunksCount = 0;
-            let selectedSetsCount = 0;
-            
-            selectedSets.forEach((isSelected, index) => {
-                if (isSelected) {
-                    selectedSetsCount++;
-                    selectedChunksCount += sets[index].length;
-                }
-            });
-            
-            // Calculate total frames (metadata + set headers + chunks + end frame)
-            totalFrames = 1 + selectedSetsCount + selectedChunksCount + 1;
-            
-            log(`Selected ${selectedSetsCount} sets with ${selectedChunksCount} chunks`);
-            log(`Total frames to display: ${totalFrames}`);
-            
-            updateProgress(0, totalFrames);
-        }
-
-        function startDisplay() {
-            if (isPlaying || !chunks.length) return;
-            
-            // Update presentation header information before we start
-            const fps = parseInt(speedSlider.value);
-            const totalTimeSeconds = calculateEstimatedTime(totalFrames, fps);
-            const presentationFilename = document.getElementById('presentationFilename');
-            const presentationEstTime = document.getElementById('presentationEstTime');
-            const presentationRemaining = document.getElementById('presentationRemaining');
-            
-            presentationFilename.textContent = `Transmitting: ${fileName}`;
-            presentationEstTime.textContent = `Est. Time: ${formatTime(totalTimeSeconds)}`;
-            if (presentationRemaining) {
-                presentationRemaining.textContent = `Remaining: ${formatTime(totalTimeSeconds)}`;
-            }
-            
-            // Update the QR container size to make sure it matches the grid layout
-            updateQRContainerSize();
-            
-            // Prepare the estimate display for countdown
-            const estimateDisplay = document.createElement('div');
-            estimateDisplay.style.fontSize = '24px';
-            estimateDisplay.style.marginTop = '20px';
-            estimateDisplay.style.color = '#fff';
-            estimateDisplay.innerHTML = `
-                <div style="margin-bottom: 8px;">Estimated transmission time: ${formatTime(totalTimeSeconds)}</div>
-                <div style="font-size: 18px;">File: ${fileName} (${formatFileSize(fileSize)})</div>
-                <div style="font-size: 18px;">Transfer rate: ${formatFileSize((fileSize / totalTimeSeconds).toFixed(2))}/sec</div>
-            `;
-            
-            // Set countdown values
-            countdownValue = parseInt(countdownSlider.value);
-            
-            // Disable buttons during countdown
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
-            generateBtn.disabled = true;
-            
-            // Adjust countdown frame size to match the QR display size
-            const size = parseInt(sizeSlider.value);
-            const qrCount = parseInt(gridLayoutSelect.value);
-            let cols, rows;
-            switch(qrCount) {
-                case 1: cols = 1; rows = 1; break;
-                case 2: cols = 2; rows = 1; break; 
-                case 4: cols = 2; rows = 2; break;
-                case 8: cols = 4; rows = 2; break;
-                case 16: cols = 4; rows = 4; break;
-                case 32: cols = 8; rows = 4; break;
-                default: cols = 1; rows = 1;
-            }
-            const padding = 20;
-            const totalWidth = (size * cols) + (padding * (cols - 1));
-            const totalHeight = (size * rows) + (padding * (rows - 1));
-            
-            // Make the frame 20% larger than the QR code for better visibility
-            countdownFrame.style.width = `${Math.round(totalWidth * 1.2)}px`;
-            countdownFrame.style.height = `${Math.round(totalHeight * 1.2)}px`;
-            
-            // Create a normal mode real-time timer display if it doesn't exist
-            let normalTimerDisplay = document.getElementById('normalTimerDisplay');
-            if (!normalTimerDisplay) {
-                normalTimerDisplay = document.createElement('div');
-                normalTimerDisplay.id = 'normalTimerDisplay';
-                normalTimerDisplay.style.marginTop = '10px';
-                normalTimerDisplay.style.padding = '8px 12px';
-                normalTimerDisplay.style.backgroundColor = '#e9f5ff';
-                normalTimerDisplay.style.borderRadius = '4px';
-                normalTimerDisplay.style.border = '1px solid #b8e0ff';
-                normalTimerDisplay.style.fontSize = '14px';
-                normalTimerDisplay.style.display = 'flex';
-                normalTimerDisplay.style.justifyContent = 'space-between';
-                normalTimerDisplay.innerHTML = `
-                    <div><strong>Elapsed:</strong> <span id="normalElapsedTime">00:00</span></div>
-                    <div><strong>Remaining:</strong> <span id="normalRemainingTime">${formatTime(totalTimeSeconds)}</span></div>
-                    <div><strong>Progress:</strong> <span id="normalProgressPercent">0%</span></div>
-                `;
-                // Add it before progress bar
-                const progressContainer = document.querySelector('.progress-container');
-                progressContainer.parentNode.insertBefore(normalTimerDisplay, progressContainer);
-            }
-            
-            // Scroll to the QR display container when starting display
-            displayContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            log('Scrolling to QR display for better visibility');
-            
-            log(`Starting countdown: ${countdownValue} seconds before QR display. Estimated time: ${formatTime(totalTimeSeconds)}`);
-            
-            // If in presentation mode, use presentation countdowns, otherwise use in-place display
-            if (isPresentation) {
-                // Show countdown in presentation mode
-                countdownOverlay.appendChild(estimateDisplay);
-                countdownOverlay.style.display = 'flex';
-                countdownDisplay.textContent = countdownValue;
-            } else {
-                // For regular display, use a countdown overlay just above the QR display
-                // Create an overlay for the regular view
-                const normalCountdown = document.createElement('div');
-                normalCountdown.id = 'normalCountdown';
-                normalCountdown.style.position = 'absolute';
-                normalCountdown.style.top = '0';
-                normalCountdown.style.left = '0';
-                normalCountdown.style.width = '100%';
-                normalCountdown.style.height = '100%';
-                normalCountdown.style.backgroundColor = 'rgba(0,0,0,0.9)';
-                normalCountdown.style.color = 'white';
-                normalCountdown.style.display = 'flex';
-                normalCountdown.style.flexDirection = 'column';
-                normalCountdown.style.justifyContent = 'center';
-                normalCountdown.style.alignItems = 'center';
-                normalCountdown.style.fontSize = '40px';
-                normalCountdown.style.zIndex = '100';
-                normalCountdown.innerHTML = `
-                    <div style="font-size: 60px; font-weight: bold;">${countdownValue}</div>
-                    <div style="margin-top: 10px;">Prepare to scan</div>
-                    <div style="margin-top: 20px; font-size: 18px;">Est. Time: ${formatTime(totalTimeSeconds)}</div>
-                    <div style="margin-top: 5px; font-size: 16px;">${fileName} (${formatFileSize(fileSize)})</div>
-                `;
-                
-                // Create the countdown overlay that will be in the center
-                // (not touching the edges of the QR area)
-                qrDisplay.style.position = 'relative';
-                qrDisplay.appendChild(normalCountdown);
-                
-                // For normal mode, we'll adjust the QR display to have a border that doesn't interfere
-                // Create a persistent frame that will remain after countdown
-                // Store original border to restore later
-                const originalBorder = qrDisplay.style.border;
-                const originalBorderRadius = qrDisplay.style.borderRadius;
-                
-                // Add a margin around the QR display so the frame doesn't touch QR codes
-                const originalPadding = qrDisplay.style.padding || '0px';
-                qrDisplay.style.padding = '20px';
-                qrDisplay.style.border = '4px solid #FF0000';
-                qrDisplay.style.borderRadius = '10px';
-                
-                // Store original styles to restore them later
-                qrDisplay.dataset.originalPadding = originalPadding;
-                qrDisplay.dataset.originalBorder = originalBorder;
-                qrDisplay.dataset.originalBorderRadius = originalBorderRadius;
-            }
-            
-            // Start countdown timer
-            countdownTimer = setInterval(() => {
-                countdownValue--;
-                
-                if (isPresentation) {
-                    countdownDisplay.textContent = countdownValue;
-                } else {
-                    const normalCountdown = document.getElementById('normalCountdown');
-                    if (normalCountdown) {
-                        normalCountdown.querySelector('div').textContent = countdownValue;
-                    }
-                }
-                
-                if (countdownValue <= 0) {
-                    clearInterval(countdownTimer);
-                    
-                    if (isPresentation) {
-                        countdownOverlay.style.display = 'none';
-                        countdownOverlay.removeChild(estimateDisplay); // Clean up
-                    } else {
-                        // Remove only the countdown overlay, keep the frame
-                        const normalCountdown = document.getElementById('normalCountdown');
-                        if (normalCountdown) {
-                            qrDisplay.removeChild(normalCountdown);
-                        }
-                        
-                        // Change the border to be thinner but still visible during display
-                        qrDisplay.style.border = '4px solid rgba(255, 0, 0, 0.5)';
-                    }
-                    
-                    // Start the actual display
-                    isPlaying = true;
-                    currentFrame = 0;
-                    startTransmissionTime = Date.now();
-                    
-                    log('Starting QR code display...');
-                    
-                    // Clear display
-                    qrDisplay.innerHTML = '';
-                    
-                    // Make sure the toggle button is enabled
-                    togglePresentationBtn.disabled = false;
-                    
-                    // Start display loop
-                    displayFrame();
-                    restartInterval();
-                    
-                    // Start tracking remaining time
-                    remainingInterval = setInterval(updateRemainingTime, 1000);
-                    const presentationRemaining = document.getElementById('presentationRemaining');
-                    if (presentationRemaining) {
-                        presentationRemaining.textContent = `Remaining: ${formatTime(totalTimeSeconds)}`;
-                    }
-                }
-            }, 1000);
-        }
-
-        function stopDisplay() {
-            if (!isPlaying && !countdownTimer) return;
-            
-            isPlaying = false;
-            
-            // Clear the normal view timer display
-            const normalTimerDisplay = document.getElementById('normalTimerDisplay');
-            if (normalTimerDisplay && normalTimerDisplay.parentNode) {
-                normalTimerDisplay.parentNode.removeChild(normalTimerDisplay);
-            }
-            
-            // Exit presentation mode if active
-            if (isPresentation) {
-                exitPresentationMode();
-            }
-            
-            // Update the toggle button
-            togglePresentationBtn.disabled = true;
-            document.getElementById('togglePresentationText').textContent = 'Enter Full Screen Mode';
-            
-            if (countdownTimer) {
-                clearInterval(countdownTimer);
-                countdownTimer = null;
-                
-                // Handle normal countdown wrapper if present
-                const normalCountdownWrapper = document.getElementById('normalCountdownWrapper');
-                if (normalCountdownWrapper && normalCountdownWrapper.parentNode) {
-                    normalCountdownWrapper.parentNode.removeChild(normalCountdownWrapper);
-                }
-                
-                // Handle presentation countdown overlay if visible
-                countdownOverlay.style.display = 'none';
-                
-                // Remove any dynamically added elements to the countdown overlay
-                const estimateDisplay = countdownOverlay.querySelector('div:not(#countdownDisplay):not(#countdownFrame):not(#countdownInstructions)');
-                if (estimateDisplay) {
-                    countdownOverlay.removeChild(estimateDisplay);
-                }
-            }
-            
-            if (displayInterval) {
-                clearTimeout(displayInterval);
-                displayInterval = null;
-            }
-            
-            if (remainingInterval) {
-                clearInterval(remainingInterval);
-                remainingInterval = null;
-            }
-            
-            // Simple reset of the display
-            qrDisplay.innerHTML = '';
-            qrDisplay.style.display = 'flex';
-            
-            // Restore original styles if they were saved
-            if (qrDisplay.dataset.originalBorder !== undefined) {
-                qrDisplay.style.border = qrDisplay.dataset.originalBorder;
-                qrDisplay.style.borderRadius = qrDisplay.dataset.originalBorderRadius;
-                qrDisplay.style.padding = qrDisplay.dataset.originalPadding;
-                
-                // Clear dataset values
-                delete qrDisplay.dataset.originalBorder;
-                delete qrDisplay.dataset.originalBorderRadius;
-                delete qrDisplay.dataset.originalPadding;
-            } else {
-                // Default if no saved styles
-                qrDisplay.style.border = '2px solid #333';
-                qrDisplay.style.padding = '0px';
-                qrDisplay.style.borderRadius = '0px';
-            }
-            
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
-            generateBtn.disabled = false;
-            
-            // Update progress to 0
-            updateProgress(0, totalFrames);
-            
-            log('Display stopped');
-        }
-
-        // Track the remaining time
-        let startTransmissionTime = 0;
-        let remainingSeconds = 0;
-        let remainingInterval = null;
+        // Apply our enhancements
+        setTimeout(enhanceSetCheckboxes, 100);
+    };
+    
+    // Add function to mark sets that need resending
+    window.markSetsForResending = function(setIndices) {
+        if (!Array.isArray(setIndices) || setIndices.length === 0) return;
         
-        function updateRemainingTime() {
-            const elapsed = (Date.now() - startTransmissionTime) / 1000;
-            const fps = parseInt(speedSlider.value);
-            const totalEstimated = calculateEstimatedTime(totalFrames, fps);
-            
-            remainingSeconds = Math.max(0, totalEstimated - elapsed);
-            const percentComplete = Math.min(100, Math.round((elapsed / totalEstimated) * 100));
-            
-            // Update the presentation mode display
-            const presentationRemaining = document.getElementById('presentationRemaining');
+        const checkboxes = setsSelectionList.querySelectorAll('.set-checkbox');
+        
+        // First, deselect all sets
+        selectedSets = Array(sets.length).fill(0);
+        checkboxes.forEach(checkbox => {
+            checkbox.style.backgroundColor = '#f5f5f5';
+            checkbox.style.border = '1px solid #d9d9d9';
+        });
+        
+        // Then select only the sets that need resending
+        setIndices.forEach(index => {
+            if (index >= 0 && index < selectedSets.length) {
+                selectedSets[index] = 1;
+                
+                // Update the UI if the checkbox exists
+                if (index < checkboxes.length) {
+                    checkboxes[index].style.backgroundColor = '#e6f7ff';
+                    checkboxes[index].style.border = '1px solid #1890ff';
+                    // Add a "Needs Resending" indicator
+                    const resendIndicator = document.createElement('div');
+                    resendIndicator.style.fontSize = '10px';
+                    resendIndicator.style.color = 'red';
+                    resendIndicator.style.fontWeight = 'bold';
+                    resendIndicator.style.marginTop = '5px';
+                    resendIndicator.textContent = 'Needs Resending';
+                    checkboxes[index].appendChild(resendIndicator);
+                }
+            }
+        });
+        
+        // Update the button state
+        const anySelected = selectedSets.some(Boolean);
+        resendButton.disabled = !anySelected;
+        
+        // Show a notification
+        log(`Marked ${setIndices.length} sets for resending.`);
+    };
+}
+
+// 3. Full-Screen Presentation Mode Fixes
+function enterPresentationMode() {
+    if (isPresentation) return;
+    
+    try {
+        // Store current frame/content before switching modes
+        const currentFrameNumber = currentFrame;
+        const currentContent = getFrameContent(currentFrame);
+        
+        // Setup presentation mode
+        presentationOverlay.style.display = 'flex';
+        isPresentation = true;
+        
+        // Update presentation info
+        presentationCounter.textContent = frameCounter.textContent;
+        
+        // Calculate and display estimated transmission time
+        const fps = parseInt(speedSlider.value);
+        const totalTimeSeconds = calculateEstimatedTime(totalFrames, fps);
+        const presentationFilename = document.getElementById('presentationFilename');
+        const presentationEstTime = document.getElementById('presentationEstTime');
+        const presentationRemaining = document.getElementById('presentationRemaining');
+        
+        presentationFilename.textContent = `Transmitting: ${fileName}`;
+        presentationEstTime.textContent = `Est. Time: ${formatTime(totalTimeSeconds)}`;
+        
+        // Update remaining time if we're already playing
+        if (isPlaying && remainingSeconds > 0) {
             if (presentationRemaining) {
                 presentationRemaining.textContent = `Remaining: ${formatTime(remainingSeconds)}`;
             }
-            
-            // Update the normal mode timer display
-            const normalElapsedTime = document.getElementById('normalElapsedTime');
-            const normalRemainingTime = document.getElementById('normalRemainingTime');
-            const normalProgressPercent = document.getElementById('normalProgressPercent');
-            
-            if (normalElapsedTime) {
-                normalElapsedTime.textContent = formatTime(elapsed);
-            }
-            
-            if (normalRemainingTime) {
-                normalRemainingTime.textContent = formatTime(remainingSeconds);
-            }
-            
-            if (normalProgressPercent) {
-                normalProgressPercent.textContent = `${percentComplete}%`;
-            }
-            
-            // If we're done, clear the interval
-            if (remainingSeconds <= 0 && remainingInterval) {
-                clearInterval(remainingInterval);
-                remainingInterval = null;
-            }
+            // Update presentation with current content
+            updatePresentationView(currentContent.content, currentContent.label);
         }
         
-        function restartInterval() {
-            if (displayInterval) {
-                clearTimeout(displayInterval);
-            }
+        // Improved fullscreen implementation
+        try {
+            const elem = document.documentElement;
             
-            // Calculate base interval from fps setting
-            const baseInterval = Math.floor(1000 / parseInt(speedSlider.value));
-            
-            // Start tracking remaining time if not already doing so
-            if (!remainingInterval) {
-                startTransmissionTime = Date.now();
-                remainingInterval = setInterval(updateRemainingTime, 1000);
-                updateRemainingTime(); // Update immediately
-            }
-            
-            // Map to store pregenerated frames to eliminate blinking
-            let pregeneratedFrames = {};
-            
-            // Create and return a ready-to-use frame without async rendering
-            function createFrameSync(frameIndex) {
-                // Create a new container for the frame
-                const frameContainer = document.createElement('div');
-                frameContainer.style.display = 'grid';
-                frameContainer.style.width = '100%';
-                frameContainer.style.height = '100%';
-                frameContainer.style.gridTemplateColumns = qrDisplay.style.gridTemplateColumns;
-                frameContainer.style.gridTemplateRows = qrDisplay.style.gridTemplateRows;
-                frameContainer.style.gap = qrDisplay.style.gap;
-                
-                // Get frame content
-                const {content, label, type} = getFrameContent(frameIndex);
-                
-                // Get grid layout information
-                const qrCount = parseInt(gridLayoutSelect.value);
-                
-                // Calculate how many frames to display in this grid
-                const framesToDisplay = Math.min(qrCount, totalFrames - frameIndex);
-                
-                // Create all QR codes in the grid synchronously
-                for (let i = 0; i < framesToDisplay; i++) {
-                    const subFrameIndex = frameIndex + i;
-                    if (subFrameIndex >= totalFrames) break;
-                    
-                    // Get frame content for this position
-                    const subFrameData = getFrameContent(subFrameIndex);
-                    
-                    // Create container for this QR code
-                    const qrContainer = document.createElement('div');
-                    qrContainer.style.display = 'flex';
-                    qrContainer.style.flexDirection = 'column';
-                    qrContainer.style.justifyContent = 'center';
-                    qrContainer.style.alignItems = 'center';
-                    qrContainer.style.position = 'relative';
-                    qrContainer.style.backgroundColor = '#ffffff';
-                    qrContainer.className = 'qr-grid-cell';
-                    qrContainer.setAttribute('data-frame-index', subFrameIndex);
-                    qrContainer.setAttribute('data-frame-type', subFrameData.type);
-                    
-                    // Create a placeholder element so layout doesn't shift
-                    const placeholderCanvas = document.createElement('canvas');
-                    placeholderCanvas.width = parseInt(sizeSlider.value);
-                    placeholderCanvas.height = parseInt(sizeSlider.value);
-                    placeholderCanvas.style.backgroundColor = '#ffffff';
-                    qrContainer.appendChild(placeholderCanvas);
-                    
-                    // Add placeholder for label to maintain layout
-                    const labelElement = document.createElement('div');
-                    labelElement.style.marginTop = '8px';
-                    labelElement.style.textAlign = 'center';
-                    labelElement.style.fontWeight = 'bold';
-                    labelElement.style.fontSize = '10px';
-                    labelElement.textContent = subFrameData.label;
-                    
-                    // Style label according to frame type
-                    if (subFrameData.type === 'metadata' || subFrameData.type === 'end') {
-                        labelElement.style.color = 'red';
-                    } else if (subFrameData.type === 'set_header') {
-                        labelElement.style.color = 'orange';
-                    }
-                    
-                    qrContainer.appendChild(labelElement);
-                    frameContainer.appendChild(qrContainer);
-                    
-                    // Now generate QR code - we'll add it directly to the canvas
-                    // This happens synchronously so no frame flashing
-                    const canvasContext = placeholderCanvas.getContext('2d');
-                    canvasContext.fillStyle = '#FFFFFF';
-                    canvasContext.fillRect(0, 0, placeholderCanvas.width, placeholderCanvas.height);
-                    
-                    // Use QRCode library to render to our existing canvas
-                    // For single QR mode, use maximum error correction and slightly larger margin
-                    // For multi-QR modes, optimize for space with minimal margins
-                    const isMultiQR = parseInt(gridLayoutSelect.value) > 1;
-                    QRCode.toCanvas(
-                        placeholderCanvas,
-                        subFrameData.content || 'ERROR',
-                        {
-                            width: parseInt(sizeSlider.value),
-                            margin: isMultiQR ? 1 : 4, // Larger margin for single QR for better scanning
-                            errorCorrectionLevel: isMultiQR ? 'L' : 'M', // Higher error correction for single QR
-                            color: {
-                                dark: '#000000',
-                                light: '#FFFFFF'
-                            }
-                        }
-                    );
-                }
-                
-                return frameContainer;
-            }
-            
-            // Function to pregenerate the next frame - now synchronous
-            function pregenerateFrame(frameIndex) {
-                if (pregeneratedFrames[frameIndex]) {
-                    return Promise.resolve(pregeneratedFrames[frameIndex]);
-                }
-                
-                // Create the frame synchronously
-                const frameContainer = createFrameSync(frameIndex);
-                pregeneratedFrames[frameIndex] = frameContainer;
-                
-                return Promise.resolve(frameContainer);
-            }
-            
-            // Set up next frame using timeout to handle variable frame times
-            function scheduleNextFrame() {
-                // Determine frame type for current frame
-                let frameType = 'normal';
-                if (currentFrame === 0) {
-                    frameType = 'metadata';
-                } else if (isSetHeaderFrame(currentFrame)) {
-                    frameType = 'setheader';
-                } else if (currentFrame === totalFrames - 1) {
-                    frameType = 'endframe';
-                }
-                
-                // Calculate timing multiplier based on frame type
-                let intervalMultiplier = 1;
-                if (frameType === 'metadata') {
-                    intervalMultiplier = METADATA_DISPLAY_MULTIPLIER;
-                } else if (frameType === 'setheader') {
-                    intervalMultiplier = SET_HEADER_DISPLAY_MULTIPLIER;
-                } else if (frameType === 'endframe') {
-                    intervalMultiplier = METADATA_DISPLAY_MULTIPLIER;
-                }
-                
-                // Pre-generate the current frame and the next frame to avoid flicker
-                pregenerateFrame(currentFrame).then(frameContainer => {
-                    // Store current padding to maintain it
-                    const currentPadding = qrDisplay.style.padding || '40px';
-                    
-                    if (isPresentation) {
-                        // Use the presentation mode approach which works without flickering
-                        const { content, label } = getFrameContent(currentFrame);
-                        updatePresentationView(content, label);
-                    } else {
-                        // Create a new approach similar to presentation mode but for normal view
-                        // Instead of clearing and re-adding content, we'll use the same technique
-                        // that works in presentation mode
-                        
-                        // First, create a new canvas that we can render to
-                        const normalCanvas = document.createElement('canvas');
-                        const size = Math.max(qrDisplay.clientWidth, qrDisplay.clientHeight) - (parseInt(currentPadding) * 2);
-                        normalCanvas.width = size;
-                        normalCanvas.height = size;
-                        
-                        // Get the context and fill with white
-                        const ctx = normalCanvas.getContext('2d', { willReadFrequently: true });
-                        ctx.fillStyle = '#FFFFFF';
-                        ctx.fillRect(0, 0, size, size);
-                        
-                        // For each QR code in the frame, render it to the canvas
-                        const qrCount = parseInt(gridLayoutSelect.value);
-                        const framesToDisplay = Math.min(qrCount, totalFrames - currentFrame);
-                        
-                        // Get frame content
-                        const { content, label, type } = getFrameContent(currentFrame);
-                        
-                        // Use the QR library to draw directly to our canvas
-                        // This happens synchronously and avoids DOM manipulation
-                        QRCode.toCanvas(normalCanvas, content || 'ERROR', {
-                            width: size - 40, // Add margin
-                            margin: 4,
-                            errorCorrectionLevel: 'L',
-                            color: {
-                                dark: '#000000',
-                                light: '#FFFFFF'
-                            }
-                        }, function(err, canvas) {
-                            // Clear the display and add the new canvas
-                            qrDisplay.innerHTML = '';
-                            
-                            // Create a container for the canvas and label
-                            const container = document.createElement('div');
-                            container.style.display = 'flex';
-                            container.style.flexDirection = 'column';
-                            container.style.alignItems = 'center';
-                            container.style.justifyContent = 'center';
-                            container.style.width = '100%';
-                            container.style.height = '100%';
-                            
-                            // Add the canvas
-                            container.appendChild(canvas);
-                            
-                            // Add a label
-                            const labelElement = document.createElement('div');
-                            labelElement.style.marginTop = '8px';
-                            labelElement.style.textAlign = 'center';
-                            labelElement.style.fontWeight = 'bold';
-                            labelElement.style.fontSize = '14px';
-                            
-                            // Style label according to frame type
-                            if (type === 'metadata' || type === 'end') {
-                                labelElement.style.color = 'red';
-                            } else if (type === 'set_header') {
-                                labelElement.style.color = 'orange';
-                            }
-                            
-                            labelElement.textContent = label;
-                            container.appendChild(labelElement);
-                            
-                            // Add the container to the display
-                            qrDisplay.appendChild(container);
-                            qrDisplay.style.padding = currentPadding;
-                        });
-                    }
-                    
-                    // Update progress
-                    updateProgress(currentFrame + 1, totalFrames);
-                    
-                    // Pre-generate the next frame
-                    const nextFrame = (currentFrame + 1) % totalFrames;
-                    pregenerateFrame(nextFrame);
-                    
-                    // Schedule the next frame with appropriate interval
-                    const actualInterval = baseInterval * intervalMultiplier;
-                    
-                    displayInterval = setTimeout(() => {
-                        currentFrame++;
-                        
-                        if (currentFrame >= totalFrames) {
-                            currentFrame = 0;
-                        }
-                        
-                        if (isPlaying) {
-                            scheduleNextFrame();
-                        }
-                    }, actualInterval);
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen().catch(e => {
+                    log("Info: Fullscreen mode error: " + e.message, false);
                 });
-            }
-            
-            // Start the scheduling
-            if (isPlaying) {
-                // Pregenerate first two frames and then start display
-                pregenerateFrame(currentFrame).then(() => {
-                    // Pregenerate the next frame as well
-                    const nextFrame = (currentFrame + 1) % totalFrames;
-                    pregenerateFrame(nextFrame).then(() => {
-                        scheduleNextFrame();
-                    });
-                });
-            }
-        }
-
-        // Helper function to check if current frame is a set header
-        function isSetHeaderFrame(frameIndex) {
-            // Calculate which frames are set headers based on selected sets
-            let metadataAndSetHeaderCount = 1; // Start with 1 for metadata frame
-            
-            for (let i = 0; i < selectedSets.length; i++) {
-                if (selectedSets[i]) {
-                    if (frameIndex === metadataAndSetHeaderCount) {
-                        return true;
-                    }
-                    metadataAndSetHeaderCount++;
-                }
-            }
-            
-            return false;
-        }
-
-        // This function is now a placeholder - actual frame display logic is in restartInterval
-        // to support pregeneration and avoid blinking
-        function displayFrame(frameType) {
-            // The displayFrame function is no longer used directly
-            // All frame generation and display is handled by restartInterval
-            // This placeholder is kept for compatibility with existing code
-            if (!isPlaying) return;
-            
-            // Just update progress in case this is called directly
-            updateProgress(currentFrame + 1, totalFrames);
-        }
-        
-        // Helper function to get the next set header frame
-        function getNextSetHeaderFrame(startFrame) {
-            let currentPosition = 1; // Start after metadata
-            let selectedSetIndices = selectedSets
-                .map((selected, index) => selected ? index : -1)
-                .filter(index => index !== -1);
-                
-            // Check if the current frame is in the set header range
-            if (currentPosition <= startFrame && 
-                startFrame < currentPosition + selectedSetIndices.length) {
-                return startFrame;
-            }
-            
-            return -1;
-        }
-        
-        // Helper function to get frame content by index
-        function getFrameContent(frameIndex) {
-            let frameContent = '';
-            let frameLabel = '';
-            let frameType = 'chunk';
-            
-            if (frameIndex === 0) {
-                // Metadata frame
-                const includeFileQueueInfo = fileQueue.length > 1;
-                
-                const metadata = {
-                    type: "metadata",
-                    file_name: fileName,
-                    file_size: fileSize,
-                    total_sets: sets.length,
-                    total_selected_sets: selectedSets.filter(Boolean).length,
-                    chunks_per_set: SET_SIZE_CHUNKS,
-                    total_chunks: chunks.length,
-                    timestamp: Date.now(),
-                    qr_grid_size: parseInt(gridLayoutSelect.value)
-                };
-                
-                // Add file queue information if multiple files
-                if (includeFileQueueInfo) {
-                    metadata.file_index = currentFileIndex + 1;
-                    metadata.total_files = fileQueue.length;
-                }
-                
-                // Add selected sets information
-                metadata.selected_sets = selectedSets.map((selected, index) => 
-                    selected ? index + 1 : null).filter(Boolean);
-                
-                frameContent = JSON.stringify(metadata);
-                frameLabel = "Metadata";
-                frameType = 'metadata';
-                
+            } else if (elem.mozRequestFullScreen) { /* Firefox */
+                elem.mozRequestFullScreen();
+            } else if (elem.webkitRequestFullscreen) { /* Chrome, Safari & Opera */
+                elem.webkitRequestFullscreen();
+            } else if (elem.msRequestFullscreen) { /* IE/Edge */
+                elem.msRequestFullscreen();
             } else {
-                // Track position in the selected sets
-                let currentPosition = 1; // Start after metadata
-                let selectedSetIndices = selectedSets
-                    .map((selected, index) => selected ? index : -1)
-                    .filter(index => index !== -1);
+                log("Info: Fullscreen mode not supported by this browser", false);
+            }
+        } catch (err) {
+            log("Info: Fullscreen API error: " + err.message, false);
+            // Continue without fullscreen - position fixed should still make it work
+        }
+        
+        // Ensure presentation overlay has correct styling
+        presentationOverlay.style.position = 'fixed';
+        presentationOverlay.style.top = '0';
+        presentationOverlay.style.left = '0';
+        presentationOverlay.style.width = '100%';
+        presentationOverlay.style.height = '100%';
+        presentationOverlay.style.zIndex = '9999';
+        presentationOverlay.style.backgroundColor = '#000';
+        presentationOverlay.style.display = 'flex';
+        presentationOverlay.style.flexDirection = 'column';
+        presentationOverlay.style.justifyContent = 'center';
+        presentationOverlay.style.alignItems = 'center';
+        
+        // Make sure all controls are visible in presentation mode
+        presentationHeader.style.zIndex = '10000';
+        exitPresentationBtn.style.zIndex = '10000';
+        
+        // Responsive sizing for QR display
+        const resizeQrDisplay = function() {
+            const qrSize = Math.min(window.innerWidth, window.innerHeight) * 0.8;
+            presentationQrDisplay.style.width = qrSize + 'px';
+            presentationQrDisplay.style.height = qrSize + 'px';
+        };
+        
+        // Initial sizing
+        resizeQrDisplay();
+        
+        // Add resize listener
+        window.addEventListener('resize', resizeQrDisplay);
+        
+        log("Entered presentation mode successfully", false);
+    } catch (error) {
+        log("Error entering presentation mode: " + error.message, true);
+        // Continue in regular mode
+    }
+}
+
+// 4. Multiple File Queue Support Enhancements
+function enhanceFileQueueSystem() {
+    // Make file queue panel more prominent
+    fileQueuePanel.style.background = '#f5f5f5';
+    fileQueuePanel.style.border = '2px solid #d9d9d9';
+    fileQueuePanel.style.borderRadius = '8px';
+    fileQueuePanel.style.padding = '15px';
+    fileQueuePanel.style.margin = '20px 0';
+    fileQueuePanel.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+    
+    // Add a title
+    const titleDiv = document.createElement('div');
+    titleDiv.innerHTML = `<h3 style="margin-top:0;">File Queue</h3>
+                         <p style="margin-bottom:15px;">Select files to transfer in sequence.</p>`;
+    fileQueuePanel.insertBefore(titleDiv, fileQueuePanel.firstChild);
+    
+    // Add a clear button to remove all files
+    const clearQueueBtn = document.createElement('button');
+    clearQueueBtn.textContent = 'Clear Queue';
+    clearQueueBtn.style.backgroundColor = '#f5f5f5';
+    clearQueueBtn.style.color = '#333';
+    clearQueueBtn.style.border = '1px solid #d9d9d9';
+    clearQueueBtn.style.marginLeft = '10px';
+    
+    // Add event listener for the clear button
+    clearQueueBtn.addEventListener('click', function() {
+        fileQueue = [];
+        fileQueueList.innerHTML = '';
+        currentFileIndex = 0;
+        updateQueueControls();
+        log('File queue cleared.');
+        
+        // Update the input element to allow new selections
+        fileInput.value = '';
+        
+        // Disable generate button if queue is empty
+        generateBtn.disabled = true;
+    });
+    
+    // Add the clear button to the file queue panel
+    const buttonContainer = fileQueuePanel.querySelector('div');
+    if (buttonContainer) {
+        buttonContainer.appendChild(clearQueueBtn);
+    }
+    
+    // Enhance file queue items with better information
+    const updateFileQueueDisplay = function() {
+        const items = fileQueueList.querySelectorAll('.file-queue-item');
+        items.forEach((item, index) => {
+            // Add more detailed information
+            const fileItem = fileQueue[index];
+            if (!fileItem) return;
+            
+            // Check if already has enhanced info
+            if (item.querySelector('.file-details')) return;
+            
+            // Create detailed info
+            const detailsDiv = document.createElement('div');
+            detailsDiv.className = 'file-details';
+            detailsDiv.style.fontSize = '11px';
+            detailsDiv.style.color = '#666';
+            detailsDiv.style.marginTop = '5px';
+            
+            // Add file info
+            detailsDiv.innerHTML = `Size: ${formatFileSize(fileItem.size)} | Type: ${fileItem.file.type || 'Unknown'}`;
+            
+            // Add details to item
+            item.appendChild(detailsDiv);
+            
+            // Highlight active item more clearly
+            if (index === currentFileIndex) {
+                item.style.backgroundColor = '#e6f7ff';
+                item.style.border = '1px solid #1890ff';
+                item.style.boxShadow = '0 0 5px rgba(24, 144, 255, 0.3)';
                 
-                if (currentPosition <= frameIndex && 
-                    frameIndex < currentPosition + selectedSetIndices.length) {
-                    // Set header frame
-                    const selectedSetIndex = frameIndex - currentPosition;
-                    const actualSetIndex = selectedSetIndices[selectedSetIndex];
-                    const setChunks = sets[actualSetIndex] || [];
-                    
-                    const setHeader = {
-                        type: "set_header",
-                        set_index: actualSetIndex + 1,
-                        total_sets: selectedSets.filter(Boolean).length,
-                        chunks_in_set: setChunks.length
-                    };
-                    
-                    frameContent = JSON.stringify(setHeader);
-                    frameLabel = `Set ${actualSetIndex + 1} Header`;
-                    frameType = 'set_header';
-                    
-                } else {
-                    // Advance position past set headers
-                    currentPosition += selectedSetIndices.length;
-                    
-                    // End frame
-                    if (frameIndex === totalFrames - 1) {
-                        const endData = {
-                            type: "end",
-                            file_name: fileName,
-                            file_size: fileSize,
-                            selected_sets: selectedSets.map((selected, index) => 
-                                selected ? index + 1 : null).filter(Boolean),
-                            timestamp: Date.now()
-                        };
-                        
-                        frameContent = JSON.stringify(endData);
-                        frameLabel = "End Frame";
-                        frameType = 'end';
-                        
-                    } else {
-                        // Chunk frame - map from frame index to actual chunk index
-                        let chunkPositionInStream = frameIndex - currentPosition;
-                        let actualChunkIndex = -1;
-                        let runningTotal = 0;
-                        
-                        // Find which set and chunk this corresponds to
-                        for (let i = 0; i < selectedSets.length; i++) {
-                            if (!selectedSets[i]) continue;
-                            
-                            const setSize = sets[i].length;
-                            if (chunkPositionInStream < runningTotal + setSize) {
-                                // Found the set - calculate chunk index
-                                const localChunkIndex = chunkPositionInStream - runningTotal;
-                                
-                                // Create chunk data
-                                const chunkData = {
-                                    type: "chunk",
-                                    set_index: i + 1,
-                                    chunk_index: localChunkIndex + 1,
-                                    chunks_in_set: setSize,
-                                    data: sets[i][localChunkIndex] || ""
-                                };
-                                
-                                frameContent = JSON.stringify(chunkData);
-                                frameLabel = `Set ${i + 1}, Chunk ${localChunkIndex + 1}`;
-                                frameType = 'chunk';
-                                break;
-                            }
-                            
-                            runningTotal += setSize;
-                        }
-                        
-                        if (!frameContent) {
-                            // Error case - shouldn't happen with proper indexing
-                            frameContent = JSON.stringify({ error: "Invalid chunk index" });
-                            frameLabel = "Error";
-                            frameType = 'error';
-                        }
-                    }
-                }
-            }
-            
-            return { content: frameContent, label: frameLabel, type: frameType };
-        }
-        
-        // Function to update presentation view (for fullscreen mode)
-        function updatePresentationView(frameContent, frameLabel) {
-            // Create a clean display for presentation mode
-            presentationQrDisplay.innerHTML = '';
-            
-            // Add a wrapper with white background for better contrast
-            const qrWrapper = document.createElement('div');
-            qrWrapper.style.background = '#ffffff';
-            qrWrapper.style.padding = '30px';
-            qrWrapper.style.borderRadius = '8px';
-            qrWrapper.style.boxShadow = '0 0 30px rgba(255,255,255,0.3)';
-            qrWrapper.style.display = 'flex';
-            qrWrapper.style.flexDirection = 'column';
-            qrWrapper.style.alignItems = 'center';
-            qrWrapper.style.justifyContent = 'center';
-            
-            // Create a loading indicator while we generate the QR code
-            const loadingIndicator = document.createElement('div');
-            loadingIndicator.textContent = 'Generating QR...';
-            loadingIndicator.style.padding = '20px';
-            loadingIndicator.style.border = '1px solid #ccc';
-            loadingIndicator.style.borderRadius = '4px';
-            loadingIndicator.style.marginBottom = '15px';
-            qrWrapper.appendChild(loadingIndicator);
-            
-            // Create a new QR code canvas specifically for the presentation view
-            const size = Math.min(window.innerWidth, window.innerHeight) * 0.7;
-            
-            // Create the full presentationCanvas
-            const presentationCanvas = document.createElement('canvas');
-            presentationCanvas.width = size;
-            presentationCanvas.height = size;
-            
-            // First, set up the whole canvas with red frame and white center
-            const pctx = presentationCanvas.getContext('2d');
-            // Draw red outer frame
-            pctx.fillStyle = '#FF0000';
-            pctx.fillRect(0, 0, size, size);
-            // Draw white inner area (with margin)
-            const margin = size * 0.05; // 5% margin
-            pctx.fillStyle = '#FFFFFF';
-            pctx.fillRect(margin, margin, size - (margin * 2), size - (margin * 2));
-            
-            // Insert the presentation canvas before the loading indicator
-            qrWrapper.insertBefore(presentationCanvas, loadingIndicator);
-            
-            // Use QRCode.toCanvas to create a fresh QR code with appropriate size
-            // For presentation mode, use higher error correction level and adaptive margin based on content size
-            const isMultiQR = parseInt(gridLayoutSelect.value) > 1;
-            QRCode.toCanvas(document.createElement('canvas'), frameContent || 'ERROR', {
-                width: size - 40, // Slightly smaller to ensure it fits
-                margin: isMultiQR ? 4 : 10, // Larger margin for single QR in presentation mode
-                errorCorrectionLevel: isMultiQR ? 'M' : 'H', // Highest error correction for presentation mode
-                color: {
-                    dark: '#000000',
-                    light: '#FFFFFF'
-                }
-            }, function(err, qrCanvas) {
-                // Remove the QR code from the loading area once we're handling it
-                qrWrapper.removeChild(loadingIndicator);
-                if (!err) {
-                    // Draw the generated QR code onto our presentation canvas
-                    // Calculate position to center QR code in the white area
-                    // Use a smaller margin (5%) to make the QR code fill more of the space
-                    const qrMargin = size * 0.05; // 5% in from the edge, making QR code larger
-                    pctx.drawImage(qrCanvas, qrMargin, qrMargin, size - (qrMargin * 2), size - (qrMargin * 2));
-                    // Loading indicator already removed
-                } else {
-                    console.error("Error creating presentation QR", err);
-                    // Create error indicator since we already removed the loading indicator
-                    const errorIndicator = document.createElement('div');
-                    errorIndicator.textContent = 'Error generating QR';
-                    errorIndicator.style.color = 'red';
-                    errorIndicator.style.padding = '10px';
-                    errorIndicator.style.border = '1px solid red';
-                    errorIndicator.style.borderRadius = '4px';
-                    qrWrapper.appendChild(errorIndicator);
-                    
-                    // Fallback - try to use the original canvas
-                    try {
-                        pctx.drawImage(canvas, 20, 20, size - 40, size - 40);
-                        // Remove the error message if this worked
-                        qrWrapper.removeChild(errorIndicator);
-                    } catch (e) {
-                        console.error("Fallback failed", e);
-                    }
-                }
-            });
-            
-            // Create the frame label immediately
-            const newLabel = document.createElement('div');
-            newLabel.style.marginTop = '15px';
-            newLabel.style.color = '#000';
-            newLabel.style.fontWeight = 'bold';
-            newLabel.style.fontSize = '24px';
-            newLabel.textContent = frameLabel || 'Frame';
-            
-            // We add this right away, before the async QR code generation
-            qrWrapper.appendChild(newLabel);
-            
-            // Add the wrapper to the presentation display
-            presentationQrDisplay.appendChild(qrWrapper);
-            
-            // Update the counter
-            presentationCounter.textContent = frameCounter.textContent;
-        }
-
-        function updateProgress(current, total) {
-            const percent = Math.round((current / total) * 100);
-            progressBar.style.width = `${percent}%`;
-            progressText.textContent = `${percent}%`;
-            frameCounter.textContent = `Frame: ${current} / ${total}`;
-            
-            if (isPresentation) {
-                presentationCounter.textContent = frameCounter.textContent;
-            }
-        }
-
-        // Utility functions
-        function formatFileSize(bytes) {
-            if (bytes < 1024) return bytes + ' bytes';
-            else if (bytes < 1048576) return (bytes / 1024).toFixed(2) + ' KB';
-            else if (bytes < 1073741824) return (bytes / 1048576).toFixed(2) + ' MB';
-            else return (bytes / 1073741824).toFixed(2) + ' GB';
-        }
-        
-        function calculateEstimatedTime(frameCount, fps) {
-            // Calculate raw seconds based on frame count and fps
-            let totalSeconds = Math.ceil(frameCount / fps);
-            
-            // Add extra time for metadata and set header frames
-            // which display longer (based on multipliers)
-            const metadataFrames = 1; // Always one metadata frame
-            const setHeaderFrames = selectedSets.filter(Boolean).length;
-            const endFrames = 1;
-            
-            // Add the extra time for special frames
-            totalSeconds += (metadataFrames * METADATA_DISPLAY_MULTIPLIER - metadataFrames) / fps;
-            totalSeconds += (setHeaderFrames * SET_HEADER_DISPLAY_MULTIPLIER - setHeaderFrames) / fps;
-            totalSeconds += (endFrames * METADATA_DISPLAY_MULTIPLIER - endFrames) / fps;
-            
-            return totalSeconds;
-        }
-        
-        function formatTime(seconds) {
-            const minutes = Math.floor(seconds / 60);
-            const remainingSeconds = Math.floor(seconds % 60);
-            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-        }
-
-        function log(message, isError = false) {
-            const timestamp = new Date().toLocaleTimeString();
-            const logMessage = `[${timestamp}] ${message}`;
-            
-            statusEl.textContent = message;
-            
-            if (isError) {
-                console.error(logMessage);
-                statusEl.style.color = 'red';
-            } else {
-                console.log(logMessage);
-                statusEl.style.color = 'black';
-            }
-            
-            debugLogs.push(logMessage);
-            debugView.textContent = debugLogs.join('\n');
-            debugView.scrollTop = debugView.scrollHeight;
-        }
-
-        // Add window resize handler to automatically adjust QR size when window changes
-        window.addEventListener('resize', () => {
-            // Only adjust if we have content to display
-            if (fileName && !isPlaying) {
-                // Delay the update slightly to avoid performance issues during resize
-                clearTimeout(window.resizeTimer);
-                window.resizeTimer = setTimeout(() => {
-                    log("Window resized, adjusting QR display size");
-                    updateQRContainerSize();
-                }, 250);
+                const activeIndicator = document.createElement('div');
+                activeIndicator.style.position = 'absolute';
+                activeIndicator.style.top = '5px';
+                activeIndicator.style.right = '5px';
+                activeIndicator.style.backgroundColor = '#1890ff';
+                activeIndicator.style.color = 'white';
+                activeIndicator.style.padding = '2px 5px';
+                activeIndicator.style.borderRadius = '3px';
+                activeIndicator.style.fontSize = '10px';
+                activeIndicator.textContent = 'Active';
+                
+                // Make sure the item is relative positioned for absolute positioning to work
+                item.style.position = 'relative';
+                item.appendChild(activeIndicator);
             }
         });
+    };
+    
+    // Override the refreshQueueDisplay function to include our enhancements
+    const originalRefreshQueueDisplay = window.refreshQueueDisplay;
+    
+    window.refreshQueueDisplay = function() {
+        // Call the original function
+        originalRefreshQueueDisplay();
         
-        // Set initial QR display size based on default slider value
-        window.addEventListener('DOMContentLoaded', () => {
-            const defaultSize = parseInt(sizeSlider.value);
-            qrDisplay.style.width = `${defaultSize}px`;
-            qrDisplay.style.height = `${defaultSize}px`;
-            log(`Initial QR display size set to ${defaultSize}px`);
-        });
+        // Apply our enhancements
+        setTimeout(updateFileQueueDisplay, 100);
+    };
+    
+    // Make generated file queues display immediately
+    fileQueuePanel.style.display = 'block';
+}
+
+// 5. Enhanced Debug and Log Visibility
+function enhanceDebugAndLogVisibility() {
+    // Style the debug view for better visibility
+    debugView.style.fontFamily = 'monospace';
+    debugView.style.fontSize = '12px';
+    debugView.style.lineHeight = '1.5';
+    debugView.style.padding = '10px';
+    debugView.style.backgroundColor = '#f5f5f5';
+    debugView.style.border = '1px solid #d9d9d9';
+    debugView.style.borderRadius = '4px';
+    debugView.style.whiteSpace = 'pre-wrap';
+    debugView.style.tabSize = '2';
+    debugView.style.overflowX = 'auto';
+    
+    // Add a clear debug button
+    const clearDebugBtn = document.createElement('button');
+    clearDebugBtn.textContent = 'Clear Debug Log';
+    clearDebugBtn.style.margin = '10px 0';
+    clearDebugBtn.style.padding = '5px 10px';
+    clearDebugBtn.style.backgroundColor = '#f5f5f5';
+    clearDebugBtn.style.border = '1px solid #d9d9d9';
+    clearDebugBtn.style.borderRadius = '4px';
+    clearDebugBtn.style.cursor = 'pointer';
+    
+    // Add event listener
+    clearDebugBtn.addEventListener('click', function() {
+        debugLogs = [];
+        debugView.textContent = '';
+        log('Debug log cleared.');
+    });
+    
+    // Add button before debug view
+    const debugTab = document.querySelector('.tab-content[data-tab-content="debug"]');
+    if (debugTab) {
+        debugTab.insertBefore(clearDebugBtn, debugView);
+    }
+    
+    // Enhance the status element
+    statusEl.style.fontFamily = 'monospace';
+    statusEl.style.fontSize = '12px';
+    statusEl.style.lineHeight = '1.5';
+    statusEl.style.padding = '10px';
+    statusEl.style.backgroundColor = '#f0f7ff';
+    statusEl.style.border = '1px solid #d9d9d9';
+    statusEl.style.borderRadius = '4px';
+    statusEl.style.whiteSpace = 'pre-wrap';
+    
+    // Create a floating status panel for important messages
+    const floatingStatus = document.createElement('div');
+    floatingStatus.id = 'floatingStatus';
+    floatingStatus.style.position = 'fixed';
+    floatingStatus.style.bottom = '20px';
+    floatingStatus.style.right = '20px';
+    floatingStatus.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    floatingStatus.style.color = '#fff';
+    floatingStatus.style.padding = '10px 15px';
+    floatingStatus.style.borderRadius = '5px';
+    floatingStatus.style.maxWidth = '300px';
+    floatingStatus.style.zIndex = '9999';
+    floatingStatus.style.display = 'none';
+    floatingStatus.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.2)';
+    floatingStatus.style.transition = 'opacity 0.3s';
+    
+    document.body.appendChild(floatingStatus);
+    
+    // Enhance the log function to also show important messages in the floating status
+    const originalLog = window.log;
+    
+    window.log = function(message, isError = false) {
+        // Call the original log function
+        originalLog(message, isError);
         
-        // Reset size button handler 
-        resetSizeBtn.addEventListener('click', (e) => {
-            e.preventDefault(); // Prevent form submission
+        // For important messages, also show in floating status
+        if (isError || message.includes('received') || message.includes('complete') || 
+            message.includes('Starting') || message.includes('Frame')) {
             
-            // Reset to default size (500px)
-            resetQRSize();
-        });
-        
-        // Show size button handler
-        showSizeBtn.addEventListener('click', (e) => {
-            e.preventDefault();
+            floatingStatus.textContent = message;
+            floatingStatus.style.display = 'block';
+            floatingStatus.style.backgroundColor = isError ? 'rgba(255, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.8)';
             
-            // Get the actual current dimensions
-            const computedStyle = window.getComputedStyle(qrDisplay);
-            const actualWidth = qrDisplay.offsetWidth;
-            const actualHeight = qrDisplay.offsetHeight;
-            const actualPadding = parseInt(computedStyle.padding);
-            const totalWidth = actualWidth + (actualPadding * 2);
-            const totalHeight = actualHeight + (actualPadding * 2);
-            
-            // Create a temporary "Size" indicator on the QR display
-            const sizeIndicator = document.createElement('div');
-            sizeIndicator.style.position = 'absolute';
-            sizeIndicator.style.top = '0';
-            sizeIndicator.style.left = '0';
-            sizeIndicator.style.width = '100%';
-            sizeIndicator.style.padding = '10px';
-            sizeIndicator.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-            sizeIndicator.style.color = 'white';
-            sizeIndicator.style.textAlign = 'center';
-            sizeIndicator.style.fontSize = '14px';
-            sizeIndicator.style.zIndex = '100';
-            sizeIndicator.style.borderRadius = '4px 4px 0 0';
-            sizeIndicator.innerHTML = `
-                Size: ${actualWidth}×${actualHeight}px<br>
-                With padding: ${totalWidth}×${totalHeight}px
-            `;
-            
-            // Make sure qrDisplay has position relative
-            const originalPosition = qrDisplay.style.position;
-            if (qrDisplay.style.position !== 'relative') {
-                qrDisplay.style.position = 'relative';
-            }
-            
-            // Add to display
-            qrDisplay.appendChild(sizeIndicator);
-            
-            // Show in the log
-            log(`Current QR size: ${actualWidth}×${actualHeight}px (with padding: ${totalWidth}×${totalHeight}px)`);
-            
-            // Remove after 3 seconds
-            setTimeout(() => {
-                qrDisplay.removeChild(sizeIndicator);
-                qrDisplay.style.position = originalPosition;
+            // Auto-hide after 3 seconds
+            setTimeout(function() {
+                floatingStatus.style.opacity = '0';
+                
+                // Actually hide after fade out
+                setTimeout(function() {
+                    floatingStatus.style.display = 'none';
+                    floatingStatus.style.opacity = '1';
+                }, 300);
             }, 3000);
-        });
-        
-        // Function to reset QR size to default with visual feedback
-        function resetQRSize() {
-            const defaultSize = 500;
-            
-            // Update slider and display
-            sizeSlider.value = defaultSize;
-            sizeValue.textContent = `${defaultSize}px`;
-            
-            // Visual indication of reset by adding a highlight effect
-            const originalBorder = qrDisplay.style.border;
-            const originalBackground = qrDisplay.style.backgroundColor;
-            
-            // Flash effect to show reset is happening
-            qrDisplay.style.transition = 'all 0.3s ease';
-            qrDisplay.style.border = '4px solid #4CAF50'; // Green highlight
-            qrDisplay.style.backgroundColor = '#f0fff0'; // Light green background
-            
-            // Set size directly with a small delay to let the visual effect be seen
-            setTimeout(() => {
-                // Reset to exact dimensions
-                qrDisplay.style.width = `${defaultSize}px`;
-                qrDisplay.style.height = `${defaultSize}px`;
-                qrDisplay.style.padding = '40px';
-                
-                // Force a browser reflow
-                void qrDisplay.offsetWidth;
-                
-                // Clear any potential interfering styles
-                qrDisplay.style.maxWidth = '';
-                qrDisplay.style.maxHeight = '';
-                qrDisplay.style.minWidth = '';
-                qrDisplay.style.minHeight = '';
-                
-                // Update QR display with manual flag
-                updateQRContainerSize(true);
-                
-                // Restore original styling with slight delay
-                setTimeout(() => {
-                    qrDisplay.style.border = originalBorder || '4px solid rgba(255, 0, 0, 0.6)';
-                    qrDisplay.style.backgroundColor = originalBackground || '#ffffff';
-                    qrDisplay.style.transition = '';
-                }, 500);
-                
-                // Log the outcome
-                log(`QR size reset to default (${defaultSize}px)`);
-                
-                // Add a size indicator that shows the actual dimensions
-                const actualWidth = qrDisplay.offsetWidth;
-                const indicator = document.createElement('div');
-                indicator.style.position = 'absolute';
-                indicator.style.top = '5px';
-                indicator.style.left = '0';
-                indicator.style.width = '100%';
-                indicator.style.textAlign = 'center';
-                indicator.style.color = '#4CAF50';
-                indicator.style.fontWeight = 'bold';
-                indicator.style.zIndex = '100';
-                indicator.textContent = `Size reset to ${actualWidth}px`;
-                
-                // Make sure qrDisplay has position relative
-                if (qrDisplay.style.position !== 'relative') {
-                    qrDisplay.style.position = 'relative';
-                }
-                
-                qrDisplay.appendChild(indicator);
-                
-                // Remove indicator after 2 seconds
-                setTimeout(() => {
-                    qrDisplay.removeChild(indicator);
-                }, 2000);
-            }, 100);
         }
+    };
+}
+
+// Call all the enhancement functions during initialization
+document.addEventListener('DOMContentLoaded', function() {
+    // Add these functions to the window so they can be called
+    window.enhanceSetSelectionInterface = enhanceSetSelectionInterface;
+    window.enhanceFileQueueSystem = enhanceFileQueueSystem;
+    window.enhanceDebugAndLogVisibility = enhanceDebugAndLogVisibility;
+    
+    // Apply the enhancements
+    setTimeout(function() {
+        enhanceSetSelectionInterface();
+        enhanceFileQueueSystem();
+        enhanceDebugAndLogVisibility();
         
-        // Reset all settings button handler
-        resetAllBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            
-            // Confirm before resetting everything
-            if (isPlaying) {
-                log("Please stop the display before resetting settings", true);
-                return;
-            }
-            
-            // Reset all sliders to their default values
-            speedSlider.value = 10;
-            speedValue.textContent = "10 fps";
-            
-            // Reset QR size
-            resetQRSize();
-            
-            // Reset grid layout
-            gridLayoutSelect.value = "1";
-            gridValue.textContent = "1 QR per frame";
-            
-            // Reset chunk size
-            chunkSlider.value = 500;
-            chunkValue.textContent = "500 bytes";
-            
-            // Reset countdown
-            countdownSlider.value = 5;
-            countdownValueEl.textContent = "5 seconds";
-            
-            // Update display to reflect new settings
-            updateQRContainerSize(true);
-            
-            log("All settings reset to defaults");
-        });
-
-        // Initialize
-        log('Ready to encode files. Select a file and click "Generate QR Codes".');
-    </script>
-</body>
-
-</html>
+        // Log initialization complete
+        log('UI enhancements applied successfully.');
+    }, 500);
+});
