@@ -1,4 +1,4 @@
-# QRCoder: High-Speed File Transfer via QR Code Video Stream
+# QRCoder: File Transfer via QR Code Video Stream
 
 ![QRCoder Logo](link.png)
 
