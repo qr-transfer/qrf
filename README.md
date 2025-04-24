@@ -10,9 +10,7 @@ QRCoder is an open-source solution for transferring data using animated QR code 
 
 - **Offline Transfer**: Move data between devices without network access
 - **Visual Data Transmission**: Transfer files using only a screen and camera
-- **High Data Density**: Up to 32 QR codes per frame with grid layout support
 - **Adaptive Sizing**: QR codes automatically scale to optimize screen utilization
-- **Multi-QR Grid Layouts**: Support for 1×1, 2×1, 2×2, 4×2, 4×4, and 8×4 configurations
 - **Unlimited File Size**: Set-based architecture with no practical file size limit
 - **File Continuity**: Recognizes previously partially transferred files
 - **Smart Processing**: Preliminary scan analysis for optimal frame detection
@@ -62,7 +60,6 @@ The encoder converts files into a sequence of QR codes displayed at adjustable s
 - **File Processing**: Reads files as binary data and converts to Base64
 - **Chunking Algorithm**: Divides data into optimally sized chunks
 - **Set-Based Architecture**: Organizes chunks into independently processable sets
-- **Grid-Based Display**: Renders 1-32 QR codes per frame in various layouts
 - **Adaptive Sizing**: Dynamically sizes QR codes based on display capabilities
 - **Frame Timing Control**: Variable frame timing with metadata emphasis
 - **Multiple File Support**: Queue system for processing multiple files
@@ -81,28 +78,12 @@ The decoder captures and processes QR sequences to reconstruct the original file
 
 ### Technical Specifications
 
-- **Transfer Rates**:
-  - Single QR (1×1): ~15KB/s at 30fps
-  - 2×2 grid: ~60KB/s at 30fps
-  - 4×4 grid: ~240KB/s at 30fps
-  - 8×4 grid: ~480KB/s at 30fps
-
 - **QR Code Parameters**:
   - Size: 200-800px (default 500px)
   - Error Correction: Adaptive L/M/H based on grid layout
   - Margin: Adaptive 1-10px based on grid layout
   - Version: Support for high-capacity QR codes (up to version 40)
 
-- **Frame Structure**:
-  ```json
-  {
-    "type": "chunk",
-    "set_index": 1,
-    "chunk_index": 5,
-    "chunks_in_set": 50,
-    "data": "base64_encoded_chunk"
-  }
-  ```
 
 ## 📝 Documentation
 
