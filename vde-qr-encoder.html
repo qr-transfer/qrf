@@ -1,0 +1,1640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR File Transfer - Optimized Encoder</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:system-ui,-apple-system,sans-serif;line-height:1.5;background:#f5f5f5;color:#333;max-width:1200px;margin:0 auto;padding:20px}
+        h1{margin:20px 0;color:#2563eb}
+        .container{display:flex;flex-wrap:wrap;gap:20px}
+        .panel{background:#fff;padding:20px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.1);flex:1;min-width:300px}
+        .control-panel{display:flex;flex-direction:column;gap:15px}
+        .control-group{display:flex;flex-direction:column;gap:8px}
+        .control-label{font-weight:700}
+        button{padding:12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;margin-top:10px;transition:background .2s}
+        button:hover{background:#1d4ed8}
+        button:disabled{background:#94a3b8;cursor:not-allowed}
+        .display-container{display:flex;flex-direction:column;align-items:center;justify-content:center}
+        #qrDisplay{position:relative;margin:0 auto 20px;border:1px solid #ddd;padding:20px;border-radius:8px;background:#fff;max-width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center}
+        .progress-container{width:100%;background:#e5e7eb;border-radius:4px;overflow:hidden;height:10px;margin-top:15px}
+        .progress-bar{height:100%;background:#2563eb;width:0;transition:width .3s}
+        .file-info{margin-top:20px;padding:15px;background:#f0f9ff;border-radius:8px;border-left:4px solid #2563eb}
+        .metadata-info{margin-top:10px;padding:10px;background:#f0f9ff;border-radius:8px;border-left:4px solid #1d4ed8}
+        .info-row{display:flex;justify-content:space-between;margin-bottom:8px}
+        .info-label{font-weight:700;color:#1e40af}
+        
+        /* Fullscreen Mode */
+        .fullscreen{position:fixed;top:0;left:0;width:100vw;height:100vh;background:#000;z-index:1000;display:flex;justify-content:center;align-items:center;flex-direction:column}
+        .fullscreen .qr-container{
+            display:flex;
+            justify-content:center;
+            align-items:center;
+            width:80vmin;
+            height:80vmin;
+            position:relative;
+        }
+        .fullscreen-qr {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            max-width: 95vh;
+            max-height: 95vh;
+        }
+        .fullscreen-progress{position:absolute;bottom:50px;width:80%;max-width:400px}
+        .fullscreen-counter{position:absolute;top:20px;left:20px;background:rgba(0,0,0,.5);color:#fff;padding:10px;border-radius:4px;font-weight:bold;font-size:16px;z-index:10}
+        .exit-button{position:absolute;top:20px;right:20px;background:#ef4444;color:#fff;border:none;width:40px;height:40px;border-radius:20px;font-size:20px;cursor:pointer}
+        
+        /* Countdown Display */
+        .countdown-display{
+            font-size:120px;
+            color:#1890ff;
+            position:absolute;
+            top:50%;
+            left:50%;
+            transform:translate(-50%,-50%);
+            text-shadow:0 0 10px rgba(24,144,255,.5);
+            z-index:100;
+            display:none;
+            background:rgba(0,0,0,.4);
+            width:200px;
+            height:200px;
+            border-radius:50%;
+            line-height:200px;
+            text-align:center;
+            font-weight:bold;
+        }
+        
+        /* Fullscreen Countdown Display */
+        .fullscreen .countdown-display {
+            width: 250px;
+            height: 250px;
+            line-height: 250px;
+            font-size: 150px;
+            background: rgba(0,0,0,.6);
+        }
+        input[type=range]{width:100%;height:8px;background:#e5e7eb;border-radius:4px;appearance:none;outline:0}
+        input[type=range]::-webkit-slider-thumb{appearance:none;width:16px;height:16px;background:#2563eb;border-radius:50%;cursor:pointer}
+        .slider-labels{display:flex;justify-content:space-between;font-size:12px;color:#6b7280;margin-top:5px}
+        .value-display{font-weight:700;color:#2563eb;margin-left:auto}
+        
+        /* File input */
+        .file-input-container{position:relative;overflow:hidden;display:inline-block;width:100%}
+        .file-input-label{padding:12px;background:#e5e7eb;color:#333;border-radius:4px;cursor:pointer;display:block;text-align:center;transition:background .2s}
+        .file-input-label:hover{background:#d1d5db}
+        .file-input-container input[type=file]{position:absolute;left:0;top:0;opacity:0;width:100%;height:100%;cursor:pointer}
+        
+        /* Checkbox style */
+        .control-switch {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+            margin: 10px 0;
+        }
+        
+        .control-switch input[type="checkbox"] {
+            margin-right: 8px;
+            width: 16px;
+            height: 16px;
+        }
+        
+        .switch-label {
+            font-weight: 500;
+        }
+        
+        /* Combined button */
+        .action-button {
+            background-color: #16a34a;
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+        }
+        
+        .action-button:hover {
+            background-color: #15803d;
+        }
+
+        /* Alignment guides */
+        .alignment-guide {
+            position: absolute;
+            border: 3px dashed rgba(59, 130, 246, 0.7);
+            pointer-events: none;
+            display: none;
+        }
+
+        #qrDisplay.show-guides .alignment-guide {
+            display: block;
+        }
+
+        .guide-label {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+        }
+        
+        /* QR Code transition effects */
+        .qr-image {
+            transition: opacity 0.15s ease-out;
+        }
+
+        /* Performance presets */
+        .preset-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .preset-button {
+            padding: 8px 12px;
+            background: #e5e7eb;
+            color: #333;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            cursor: pointer;
+            flex: 1;
+            min-width: 120px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .preset-button:hover {
+            background: #d1d5db;
+        }
+
+        .preset-button.active {
+            background: #2563eb;
+            color: white;
+            border-color: #2563eb;
+        }
+
+        /* Tooltip */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            margin-left: 5px;
+            width: 16px;
+            height: 16px;
+            background: #e5e7eb;
+            color: #6b7280;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 16px;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: help;
+        }
+
+        .tooltip:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            top: -5px;
+            left: 100%;
+            transform: translateY(-100%);
+            background: rgba(55, 65, 81, 0.9);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            width: 200px;
+            font-weight: normal;
+            font-size: 12px;
+            z-index: 10;
+            line-height: 1.4;
+        }
+
+        .handshake-notice {
+            margin-top: 20px;
+            padding: 10px;
+            background: rgba(245, 158, 11, 0.1);
+            border-left: 3px solid #f59e0b;
+            border-radius: 3px;
+            font-size: 13px;
+            color: #92400e;
+        }
+
+        /* Mobile responsiveness */
+        @media (max-width:768px){
+            .container{flex-direction:column}
+            .handshake-notice, .preset-selector {font-size: 11px;}
+            .preset-button {padding: 6px 8px; min-width: 90px;}
+            .control-label {font-size: 14px;}
+            h1 {font-size: 20px; margin: 10px 0;}
+            .panel {padding: 15px;}
+            .slider-labels {font-size: 10px;}
+            .countdown-display {width: 150px; height: 150px; line-height: 150px; font-size: 90px;}
+        }
+    </style>
+</head>
+<body>
+    <h1>QR Code File Encoder</h1>
+    <div class="container">
+        <div class="panel control-panel">
+            <div class="control-group">
+                <label class="control-label">Select File</label>
+                <div class="file-input-container">
+                    <label class="file-input-label">
+                        <span id="fileLabel">Choose a file</span>
+                        <input type="file" id="fileInput">
+                    </label>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label class="control-label">Performance Presets</label>
+                <div class="preset-selector">
+                    <button id="fastPreset" class="preset-button">Fast Transfer</button>
+                    <button id="reliablePreset" class="preset-button active">Reliable</button>
+                    <button id="mobilePreset" class="preset-button">Mobile Optimized</button>
+                </div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+                    Presets automatically configure optimal settings for your use case
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-label">
+                    QR Size <span class="value-display" id="sizeValue">500px</span>
+                    <span class="tooltip" data-tooltip="Size of the QR code in pixels. Larger QR codes are easier to scan but may not fit on screen.">?</span>
+                </div>
+                <input type="range" id="sizeSlider" min="200" max="800" value="500">
+                <div class="slider-labels">
+                    <span>Smaller</span>
+                    <span>Larger</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-label">
+                    Display Speed <span class="value-display" id="speedValue">10 FPS</span>
+                    <span class="tooltip" data-tooltip="Frames per second. Higher values transfer data faster, but may be harder to scan.">?</span>
+                </div>
+                <input type="range" id="speedSlider" min="1" max="30" value="10">
+                <div class="slider-labels">
+                    <span>Slower</span>
+                    <span>Faster</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-label">
+                    Chunk Size <span class="value-display" id="chunkValue">500 chars</span>
+                    <span class="tooltip" data-tooltip="Size of each data chunk. Larger chunks transfer faster but may be harder to scan.">?</span>
+                </div>
+                <input type="range" id="chunkSlider" min="100" max="1000" step="50" value="500">
+                <div class="slider-labels">
+                    <span>Smaller chunks</span>
+                    <span>Larger chunks</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-label">
+                    Redundancy <span class="value-display" id="redundancyValue">60%</span>
+                    <span class="tooltip" data-tooltip="Extra data to ensure successful transfer. Higher values improve reliability but increase transfer time.">?</span>
+                </div>
+                <input type="range" id="redundancySlider" min="20" max="200" step="10" value="60">
+                <div class="slider-labels">
+                    <span>Less</span>
+                    <span>More</span>
+                </div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+                    For 30% missed frames, use 60-70% redundancy<br>
+                    For 50% missed frames, use 100-120% redundancy
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    Error Correction Level
+                    <span class="tooltip" data-tooltip="QR code error correction level. Higher levels are more reliable but create larger, more complex QR codes.">?</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 5px;">
+                    <select id="errorCorrectionSelect" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #d1d5db;">
+                        <option value="H">High (30% recovery)</option>
+                        <option value="M">Medium (15% recovery)</option>
+                        <option value="L">Low (7% recovery)</option>
+                    </select>
+                </div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+                    Higher correction = more reliable but larger QR codes
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    Max Combined Chunks <span class="value-display" id="maxDegreeValue">2</span>
+                    <span class="tooltip" data-tooltip="Maximum number of chunks to combine in a single QR code. Lower is safer for reliable scanning.">?</span>
+                </div>
+                <input type="range" id="maxDegreeSlider" min="1" max="4" step="1" value="2">
+                <div class="slider-labels">
+                    <span>Safer (1)</span>
+                    <span>Denser (4)</span>
+                </div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+                    Recommend 1-2 for highest reliability; 3-4 only for perfect conditions
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    Countdown Before Start <span class="value-display" id="countdownValue">10s</span>
+                    <span class="tooltip" data-tooltip="Time to prepare before QR codes start displaying.">?</span>
+                </div>
+                <input type="range" id="countdownSlider" min="0" max="30" value="10">
+                <div class="slider-labels">
+                    <span>None</span>
+                    <span>30s</span>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label class="control-switch">
+                    <input type="checkbox" id="fullscreenCheckbox" checked>
+                    <span class="switch-label">Start in Fullscreen Mode (Recommended)</span>
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label class="control-switch">
+                    <input type="checkbox" id="showGuidesCheckbox">
+                    <span class="switch-label">Show Scanner Alignment Guides</span>
+                </label>
+            </div>
+            
+            <div class="control-group">
+                <label class="control-switch">
+                    <input type="checkbox" id="enableTransitionsCheckbox" checked>
+                    <span class="switch-label">Enable Smooth Transitions</span>
+                    <span class="tooltip" data-tooltip="Enables subtle transitions between QR codes to improve scanning reliability.">?</span>
+                </label>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px; margin-left: 24px;">
+                    Always on for best results; disable only for older devices
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label class="control-switch">
+                    <input type="checkbox" id="highDensityCheckbox">
+                    <span class="switch-label">High Density Mode</span>
+                    <span class="tooltip" data-tooltip="Increases QR code data capacity but requires enhanced scanner capabilities.">?</span>
+                </label>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px; margin-left: 24px;">
+                    WARNING: Only enable if using the enhanced parallel processing decoder
+                </div>
+            </div>
+
+            <div class="control-group">
+                <button id="generateAndStartBtn" class="action-button" disabled>Generate & Start Display</button>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                    <button id="generateBtn" disabled>Generate QR Codes</button>
+                    <button id="stopBtn" disabled style="flex: 1; background: #dc2626;">Stop</button>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                    <button id="startBtn" disabled style="flex: 1;">Start Display</button>
+                    <button id="fullscreenBtn" disabled style="flex: 1; background: #4b5563;">Fullscreen</button>
+                </div>
+            </div>
+
+            <div class="handshake-notice">
+                <strong>Handshake Mode</strong>: The first frame contains special setup data that helps the decoder optimize for your specific transfer. Make sure to scan this frame.
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="display-container">
+                <div id="frameCounter" style="margin-bottom: 10px; font-weight: bold;">Frame: 0 / 0</div>
+                <div id="qrDisplay" style="width: 500px; height: 500px; display: flex; align-items: center; justify-content: center;">
+                    <div class="alignment-guide" style="width: 90%; height: 90%; top: 5%; left: 5%;"></div>
+                    <div class="alignment-guide" style="width: 70%; height: 70%; top: 15%; left: 15%;"></div>
+                    <div class="guide-label" style="top: 2%; left: 50%; transform: translateX(-50%);">Keep QR code within this area</div>
+                    <div style="color: #6b7280;">QR code will appear here</div>
+                    <div id="countdownDisplay" class="countdown-display"></div>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+            </div>
+            
+            <div id="fileInfo" class="file-info" style="display: none;">
+                <h3 style="margin-bottom: 10px;">File Information</h3>
+                <div class="info-row">
+                    <div class="info-label">File Name:</div>
+                    <div id="fileName">-</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">File Size:</div>
+                    <div id="fileSize">-</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Chunks:</div>
+                    <div id="chunksCount">-</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Packets:</div>
+                    <div id="packetsCount">-</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Redundancy Level:</div>
+                    <div id="redundancyLevel">-</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Transfer Time:</div>
+                    <div id="transferTime">-</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Optimal Distance:</div>
+                    <div id="optimalDistance">-</div>
+                </div>
+                <div class="info-row high-density-indicator" style="display: none;">
+                    <div class="info-label" style="color: #b91c1c;">High Density Mode:</div>
+                    <div style="color: #b91c1c; font-weight: bold;">Active</div>
+                </div>
+            </div>
+            
+            <div id="metadataInfo" class="metadata-info" style="display: none;">
+                <h3 style="margin-bottom: 10px;">Transmission Details</h3>
+                <div id="qrCodeInfo" style="margin-bottom: 10px;">
+                    <div style="font-weight: bold; color: #1e40af;">Current Frame Type:</div>
+                    <div id="frameType">-</div>
+                </div>
+                <div id="currentChunkInfo" style="margin-bottom: 10px; display: none;">
+                    <div style="font-weight: bold; color: #1e40af;">Current Chunk:</div>
+                    <div id="chunkId">-</div>
+                </div>
+                <div id="transmissionStats" style="margin-top: 10px;">
+                    <div style="font-weight: bold; color: #1e40af;">Transmission Stats:</div>
+                    <div>Elapsed Time: <span id="elapsedTime">0s</span></div>
+                    <div>Avg Speed: <span id="transmissionSpeed">-</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fullscreen mode container (hidden initially) -->
+    <div id="fullscreenDisplay" class="fullscreen" style="display: none;">
+        <div class="qr-container">
+            <img id="fullscreenQR" class="fullscreen-qr" src="" alt="QR Code">
+            <div id="fsCountdownDisplay" class="countdown-display"></div>
+        </div>
+        <div class="fullscreen-counter" id="fullscreenCounter">Frame: 0 / 0</div>
+        <div class="fullscreen-progress progress-container">
+            <div class="progress-bar" id="fullscreenProgressBar"></div>
+        </div>
+        <button class="exit-button" id="exitFullscreenBtn">&times;</button>
+    </div>
+
+    <script>
+        // Constants and configuration
+        const DEFAULT_QR_CONTENT_SIZE = 2500;
+        const HIGH_DENSITY_QR_CONTENT_SIZE = 4000;
+        let MAX_QR_CONTENT_SIZE = DEFAULT_QR_CONTENT_SIZE;
+
+        // DOM Elements
+        const fileInput = document.getElementById('fileInput');
+        const fileLabel = document.getElementById('fileLabel');
+        const speedSlider = document.getElementById('speedSlider');
+        const sizeSlider = document.getElementById('sizeSlider');
+        const chunkSlider = document.getElementById('chunkSlider');
+        const redundancySlider = document.getElementById('redundancySlider');
+        const countdownSlider = document.getElementById('countdownSlider');
+        const maxDegreeSlider = document.getElementById('maxDegreeSlider');
+        const speedValue = document.getElementById('speedValue');
+        const sizeValue = document.getElementById('sizeValue');
+        const chunkValue = document.getElementById('chunkValue');
+        const redundancyValue = document.getElementById('redundancyValue');
+        const maxDegreeValue = document.getElementById('maxDegreeValue');
+        const countdownValue = document.getElementById('countdownValue');
+        const errorCorrectionSelect = document.getElementById('errorCorrectionSelect');
+        const fullscreenCheckbox = document.getElementById('fullscreenCheckbox');
+        const showGuidesCheckbox = document.getElementById('showGuidesCheckbox');
+        const enableTransitionsCheckbox = document.getElementById('enableTransitionsCheckbox');
+        const highDensityCheckbox = document.getElementById('highDensityCheckbox');
+        const generateAndStartBtn = document.getElementById('generateAndStartBtn');
+        const generateBtn = document.getElementById('generateBtn');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const qrDisplay = document.getElementById('qrDisplay');
+        const progressBar = document.getElementById('progressBar');
+        const frameCounter = document.getElementById('frameCounter');
+        const fileInfo = document.getElementById('fileInfo');
+        const metadataInfo = document.getElementById('metadataInfo');
+        const frameType = document.getElementById('frameType');
+        const chunkId = document.getElementById('chunkId');
+        const currentChunkInfo = document.getElementById('currentChunkInfo');
+        const elapsedTime = document.getElementById('elapsedTime');
+        const transmissionSpeed = document.getElementById('transmissionSpeed');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const chunksCount = document.getElementById('chunksCount');
+        const packetsCount = document.getElementById('packetsCount');
+        const redundancyLevel = document.getElementById('redundancyLevel');
+        const transferTime = document.getElementById('transferTime');
+        const optimalDistance = document.getElementById('optimalDistance');
+        const fullscreenDisplay = document.getElementById('fullscreenDisplay');
+        const fullscreenQR = document.getElementById('fullscreenQR');
+        const fullscreenCounter = document.getElementById('fullscreenCounter');
+        const fullscreenProgressBar = document.getElementById('fullscreenProgressBar');
+        const exitFullscreenBtn = document.getElementById('exitFullscreenBtn');
+        const countdownDisplay = document.getElementById('countdownDisplay');
+        const fsCountdownDisplay = document.getElementById('fsCountdownDisplay');
+        const fastPreset = document.getElementById('fastPreset');
+        const reliablePreset = document.getElementById('reliablePreset');
+        const mobilePreset = document.getElementById('mobilePreset');
+
+        // State variables
+        let fileContent = null;
+        let fileNameText = '';
+        let fileSizeBytes = 0;
+        let chunks = [];
+        let fountainPackets = [];
+        let displayInterval = null;
+        let currentFrame = 0;
+        let totalFrames = 0;
+        let isPlaying = false;
+        let isFullscreen = false;
+        let qrSize = 500;
+        let startTime = null;
+        let transmissionTimer = null;
+        let countdownTimer = null;
+        let countdownSeconds = 10;
+
+        // Update UI based on slider values
+        speedSlider.addEventListener('input', () => {
+            const fps = speedSlider.value;
+            speedValue.textContent = `${fps} FPS`;
+        });
+
+        sizeSlider.addEventListener('input', () => {
+            qrSize = parseInt(sizeSlider.value);
+            sizeValue.textContent = `${qrSize}px`;
+            qrDisplay.style.width = `${qrSize}px`;
+            qrDisplay.style.height = `${qrSize}px`;
+        });
+
+        chunkSlider.addEventListener('input', () => {
+            const size = chunkSlider.value;
+            chunkValue.textContent = `${size} chars`;
+        });
+
+        redundancySlider.addEventListener('input', () => {
+            const redundancy = redundancySlider.value;
+            redundancyValue.textContent = `${redundancy}%`;
+        });
+        
+        countdownSlider.addEventListener('input', () => {
+            countdownSeconds = parseInt(countdownSlider.value);
+            countdownValue.textContent = countdownSeconds > 0 ? `${countdownSeconds}s` : 'None';
+        });
+        
+        maxDegreeSlider.addEventListener('input', () => {
+            const maxDegree = maxDegreeSlider.value;
+            maxDegreeValue.textContent = maxDegree;
+        });
+
+        // Show alignment guides
+        showGuidesCheckbox.addEventListener('change', () => {
+            if (showGuidesCheckbox.checked) {
+                qrDisplay.classList.add('show-guides');
+            } else {
+                qrDisplay.classList.remove('show-guides');
+            }
+        });
+        
+        // Toggle high-density mode
+        highDensityCheckbox.addEventListener('change', () => {
+            if (highDensityCheckbox.checked) {
+                MAX_QR_CONTENT_SIZE = HIGH_DENSITY_QR_CONTENT_SIZE;
+                document.querySelectorAll('.high-density-indicator').forEach(el => {
+                    el.style.display = 'block';
+                });
+            } else {
+                MAX_QR_CONTENT_SIZE = DEFAULT_QR_CONTENT_SIZE;
+                document.querySelectorAll('.high-density-indicator').forEach(el => {
+                    el.style.display = 'none';
+                });
+            }
+            
+            if (chunks && chunks.length > 0) {
+                generateBtn.disabled = false;
+            }
+        });
+
+        // Preset button handlers
+        fastPreset.addEventListener('click', () => {
+            applyPreset('fast');
+        });
+
+        reliablePreset.addEventListener('click', () => {
+            applyPreset('reliable');
+        });
+
+        mobilePreset.addEventListener('click', () => {
+            applyPreset('mobile');
+        });
+
+        // Apply preset settings
+        function applyPreset(type) {
+            // Remove active class from all buttons
+            fastPreset.classList.remove('active');
+            reliablePreset.classList.remove('active');
+            mobilePreset.classList.remove('active');
+
+            // Apply settings based on preset type
+            switch (type) {
+                case 'fast':
+                    fastPreset.classList.add('active');
+                    speedSlider.value = 12;
+                    chunkSlider.value = 600;
+                    redundancySlider.value = 50;
+                    maxDegreeSlider.value = 2;
+                    errorCorrectionSelect.value = 'M';
+                    enableTransitionsCheckbox.checked = true;
+                    break;
+                    
+                case 'reliable':
+                    reliablePreset.classList.add('active');
+                    speedSlider.value = 10;
+                    chunkSlider.value = 500;
+                    redundancySlider.value = 80;
+                    maxDegreeSlider.value = 2;
+                    errorCorrectionSelect.value = 'H';
+                    enableTransitionsCheckbox.checked = true;
+                    break;
+                    
+                case 'mobile':
+                    mobilePreset.classList.add('active');
+                    speedSlider.value = 8;
+                    chunkSlider.value = 400;
+                    redundancySlider.value = 100;
+                    maxDegreeSlider.value = 1;
+                    errorCorrectionSelect.value = 'H';
+                    sizeSlider.value = 600;
+                    qrSize = 600;
+                    qrDisplay.style.width = `${qrSize}px`;
+                    qrDisplay.style.height = `${qrSize}px`;
+                    sizeValue.textContent = `${qrSize}px`;
+                    enableTransitionsCheckbox.checked = true;
+                    break;
+            }
+
+            // Update slider display values
+            speedValue.textContent = `${speedSlider.value} FPS`;
+            chunkValue.textContent = `${chunkSlider.value} chars`;
+            redundancyValue.textContent = `${redundancySlider.value}%`;
+            maxDegreeValue.textContent = maxDegreeSlider.value;
+        }
+
+        // File selection handler
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                fileNameText = file.name;
+                fileSizeBytes = file.size;
+                fileLabel.textContent = fileNameText;
+                fileName.textContent = fileNameText;
+                generateBtn.disabled = false;
+                generateAndStartBtn.disabled = false;
+                
+                // Stop any ongoing display
+                if (displayInterval) {
+                    clearInterval(displayInterval);
+                    displayInterval = null;
+                }
+                isPlaying = false;
+                startBtn.disabled = true;
+                stopBtn.disabled = true;
+                fullscreenBtn.disabled = true;
+
+                // Apply optimal settings for the file
+                applyOptimalSettings();
+            }
+        });
+        
+        // Calculate optimal display settings based on file size
+        function calculateOptimalSettings(fileSize) {
+            if (fileSize < 50000) { // < 50KB
+                return {
+                    fps: 15, 
+                    chunkSize: 600,
+                    redundancy: 60,
+                    distance: "20-25cm",
+                    preset: "fast"
+                };
+            } else if (fileSize < 500000) { // < 500KB
+                return {
+                    fps: 12,
+                    chunkSize: 500,
+                    redundancy: 80,
+                    distance: "25-30cm",
+                    preset: "reliable"
+                };
+            } else { // >= 500KB
+                return {
+                    fps: 8,
+                    chunkSize: 400,
+                    redundancy: 100,
+                    distance: "25-30cm",
+                    preset: "mobile"
+                };
+            }
+        }
+        
+        // Apply optimal settings
+        function applyOptimalSettings() {
+            if (!fileInput.files.length) return;
+            
+            const optimal = calculateOptimalSettings(fileSizeBytes);
+            
+            // Set slider values
+            speedSlider.value = optimal.fps;
+            speedValue.textContent = `${optimal.fps} FPS`;
+            
+            chunkSlider.value = optimal.chunkSize;
+            chunkValue.textContent = `${optimal.chunkSize} chars`;
+            
+            redundancySlider.value = optimal.redundancy;
+            redundancyValue.textContent = `${optimal.redundancy}%`;
+
+            // Set optimal distance
+            optimalDistance.textContent = optimal.distance;
+
+            // Apply the matching preset
+            applyPreset(optimal.preset);
+        }
+
+        // Generate & Start button (combined functionality)
+        generateAndStartBtn.addEventListener('click', async () => {
+            if (!fileInput.files.length) return;
+            
+            generateAndStartBtn.disabled = true;
+            generateAndStartBtn.textContent = 'Generating...';
+            
+            try {
+                await generateQRCodes();
+                
+                if (fullscreenCheckbox.checked) {
+                    enterFullscreenMode();
+                    startPlaying();
+                } else {
+                    startPlaying();
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                generateAndStartBtn.textContent = 'Generate & Start Display';
+                generateAndStartBtn.disabled = false;
+            }
+        });
+
+        // Generate QR codes
+        generateBtn.addEventListener('click', async () => {
+            if (!fileInput.files.length) return;
+            
+            generateBtn.disabled = true;
+            generateBtn.textContent = 'Generating...';
+            
+            try {
+                await generateQRCodes();
+                startBtn.disabled = false;
+                fullscreenBtn.disabled = false;
+            } catch (error) {
+                alert('Error generating QR codes: ' + error.message);
+            } finally {
+                generateBtn.textContent = 'Generate QR Codes';
+                generateBtn.disabled = false;
+            }
+        });
+
+        // Generate QR codes function
+        async function generateQRCodes() {
+            if (!fileInput.files.length) return;
+            
+            const file = fileInput.files[0];
+            const chunkSize = parseInt(chunkSlider.value);
+            const redundancyPercent = parseInt(redundancySlider.value);
+            
+            // Read the file
+            const fileData = await readFileAsBase64(file);
+            fileContent = fileData.split(',')[1]; // Remove data URL prefix
+            
+            // Split file into chunks
+            chunks = chunkFile(fileContent, chunkSize);
+            
+            // Create LT encoder with systematic extensions
+            const ltEncoder = new SystematicLTEncoder(chunks);
+            
+            // Force max degree to be the one from the slider
+            ltEncoder.maxSafeDegree = parseInt(maxDegreeSlider.value);
+            
+            // Generate metadata packet first
+            fountainPackets = [ltEncoder.generateMetadataPacket()];
+            
+            // Calculate total packets to generate
+            const totalPackets = ltEncoder.calculateTotalPackets();
+            
+            // Generate the rest of the packets using LT coding
+            for (let i = 1; i < totalPackets; i++) {
+                fountainPackets.push(ltEncoder.generatePacket());
+            }
+            
+            // Generate an additional copy of chunk 0 to ensure it's received
+            if (chunks.length > 0) {
+                const redundantChunk0 = ltEncoder.createSystematicPacket(0);
+                redundantChunk0.p = ltEncoder.packetCounter; // Update packet ID
+                fountainPackets.push(redundantChunk0);
+            }
+            
+            totalFrames = fountainPackets.length;
+            
+            // Update UI
+            frameCounter.textContent = `Frame: 0 / ${totalFrames}`;
+            fileName.textContent = fileNameText;
+            fileSize.textContent = formatFileSize(fileSizeBytes);
+            chunksCount.textContent = chunks.length;
+            packetsCount.textContent = fountainPackets.length;
+            redundancyLevel.textContent = `${redundancyPercent}% (${Math.round((fountainPackets.length / chunks.length - 1) * 100)}% effective)`;
+            transferTime.textContent = `~${Math.ceil(totalFrames / parseInt(speedSlider.value))} seconds`;
+            optimalDistance.textContent = calculateOptimalSettings(fileSizeBytes).distance;
+            
+            // Count systematic vs. fountain packets
+            const systematicCount = chunks.length;
+            const fountainCount = fountainPackets.length - systematicCount - 1; // -1 for metadata packet
+            
+            // Create phase information element if it doesn't exist
+            if (!document.getElementById('phaseInfo')) {
+                const phaseInfo = document.createElement('div');
+                phaseInfo.id = 'phaseInfo';
+                phaseInfo.className = 'info-row';
+                phaseInfo.innerHTML = `
+                    <div class="info-label">Encoding Phases:</div>
+                    <div id="phaseDetails">
+                        <div>Systematic: ${systematicCount} packets</div>
+                        <div>Fountain: ${fountainCount} packets</div>
+                    </div>
+                `;
+                document.getElementById('fileInfo').appendChild(phaseInfo);
+            } else {
+                document.getElementById('phaseDetails').innerHTML = `
+                    <div>Systematic: ${systematicCount} packets</div>
+                    <div>Fountain: ${fountainCount} packets</div>
+                `;
+            }
+            
+            // Show LT parameters if they don't exist
+            if (!document.getElementById('ltParams') && fountainPackets.length > 0) {
+                const ltEncoder = new SystematicLTEncoder(chunks);
+                const ltParams = document.createElement('div');
+                ltParams.id = 'ltParams';
+                ltParams.className = 'info-row';
+                ltParams.innerHTML = `
+                    <div class="info-label">LT Parameters:</div>
+                    <div id="ltDetails">
+                        <div>c: ${ltEncoder.c.toFixed(2)}</div>
+                        <div>δ: ${ltEncoder.delta.toFixed(2)}</div>
+                    </div>
+                `;
+                document.getElementById('fileInfo').appendChild(ltParams);
+            }
+            
+            fileInfo.style.display = 'block';
+            
+            // Generate first QR code
+            if (fountainPackets.length > 0) {
+                await generateQRCodeForFrame(0);
+                currentFrame = 0;
+            }
+            
+            return true;
+        }
+
+        // Start display
+        startBtn.addEventListener('click', () => {
+            if (fountainPackets.length === 0) return;
+            
+            if (countdownSeconds > 0) {
+                startCountdown();
+            } else {
+                startPlaying();
+            }
+        });
+        
+        // Start countdown before displaying QR codes
+        function startCountdown() {
+            let countdown = countdownSeconds;
+            
+            // Initialize countdown displays
+            countdownDisplay.textContent = countdown;
+            countdownDisplay.style.display = 'block';
+            
+            fsCountdownDisplay.textContent = countdown;
+            fsCountdownDisplay.style.display = isFullscreen ? 'block' : 'none';
+            
+            // Add countdown display to QR display so it's visible
+            if (qrDisplay.querySelector('.countdown-display') === null) {
+                qrDisplay.appendChild(countdownDisplay);
+            }
+            
+            // Disable buttons during countdown
+            startBtn.disabled = true;
+            
+            // Start countdown timer
+            countdownTimer = setInterval(() => {
+                countdown--;
+                
+                if (countdown <= 0) {
+                    // Countdown complete, start playing
+                    clearInterval(countdownTimer);
+                    countdownDisplay.style.display = 'none';
+                    fsCountdownDisplay.style.display = 'none';
+                    startPlaying();
+                } else {
+                    // Update countdown displays
+                    countdownDisplay.textContent = countdown;
+                    fsCountdownDisplay.textContent = countdown;
+                }
+            }, 1000);
+        }
+        
+        // Start playing QR codes
+        function startPlaying() {
+            isPlaying = true;
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            currentFrame = 0;
+            
+            // Start timestamp for transmission
+            startTime = Date.now();
+            metadataInfo.style.display = 'block';
+            
+            // Update transmission time periodically
+            transmissionTimer = setInterval(updateTransmissionStats, 1000);
+            
+            // Display QR codes at specified frame rate
+            const interval = 1000 / parseInt(speedSlider.value);
+            
+            // Simplified transition implementation
+            displayInterval = setInterval(async () => {
+                // Update frame index
+                currentFrame = (currentFrame + 1) % totalFrames;
+                
+                // Generate new QR code
+                await generateQRCodeForFrame(currentFrame);
+                updateProgress();
+                
+                // Apply transition class to all generated QR images
+                if (enableTransitionsCheckbox.checked) {
+                    const regularQRImage = qrDisplay.querySelector('img');
+                    if (regularQRImage) {
+                        regularQRImage.classList.add('qr-image');
+                    }
+                    
+                    if (isFullscreen && fullscreenQR) {
+                        fullscreenQR.classList.add('qr-image');
+                    }
+                }
+            }, interval);
+        }
+
+        // Stop display
+        stopBtn.addEventListener('click', () => {
+            stopPlaying();
+        });
+        
+        function stopPlaying() {
+            if (countdownTimer) {
+                clearInterval(countdownTimer);
+                countdownTimer = null;
+                countdownDisplay.style.display = 'none';
+                if (isFullscreen) {
+                    fsCountdownDisplay.style.display = 'none';
+                }
+            }
+            
+            if (displayInterval) {
+                clearInterval(displayInterval);
+                displayInterval = null;
+            }
+            
+            if (transmissionTimer) {
+                clearInterval(transmissionTimer);
+                transmissionTimer = null;
+            }
+            
+            isPlaying = false;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+
+        // Fullscreen mode
+        fullscreenBtn.addEventListener('click', () => {
+            enterFullscreenMode();
+            
+            // Start display in fullscreen mode (with countdown if enabled)
+            if (countdownSeconds > 0) {
+                startCountdown();
+            } else {
+                startPlaying();
+            }
+        });
+        
+        // Enter fullscreen mode
+        function enterFullscreenMode() {
+            isFullscreen = true;
+            fullscreenDisplay.style.display = 'flex';
+            
+            // Stop normal display if it's playing
+            if (isPlaying) {
+                stopPlaying();
+            }
+            
+            // Make sure current frame is displayed in fullscreen
+            if (currentFrame >= 0 && fountainPackets.length > 0) {
+                generateQRCodeForFrame(currentFrame, true);
+            }
+        }
+
+        // Exit fullscreen mode
+        exitFullscreenBtn.addEventListener('click', () => {
+            isFullscreen = false;
+            fullscreenDisplay.style.display = 'none';
+            
+            // Stop fullscreen display
+            stopPlaying();
+        });
+        
+        // Update transmission statistics
+        function updateTransmissionStats() {
+            if (!isPlaying || !startTime) return;
+            
+            const elapsed = (Date.now() - startTime) / 1000;
+            const elapsedFormatted = formatTime(elapsed);
+            elapsedTime.textContent = elapsedFormatted;
+            
+            // Calculate transmission speed
+            const totalBytes = fileSizeBytes;
+            const progress = Math.min(currentFrame / totalFrames, 1);
+            const bytesTransferred = totalBytes * progress;
+            const bytesPerSecond = bytesTransferred / elapsed;
+            
+            transmissionSpeed.textContent = `${formatFileSize(bytesPerSecond)}/s`;
+        }
+        
+        // Format time in MM:SS format
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // Helper: Generate QR code for specific frame
+        async function generateQRCodeForFrame(frameIndex, forFullscreen = false) {
+            try {
+                if (!fountainPackets[frameIndex]) return;
+                
+                const packet = fountainPackets[frameIndex];
+                
+                // Use the compact string format directly
+                let packetData;
+                if (frameIndex === 0 && packet.metaString) {
+                    // First frame with metadata
+                    packetData = packet.metaString;
+                } else if (packet.dataString) {
+                    // Regular data frame
+                    packetData = packet.dataString;
+                }
+                
+                // Create QR code
+                const options = {
+                    errorCorrectionLevel: errorCorrectionSelect.value,
+                    margin: 1,
+                    width: forFullscreen ? Math.min(window.innerWidth * 0.7, window.innerHeight * 0.7) : qrSize,
+                    color: {
+                        dark: '#000000',
+                        light: '#FFFFFF'
+                    }
+                };
+                
+                const qrCodeDataUrl = await new Promise((resolve, reject) => {
+                    QRCode.toDataURL(packetData, options, (error, url) => {
+                        if (error) reject(error);
+                        else resolve(url);
+                    });
+                });
+                
+                // Update display
+                if (forFullscreen || isFullscreen) {
+                    fullscreenQR.src = qrCodeDataUrl;
+                    fullscreenCounter.textContent = `Frame: ${frameIndex + 1} / ${totalFrames}`;
+                    
+                    if (enableTransitionsCheckbox.checked) {
+                        fullscreenQR.classList.add('qr-image');
+                    }
+                    
+                    // Ensure countdown is visible when needed
+                    if (countdownDisplay.style.display === 'block') {
+                        fsCountdownDisplay.style.display = 'block';
+                        fsCountdownDisplay.textContent = countdownDisplay.textContent;
+                    } else {
+                        fsCountdownDisplay.style.display = 'none';
+                    }
+                }
+                
+                // Always update regular display too
+                qrDisplay.innerHTML = `<img src="${qrCodeDataUrl}" alt="QR Code" style="max-width: 100%; max-height: 100%;">`;
+                
+                // Apply transition class if enabled
+                if (enableTransitionsCheckbox.checked) {
+                    const newImage = qrDisplay.querySelector('img');
+                    if (newImage) {
+                        newImage.classList.add('qr-image');
+                    }
+                }
+                
+                // Re-add alignment guides if they were enabled
+                if (showGuidesCheckbox.checked) {
+                    const alignmentGuide1 = document.createElement('div');
+                    alignmentGuide1.className = 'alignment-guide';
+                    alignmentGuide1.style = 'width: 90%; height: 90%; top: 5%; left: 5%;';
+                    
+                    const alignmentGuide2 = document.createElement('div');
+                    alignmentGuide2.className = 'alignment-guide';
+                    alignmentGuide2.style = 'width: 70%; height: 70%; top: 15%; left: 15%;';
+                    
+                    const guideLabel = document.createElement('div');
+                    guideLabel.className = 'guide-label';
+                    guideLabel.style = 'top: 2%; left: 50%; transform: translateX(-50%);';
+                    guideLabel.textContent = 'Keep QR code within this area';
+                    
+                    qrDisplay.appendChild(alignmentGuide1);
+                    qrDisplay.appendChild(alignmentGuide2);
+                    qrDisplay.appendChild(guideLabel);
+                    
+                    if (showGuidesCheckbox.checked) {
+                        qrDisplay.classList.add('show-guides');
+                    }
+                }
+                
+                if (countdownDisplay.style.display === 'block') {
+                    qrDisplay.appendChild(countdownDisplay);
+                }
+                frameCounter.textContent = `Frame: ${frameIndex + 1} / ${totalFrames}`;
+                
+                // Update metadata display
+                updateFrameMetadata(frameIndex);
+                
+                // Update progress bar in both normal and fullscreen modes
+                const progress = ((frameIndex + 1) / totalFrames) * 100;
+                progressBar.style.width = `${progress}%`;
+                fullscreenProgressBar.style.width = `${progress}%`;
+                
+            } catch (error) {
+                console.error('Error generating QR code:', error);
+            }
+        }
+        
+        // Update frame metadata display
+        function updateFrameMetadata(frameIndex) {
+            const packet = fountainPackets[frameIndex];
+            if (!packet) return;
+            
+            // Determine frame type
+            let frameTypeText;
+            let packetSizeInfo = '';
+            
+            if (frameIndex === 0) {
+                frameTypeText = 'Handshake (Setup Data)';
+                currentChunkInfo.style.display = 'none';
+                
+                // Add size info for metadata packet
+                if (packet.metaString) {
+                    const metaSize = packet.metaString.length;
+                    packetSizeInfo = ` (${metaSize} bytes)`;
+                }
+            } else {
+                // Parse from compact string format
+                // Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+                const parts = packet.dataString.split(':');
+                if (parts.length >= 6) {
+                    const packetId = parts[1];
+                    const degree = parts[5];
+                    
+                    frameTypeText = `Data Packet (Degree: ${degree})`;
+                    currentChunkInfo.style.display = 'block';
+                    chunkId.textContent = `${packetId} (contains ${degree} chunk${degree > 1 ? 's' : ''})`;
+                    
+                    // Add size info
+                    packetSizeInfo = ` (${packet.dataString.length} bytes)`;
+                }
+            }
+            
+            frameType.textContent = frameTypeText + packetSizeInfo;
+        }
+
+        // Helper: Update progress bar
+        function updateProgress() {
+            const progress = ((currentFrame + 1) / totalFrames) * 100;
+            progressBar.style.width = `${progress}%`;
+            if (isFullscreen) {
+                fullscreenProgressBar.style.width = `${progress}%`;
+            }
+        }
+
+        // Helper: Read file as base64
+        function readFileAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Helper: Split file into chunks
+        function chunkFile(data, chunkSize) {
+            const chunks = [];
+            for (let i = 0; i < data.length; i += chunkSize) {
+                chunks.push(data.slice(i, i + chunkSize));
+            }
+            return chunks;
+        }
+
+        // Helper: Format file size
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' bytes';
+            else if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            else return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // Systematic LT Encoder Implementation
+        class SystematicLTEncoder {
+            constructor(originalChunks, seedBase = Date.now()) {
+                // Original properties
+                this.originalChunks = originalChunks;
+                this.numChunks = originalChunks.length;
+                this.seedBase = seedBase;
+                this.packetCounter = 0;
+                this.avgChunkSize = this.calculateAverageChunkSize();
+                
+                // New properties for systematic LT coding
+                this.systematicPhase = true;  // Start in systematic phase
+                this.currentSystematicIndex = 0;  // Track which systematic chunk to send next
+                this.maxSafeDegree = this.calculateMaxSafeDegree();
+                
+                // LT code parameters
+                this.c = 0.03;  // Robust Soliton parameter c
+                this.delta = 0.5;  // Robust Soliton failure probability
+            }
+            
+            // Calculate average chunk size based on sampling
+            calculateAverageChunkSize() {
+                let sum = 0;
+                const sampleSize = Math.min(10, this.numChunks);
+                
+                for (let i = 0; i < sampleSize; i++) {
+                    sum += this.originalChunks[i].length;
+                }
+                
+                return Math.ceil(sum / sampleSize);
+            }
+            
+            // Calculate maximum safe degree based on QR code capacity
+            calculateMaxSafeDegree() {
+                // Use user-configured max degree if available
+                if (maxDegreeSlider) {
+                    const userMaxDegree = parseInt(maxDegreeSlider.value);
+                    if (!isNaN(userMaxDegree) && userMaxDegree > 0) {
+                        return userMaxDegree;
+                    }
+                }
+                
+                // Packet overhead estimate
+                const packetOverhead = 150;
+                
+                // Delimiter and index overhead per chunk
+                const delimiterOverhead = 5;
+                
+                // Calculate safe QR code size (90% of max for safety margin)
+                const safeQrSize = Math.floor(MAX_QR_CONTENT_SIZE * 0.9);
+                
+                // Calculate max characters available for data
+                const charsAvailableForData = safeQrSize - packetOverhead;
+                
+                // Calculate max number of chunks we can safely combine
+                const maxDegree = Math.floor(charsAvailableForData / (this.avgChunkSize + delimiterOverhead));
+                
+                // For LT codes, we might want to limit the maximum degree further
+                const ltRecommendedMax = Math.min(
+                    Math.max(8, Math.ceil(Math.sqrt(this.numChunks))),
+                    this.numChunks
+                );
+                
+                // Return the smallest of the calculated value, LT recommended max, and general cap
+                return Math.max(1, Math.min(maxDegree, ltRecommendedMax, 20));
+            }
+            
+            // Calculate the total number of packets needed
+            calculateTotalPackets() {
+                // For LT codes with systematic extensions:
+                // 1. We need exactly numChunks packets for the systematic phase
+                const systematicPackets = this.numChunks;
+                
+                // 2. Add redundancy factor from UI slider
+                const redundancyPercent = parseInt(document.getElementById('redundancySlider').value);
+                const redundancyFactor = redundancyPercent / 100;
+                
+                // Calculate additional packets needed based on redundancy
+                const additionalPackets = Math.ceil(this.numChunks * redundancyFactor);
+                
+                // Total packets = systematic + additional
+                return systematicPackets + additionalPackets;
+            }
+            
+            // Main packet generation function - handles both phases
+            generatePacket() {
+                // PHASE 1: Systematic Phase - Send each chunk exactly once
+                if (this.systematicPhase) {
+                    // Create a packet containing just the next chunk
+                    const packet = this.createSystematicPacket(this.currentSystematicIndex);
+                    
+                    // Move to next chunk
+                    this.currentSystematicIndex++;
+                    
+                    // Check if we've completed the systematic phase
+                    if (this.currentSystematicIndex >= this.numChunks) {
+                        this.systematicPhase = false;
+                    }
+                    
+                    return packet;
+                }
+                
+                // PHASE 2: Fountain Phase - Generate LT-coded packets
+                return this.createLTPacket();
+            }
+            
+            // Create a packet during the systematic phase
+            createSystematicPacket(chunkIndex) {
+                // Get the chunk data
+                const chunkData = this.originalChunks[chunkIndex];
+                
+                // Create a seed based on packet counter
+                const seed = this.seedBase + this.packetCounter;
+                
+                // Create data string containing just this chunk
+                // Format: chunkIndex:chunkData
+                const combinedData = `${chunkIndex}:${chunkData}`;
+                
+                // Create the packet using compact string format
+                // Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+                const dataString = `D:${this.packetCounter}:${seed}:${this.seedBase}:${this.numChunks}:1:${combinedData}`;
+                
+                // Create and return the packet object
+                const packet = {
+                    format: "compact",
+                    dataString: dataString,
+                    s: seed,
+                    d: 1,  // Degree is always 1 for systematic packets
+                    p: this.packetCounter++,
+                    n: this.numChunks,
+                    b: this.seedBase,
+                    systematic: true
+                };
+                
+                // Check packet size for QR code limits
+                this.checkAndHandlePacketSize(packet);
+                
+                return packet;
+            }
+            
+            // Create a packet during the LT phase
+            createLTPacket() {
+                // Create a seed based on packet counter
+                const seed = this.seedBase + this.packetCounter;
+                
+                // Create PRNG with this seed
+                const rng = this.createPRNG(seed);
+                
+                // Get degree using Robust Soliton distribution
+                const degree = this.getRobustSolitonDegree(rng);
+                
+                // Select chunks according to LT coding rules
+                const selectedIndices = this.selectChunksLT(degree, rng);
+                
+                // Combine the selected chunks
+                const combinedData = this.combineChunks(selectedIndices);
+                
+                // Create the packet using compact string format
+                // Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+                const dataString = `D:${this.packetCounter}:${seed}:${this.seedBase}:${this.numChunks}:${degree}:${combinedData}`;
+                
+                // Create and return the packet object
+                const packet = {
+                    format: "compact",
+                    dataString: dataString,
+                    s: seed,
+                    d: degree,
+                    p: this.packetCounter++,
+                    n: this.numChunks,
+                    b: this.seedBase,
+                    systematic: false
+                };
+                
+                // Check packet size for QR code limits
+                this.checkAndHandlePacketSize(packet);
+                
+                return packet;
+            }
+            
+            // Check if packet size exceeds QR code capacity and handle truncation if needed
+            checkAndHandlePacketSize(packet) {
+                // Get the QR content size limit from configuration
+                const maxQRSize = document.getElementById('highDensityCheckbox').checked ? 
+                    HIGH_DENSITY_QR_CONTENT_SIZE : DEFAULT_QR_CONTENT_SIZE;
+                
+                // Calculate actual packet size
+                const packetSize = packet.dataString.length;
+                
+                // If packet is too large, truncate the data
+                if (packetSize > maxQRSize * 0.9) {  // Use 90% of max size for safety
+                    // Truncate the packet to fit within QR code limits
+                    this.truncatePacket(packet, maxQRSize * 0.9);
+                }
+            }
+            
+            // Truncate a packet to fit within QR code limits
+            truncatePacket(packet, maxSize) {
+                // Parse out the header portion of the packet
+                // Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+                const parts = packet.dataString.split(":", 6);
+                const header = parts.slice(0, 6).join(":");
+                
+                // Calculate how much space is available for data
+                const headerSize = header.length + 1;  // +1 for the colon separator
+                const availableSize = maxSize - headerSize;
+                
+                // Get the original data part
+                const originalData = packet.dataString.substring(headerSize);
+                const originalLength = originalData.length;
+                
+                // Truncate the data
+                const truncatedData = originalData.substring(0, availableSize);
+                
+                // Update the packet
+                packet.dataString = `${header}:${truncatedData}`;
+                packet.truncated = true;
+                
+                // Add truncation marker to dataString format
+                packet.dataString = `${packet.dataString}:t:${originalLength}`;
+            }
+            
+            // Create a pseudo-random number generator with a specific seed
+            createPRNG(seed) {
+                let s = seed;
+                return function() {
+                    s = Math.sin(s) * 10000;
+                    return s - Math.floor(s);
+                };
+            }
+            
+            // Get the degree using Robust Soliton distribution (LT coding)
+            getRobustSolitonDegree(rng) {
+                // If we have only one chunk, return 1
+                if (this.numChunks <= 1) return 1;
+                
+                // Parameters for Robust Soliton Distribution
+                const c = this.c;  // Parameter controlling the distribution shape
+                const delta = this.delta;  // Failure probability
+                
+                // Calculate R parameter (from LT codes paper)
+                const R = c * Math.log(this.numChunks / delta) * Math.sqrt(this.numChunks);
+                
+                // Cap max degree by the smaller of maxSafeDegree or numChunks
+                const maxDegree = Math.min(this.maxSafeDegree, this.numChunks);
+                
+                // Generate a value in [0,1) to use for degree selection
+                const r = rng();
+                
+                // Calculate ideal Robust Soliton distribution
+                let cdf = 0;  // Cumulative distribution function
+                
+                // Special case for degree 1 from Robust Soliton
+                const p1 = (1.0 / this.numChunks) + (R / this.numChunks);
+                cdf += p1;
+                
+                if (r < cdf) return 1;
+                
+                // Calculate probabilities for degrees 2 to maxDegree
+                for (let d = 2; d <= maxDegree; d++) {
+                    // Standard Soliton component
+                    let p_std = 1.0 / (d * (d - 1));
+                    
+                    // Robust Soliton addon component
+                    let p_robust = 0;
+                    
+                    // Extra probability mass for degrees around n/R
+                    if (d <= Math.floor(this.numChunks / R)) {
+                        p_robust = R / (d * this.numChunks);
+                    } else if (d === Math.floor(this.numChunks / R)) {
+                        p_robust = (R * Math.log(R / delta)) / this.numChunks;
+                    }
+                    
+                    // Add probabilities to CDF
+                    cdf += p_std + p_robust;
+                    
+                    // If our random value falls in this range, return this degree
+                    if (r < cdf) return d;
+                }
+                
+                // If we reach here, return the maximum degree
+                return maxDegree;
+            }
+            
+            // Select chunks for LT packets
+            selectChunksLT(degree, rng) {
+                const indices = [];
+                
+                // Ensure we don't try to select more chunks than available
+                const actualDegree = Math.min(degree, this.numChunks);
+                
+                // In LT codes, chunks are selected uniformly at random without replacement
+                while (indices.length < actualDegree) {
+                    const index = Math.floor(rng() * this.numChunks);
+                    
+                    // Avoid duplicate chunks in the same packet
+                    if (!indices.includes(index)) {
+                        indices.push(index);
+                    }
+                }
+                
+                return indices;
+            }
+            
+            // Combine chunks using string concatenation with markers
+            combineChunks(indices) {
+                if (indices.length === 0) return "";
+                
+                // Concatenate the chunks with a special delimiter and chunk index
+                return indices.map(index => {
+                    return `${index}:${this.originalChunks[index]}`;
+                }).join("|");
+            }
+            
+            // Generate metadata packet with LT code specific information
+            generateMetadataPacket() {
+                // Basic file metadata
+                const fileNameText = document.getElementById('fileName').textContent;
+                const fileSizeBytes = parseInt(document.getElementById('fileSize').textContent);
+                const fileType = fileInput.files[0].type;
+                
+                // Get encoding parameters
+                const fps = parseInt(document.getElementById('speedSlider').value);
+                const maxDegree = parseInt(document.getElementById('maxDegreeSlider').value);
+                const chunkSize = parseInt(document.getElementById('chunkSlider').value);
+                const redundancy = parseInt(document.getElementById('redundancySlider').value);
+                const highDensityMode = document.getElementById('highDensityCheckbox').checked ? 1 : 0;
+                const ecLevel = document.getElementById('errorCorrectionSelect').value;
+                
+                // Create checksum
+                const checksumData = `${fileNameText}:${fileSizeBytes}:${this.numChunks}`;
+                const checksum = this.simpleChecksum(checksumData);
+                
+                // Add LT-specific parameters
+                const ltParams = `${this.c}:${this.delta}`;
+                
+                // Create compact metadata string
+                // Format: M:<version>:<filename>:<filetype>:<filesize>:<chunks>:<packets>:<maxdegree>:<density>:<fps>:<chunksize>:<redund>:<ecl>:<checksum>:<ltparams>
+                const metadataString = `M:3.0:${encodeURIComponent(fileNameText)}:${encodeURIComponent(fileType)}:${fileSizeBytes}:${this.numChunks}:${this.calculateTotalPackets()}:${maxDegree}:${highDensityMode}:${fps}:${chunkSize}:${redundancy}:${ecLevel}:${checksum}:${ltParams}`;
+                
+                // Create metadata packet
+                const packet = {
+                    format: "compact",
+                    metaString: metadataString,
+                    s: this.seedBase,
+                    p: this.packetCounter++,
+                    n: this.numChunks,
+                    b: this.seedBase
+                };
+                
+                return packet;
+            }
+            
+            // Simple checksum for data verification
+            simpleChecksum(str) {
+                let hash = 0;
+                for (let i = 0; i < str.length; i++) {
+                    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                    hash = hash & hash; // Convert to 32bit integer
+                }
+                return Math.abs(hash).toString(36).substring(0, 6); // Base36 representation, 6 chars
+            }
+        }
+    </script>
+</body>
+</html>
