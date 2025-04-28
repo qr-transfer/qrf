@@ -722,23 +722,23 @@
         function calculateOptimalSettings(fileSize) {
             if (fileSize < 50000) { // < 50KB
                 return {
-                    fps: 15, 
-                    chunkSize: 600,
-                    redundancy: 60,
+                    fps: 8, 
+                    chunkSize: 450,
+                    redundancy: 20,
                     distance: "20-25cm",
                     preset: "fast"
                 };
             } else if (fileSize < 500000) { // < 500KB
                 return {
-                    fps: 12,
-                    chunkSize: 500,
-                    redundancy: 80,
+                    fps: 5,
+                    chunkSize: 450,
+                    redundancy: 40,
                     distance: "25-30cm",
                     preset: "reliable"
                 };
             } else { // >= 500KB
                 return {
-                    fps: 8,
+                    fps: 5,
                     chunkSize: 400,
                     redundancy: 100,
                     distance: "25-30cm",
@@ -852,6 +852,22 @@
                 fountainPackets.push(redundantChunk0);
             }
             
+            // Ensure we have enough redundancy packets (LT phase)
+            const generatedLTPackets = fountainPackets.filter(p => p.systematic === false && p.metaString === undefined).length;
+            const systematicPhasePackets = fountainPackets.filter(p => p.systematic === true).length;
+            
+            // If we don't have enough LT packets based on redundancy requirements, add more
+            const targetLTPackets = Math.ceil(chunks.length * (redundancyPercent / 100));
+            if (generatedLTPackets < targetLTPackets) {
+                const additionalPacketsNeeded = targetLTPackets - generatedLTPackets;
+                
+                for (let i = 0; i < additionalPacketsNeeded; i++) {
+                    // Force systematic phase to false to generate LT packets
+                    ltEncoder.systematicPhase = false;
+                    fountainPackets.push(ltEncoder.createLTPacket());
+                }
+            }
+            
             totalFrames = fountainPackets.length;
             
             // Update UI
@@ -864,9 +880,9 @@
             transferTime.textContent = `~${Math.ceil(totalFrames / parseInt(speedSlider.value))} seconds`;
             optimalDistance.textContent = calculateOptimalSettings(fileSizeBytes).distance;
             
-            // Count systematic vs. fountain packets
-            const systematicCount = chunks.length;
-            const fountainCount = fountainPackets.length - systematicCount - 1; // -1 for metadata packet
+            // Calculate systematic vs. fountain packets accurately
+            const systematicCount = systematicPhasePackets;
+            const fountainCount = generatedLTPackets + (fountainPackets.length - systematicCount - generatedLTPackets - 1); // -1 for metadata
             
             // Create phase information element if it doesn't exist
             if (!document.getElementById('phaseInfo')) {
@@ -890,7 +906,6 @@
             
             // Show LT parameters if they don't exist
             if (!document.getElementById('ltParams') && fountainPackets.length > 0) {
-                const ltEncoder = new SystematicLTEncoder(chunks);
                 const ltParams = document.createElement('div');
                 ltParams.id = 'ltParams';
                 ltParams.className = 'info-row';
@@ -1343,43 +1358,82 @@
             // Calculate the total number of packets needed
             calculateTotalPackets() {
                 // For LT codes with systematic extensions:
-                // 1. We need exactly numChunks packets for the systematic phase
-                const systematicPackets = this.numChunks;
+                // 1. We need packets for the systematic phase
+                // If we're using dual chunks, we need fewer systematic packets
+                let systematicPackets;
+                if (this.maxSafeDegree >= 2) {
+                    // When using dual chunks during systematic phase, we need approximately half
+                    // plus any leftover for odd number of chunks
+                    systematicPackets = Math.ceil(this.numChunks / 2);
+                } else {
+                    // Standard case: one packet per chunk
+                    systematicPackets = this.numChunks;
+                }
                 
                 // 2. Add redundancy factor from UI slider
                 const redundancyPercent = parseInt(document.getElementById('redundancySlider').value);
                 const redundancyFactor = redundancyPercent / 100;
                 
                 // Calculate additional packets needed based on redundancy
+                // We need more redundant packets if we have dual-chunk systematic packets
                 const additionalPackets = Math.ceil(this.numChunks * redundancyFactor);
                 
-                // Total packets = systematic + additional
-                return systematicPackets + additionalPackets;
+                // Add extra safety packets for higher redundancy when using dual-chunk
+                const extraPackets = this.maxSafeDegree >= 2 ? Math.ceil(this.numChunks * 0.1) : 0;
+                
+                // Total packets = systematic + additional + extra
+                return systematicPackets + additionalPackets + extraPackets;
             }
             
             // Main packet generation function - handles both phases
             generatePacket() {
                 // PHASE 1: Systematic Phase - Send each chunk exactly once
                 if (this.systematicPhase) {
-                    // Create a packet containing just the next chunk
-                    const packet = this.createSystematicPacket(this.currentSystematicIndex);
+                    // Determine if we should send two chunks in one systematic packet
+                    const maxQRSize = document.getElementById('highDensityCheckbox').checked ? 
+                        HIGH_DENSITY_QR_CONTENT_SIZE : DEFAULT_QR_CONTENT_SIZE;
                     
-                    // Move to next chunk
-                    this.currentSystematicIndex++;
-                    
-                    // Check if we've completed the systematic phase
-                    if (this.currentSystematicIndex >= this.numChunks) {
-                        this.systematicPhase = false;
+                    // Try to send two chunks if possible, one from the beginning and one from the end
+                    if (this.maxSafeDegree >= 2 && 
+                        this.currentSystematicIndex < this.numChunks && 
+                        this.numChunks - 1 - this.currentSystematicIndex > this.currentSystematicIndex) {
+                        
+                        // Create a packet containing two chunks (one from start, one from end)
+                        const packet = this.createDualSystematicPacket(
+                            this.currentSystematicIndex, 
+                            this.numChunks - 1 - this.currentSystematicIndex
+                        );
+                        
+                        // Move to next chunk
+                        this.currentSystematicIndex++;
+                        
+                        // Check if we've completed the systematic phase
+                        if (this.currentSystematicIndex >= this.numChunks) {
+                            this.systematicPhase = false;
+                        }
+                        
+                        return packet;
+                    } else {
+                        // Create a standard packet with just the next chunk
+                        const packet = this.createSystematicPacket(this.currentSystematicIndex);
+                        
+                        // Move to next chunk
+                        this.currentSystematicIndex++;
+                        
+                        // Check if we've completed the systematic phase
+                        if (this.currentSystematicIndex >= this.numChunks) {
+                            this.systematicPhase = false;
+                        }
+                        
+                        return packet;
                     }
-                    
-                    return packet;
                 }
                 
                 // PHASE 2: Fountain Phase - Generate LT-coded packets
                 return this.createLTPacket();
             }
             
-            // Create a packet during the systematic phase
+            // Create a packet during the systematic phase (single chunk)
             createSystematicPacket(chunkIndex) {
                 // Get the chunk data
                 const chunkData = this.originalChunks[chunkIndex];
@@ -1401,6 +1455,41 @@
                     dataString: dataString,
                     s: seed,
                     d: 1,  // Degree is always 1 for systematic packets
+                    p: this.packetCounter++,
+                    n: this.numChunks,
+                    b: this.seedBase,
+                    systematic: true
+                };
+                
+                // Check packet size for QR code limits
+                this.checkAndHandlePacketSize(packet);
+                
+                return packet;
+            }
+            
+            // Create a systematic packet with two chunks (one from beginning, one from end)
+            createDualSystematicPacket(firstChunkIndex, secondChunkIndex) {
+                // Get the chunk data for both chunks
+                const firstChunkData = this.originalChunks[firstChunkIndex];
+                const secondChunkData = this.originalChunks[secondChunkIndex];
+                
+                // Create a seed based on packet counter
+                const seed = this.seedBase + this.packetCounter;
+                
+                // Create data string containing both chunks with the specified delimiter format
+                // Format: index1:chunk1|index2:chunk2
+                const combinedData = `${firstChunkIndex}:${firstChunkData}|${secondChunkIndex}:${secondChunkData}`;
+                
+                // Create the packet using compact string format
+                // Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+                const dataString = `D:${this.packetCounter}:${seed}:${this.seedBase}:${this.numChunks}:1:${combinedData}`;
+                
+                // Create and return the packet object
+                const packet = {
+                    format: "compact",
+                    dataString: dataString,
+                    s: seed,
+                    d: 1,  // Degree is 2 for systematic packets
                     p: this.packetCounter++,
                     n: this.numChunks,
                     b: this.seedBase,
@@ -1581,6 +1670,7 @@
                 if (indices.length === 0) return "";
                 
                 // Concatenate the chunks with a special delimiter and chunk index
+                // Format: index1:chunk1|index2:chunk2|index3:chunk3
                 return indices.map(index => {
                     return `${index}:${this.originalChunks[index]}`;
                 }).join("|");
@@ -1590,7 +1680,7 @@
             generateMetadataPacket() {
                 // Basic file metadata
                 const fileNameText = document.getElementById('fileName').textContent;
-                const fileSizeBytes = parseInt(document.getElementById('fileSize').textContent);
+                const fileSizeBytes = document.getElementById('fileSize').textContent;
                 const fileType = fileInput.files[0].type;
                 
                 // Get encoding parameters
