@@ -405,6 +405,10 @@
   <div class="file-info-container">
     <h2>File Information</h2>
     <div id="fileInfo">No file detected yet</div>
+    <div id="checksumInfo" style="display: none; margin-top: 10px; font-size: 14px; color: #6b7280;">
+      <div>File Checksum: <span id="fileChecksum">-</span></div>
+      <div>Meta Checksum: <span id="metaChecksum">-</span></div>
+    </div>
     <div id="missingChunks">Waiting for metadata...</div>
     <div id="downloadContainer" style="display: none;">
       <button id="downloadBtn">Download Recovered File</button>
@@ -455,6 +459,28 @@
 
   <!-- Main script -->
   <script>
+    // =============================================
+    // Global Variables and Debug Control
+    // =============================================
+    
+    // Global debug mode flag
+    let debugMode = false;
+    
+    // Enable debug mode by pressing Ctrl+Shift+D
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        debugMode = !debugMode;
+        console.log(`🔧 Debug mode: ${debugMode ? 'ENABLED' : 'DISABLED'}`);
+      }
+    });
+    
+    // Warn when tab goes to background (affects QR processing)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        console.warn('⚠️ Tab backgrounded - QR processing may be throttled. Keep tab active for best performance.');
+      }
+    });
+    
     // =============================================
     // Logger Implementation
     // =============================================
@@ -746,7 +772,7 @@
         }
 
 
-        // Extract metadata
+        // Extract metadata (updated format with file checksum)
         const metadata = {
           protocolVersion: parts[1],
           fileName: this.decodeURIComponentSafe(parts[2]),
@@ -760,8 +786,9 @@
           chunkSize: parseInt(parts[10] || '1024'),
           redundancy: parseInt(parts[11] || '0'),
           ecl: parts[12] || 'L',
-          checksum: parts[13] || '',
-          ltParams: parts.slice(14).join(':')
+          metaChecksum: parts[13] || '',
+          fileChecksum: parts[14] || '',
+          ltParams: parts.slice(15).join(':')
         };
 
         // Validate metadata
@@ -784,6 +811,7 @@
 
       processDataPacket(dataString, frameIndex) {
         // Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+        // Enhanced Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<sourceIndices>:<xorData>
         const parts = dataString.split(':');
 
         if (parts.length < 7) {
@@ -794,23 +822,51 @@
         const seed = parseInt(parts[2]);
         const seedBase = parseInt(parts[3]);
         const numChunks = parseInt(parts[4]);
-        const degree = parseInt(parts[5]);
-
-        // Get the data part (everything after the 6th colon)
-        const allDataPart = parts.slice(6).join(':');
+        const chunkCount = parseInt(parts[5]); // This is chunk count, not degree!
 
         // Parse source chunks and data
         let sourceChunks = [];
         let systematicDataChunks = [];
         let fountainData = null;
+        let format = "standard";
 
-        // Single chunk (degree 1) - Systematic packet
-        if (degree === 1) {
-          // For systematic packets, the format is: index1:chunk1|index2:chunk2|...
-          const chunksData = allDataPart.split('|');
-
-          for (let i = 0; i < chunksData.length; i++) {
-            const chunkParts = chunksData[i].split(':', 2);
+        // CORRECTED: Field 5 is chunkCount, Field 6 format determines packet type
+        
+        if (parts[6] && parts[6].includes(',')) {
+          // FOUNTAIN PACKET: Comma-separated indices in field 6 (always chunkCount=1)
+          const sourceIndices = parts[6].split(',').map(idx => parseInt(idx));
+          const actualDegree = sourceIndices.length; // TRUE degree from comma count
+          console.debug(`Fountain packet ${packetId} with degree=${actualDegree} (XOR of ${sourceIndices.join(',')})`);
+          
+          format = "enhanced";
+          sourceChunks = sourceIndices;
+          
+          try {
+            // Field 7 contains base64 XOR data
+            fountainData = this.base64ToUint8Array(parts[7]);
+          } catch (e) {
+            console.error(`Failed to decode fountain XOR data: ${e.message}`);
+            throw e;
+          }
+          
+        } else {
+          // SYSTEMATIC PACKET: Field 5 = chunkCount (1, 2, 3, 4+)
+          if (debugMode) {
+            console.debug(`Systematic packet ${packetId} with chunkCount=${chunkCount}`);
+          }
+          
+          // Parse chunkCount records separated by pipe |
+          const allDataPart = parts.slice(6).join(':');
+          const records = allDataPart.split('|');
+          
+          if (debugMode) {
+            console.debug(`Processing ${records.length} systematic records (expected: ${chunkCount})`);
+          }
+          
+          for (let i = 0; i < records.length; i++) {
+            const record = records[i];
+            const chunkParts = record.split(':', 2);
+            
             if (chunkParts.length === 2) {
               const chunkIndex = parseInt(chunkParts[0]);
               const chunkData = chunkParts[1];
@@ -818,33 +874,29 @@
               if (chunkIndex >= 0 && chunkIndex < numChunks) {
                 sourceChunks.push(chunkIndex);
                 systematicDataChunks.push({ chunkIndex: chunkIndex, chunkData: chunkData });
+                console.debug(`  Record ${i+1}: chunk ${chunkIndex} (${chunkData.length} base64 chars)`);
+              } else {
+                console.warn(`  Invalid chunk index ${chunkIndex} in record ${i+1}`);
               }
+            } else {
+              console.warn(`  Invalid record format: ${record}`);
             }
           }
-        }
-        // Multiple chunks (degree > 1) - Fountain packet
-        else {
-          // For fountain packets, determine which chunks were combined
-          // Generate seed-based chunk selection just like the encoder would have
-          const rng = this.createPRNG(seed);
-          sourceChunks = this.selectChunksLT(rng, degree, numChunks);
-
-          // The data is a single combined (XORed) chunk of the original chunks
-          // We don't split it like before - this was the main issue in the original code
-          fountainData = this.stringToUint8Array(allDataPart);
-
-          console.debug(`Fountain packet ${packetId} with degree ${degree}, source chunks: ${sourceChunks.join(',')}`);
         }
 
         // Check for truncated data
         let isTruncated = false;
         let originalLength = 0;
 
-        const truncatedIndex = allDataPart.indexOf(':t:');
-        if (truncatedIndex > 0) {
-          isTruncated = true;
-          const truncatedParts = allDataPart.substring(truncatedIndex + 3).split(':');
-          originalLength = parseInt(truncatedParts[0] || '0');
+        // Only try to find truncation markers in original format
+        if (format !== "enhanced" && format !== "legacy") {
+          const allDataPart = parts.slice(6).join(':'); 
+          const truncatedIndex = allDataPart.indexOf(':t:');
+          if (truncatedIndex > 0) {
+            isTruncated = true;
+            const truncatedParts = allDataPart.substring(truncatedIndex + 3).split(':');
+            originalLength = parseInt(truncatedParts[0] || '0');
+          }
         }
 
         return {
@@ -854,13 +906,16 @@
             packetId,
             seed,
             seedBase,
-            degree,
+            chunkCount, // Field 5 is chunk count, not degree
+            actualDegree: format === "enhanced" ? sourceChunks.length : chunkCount, // True degree for fountain
             fountainData,
             systematicDataChunks,
             sourceChunks,
-            isDegreeOne: degree === 1,
+            isDegreeOne: chunkCount === 1,
+            isSystematic: format !== "enhanced", // Systematic if not enhanced fountain format
             isTruncated,
-            originalLength
+            originalLength,
+            format  // Include the detected format for debugging
           },
           frameIndex
         };
@@ -912,6 +967,49 @@
         }
         return arr;
       }
+
+      // Method to manually XOR two Uint8Arrays in-place (first array is modified)
+      xorUint8Arrays(target, source) {
+        const minLength = Math.min(target.length, source.length);
+        for (let i = 0; i < minLength; i++) {
+          target[i] ^= source[i];
+        }
+      }
+
+      // Add base64 decoder for XOR data
+      base64ToUint8Array(base64) {
+        try {
+          const binaryString = atob(base64);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          return bytes;
+        } catch (e) {
+          console.error("Error decoding base64:", e);
+          return new Uint8Array(0);
+        }
+      }
+
+      // Check if string is valid base64
+      isValidBase64(str) {
+        if (!str || str.length === 0) return false;
+        
+        // Check for valid base64 characters only
+        const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+        if (!base64Regex.test(str)) return false;
+        
+        // Check length is multiple of 4 (base64 requirement)
+        if (str.length % 4 !== 0) return false;
+        
+        try {
+          // Try to decode to verify it's actually valid
+          atob(str);
+          return true;
+        } catch (e) {
+          return false;
+        }
+      }
     }
 
     // =============================================
@@ -938,6 +1036,7 @@
 
         // Debug info
         this.lastProcessedChunk = -1;
+        this.fileCompleted = false; // Flag to prevent multiple completion calls
         this.packetStats = {
           total: 0,
           degree1: 0,
@@ -956,6 +1055,7 @@
         this.recoveredChunkCount = 0;
         this.codedPackets = [];
         this.newlyRecoveredChunks = [];
+        this.fileCompleted = false;
         this.packetStats = {
           total: 0,
           degree1: 0,
@@ -978,16 +1078,50 @@
 
         this.packetStats.total++;
 
-        // Handle systematic (degree 1) packets
-        if (packet.isDegreeOne) {
-          this.packetStats.degree1++;
+        // Handle systematic packets (degree 1 or 2)
+        if (packet.isSystematic) {
+          if (packet.isDegreeOne) {
+            this.packetStats.degree1++;
+          } else {
+            this.packetStats.degreeN++; // Count degree 2 systematic as degreeN for stats
+          }
           let anyNewChunks = false;
 
           packet.systematicDataChunks.forEach(chunk => {
             const chunkIndex = chunk.chunkIndex;
             if (!this.sourceChunks[chunkIndex]) {
-              // For systematic packets, convert the string data to Uint8Array
-              const chunkData = this.stringToUint8Array(chunk.chunkData);
+              // For systematic packets, decode base64 chunk data back to binary
+              let chunkData;
+              
+              try {
+                chunkData = this.base64ToUint8Array(chunk.chunkData);
+                
+                if (debugMode) {
+                  console.log(`🔍 DECODER DEBUG - Processing chunk ${chunkIndex}:`);
+                  console.log(`  Base64 data length: ${chunk.chunkData.length} chars`);
+                  console.log(`  Base64 preview: ${chunk.chunkData.substring(0, 30)}...`);
+                  console.log(`  ✅ Base64 decode SUCCESS: ${chunkData.length} bytes`);
+                  console.log(`  Decoded first 4 bytes: [${Array.from(chunkData.slice(0, 4)).join(', ')}]`);
+                  
+                  if (chunkIndex === 0) {
+                    const isJPEGHeader = chunkData[0] === 255 && chunkData[1] === 216;
+                    console.log(`  📸 Chunk 0 JPEG header check: ${isJPEGHeader ? '✅' : '❌'}`);
+                  }
+                }
+              } catch (e) {
+                // Fallback to string conversion for legacy packets
+                console.warn(`❌ Failed to decode base64 for chunk ${chunkIndex}: ${e.message}`);
+                if (debugMode) {
+                  console.warn(`  Error details: ${e.stack}`);
+                  console.warn(`  Base64 data: ${chunk.chunkData.substring(0, 50)}...`);
+                }
+                console.warn(`  Using string conversion fallback`);
+                chunkData = this.stringToUint8Array(chunk.chunkData);
+                
+                if (debugMode) {
+                  console.warn(`  String conversion result: ${chunkData.length} bytes, first 4: [${Array.from(chunkData.slice(0, 4)).join(', ')}]`);
+                }
+              }
               this.storeSourceChunk(chunkIndex, chunkData);
               this.newlyRecoveredChunks.push(chunkIndex);
               anyNewChunks = true;
@@ -1012,6 +1146,11 @@
 
         // If we already have all chunks, skip this packet
         if (missingChunks.length === 0) {
+          // Check if all chunks are recovered
+          if (this.recoveredChunkCount === this.totalChunks) {
+            console.log("All chunks recovered! Finalizing file...");
+            this.finalizeFile();
+          }
           return false;
         }
 
@@ -1098,6 +1237,7 @@
           console.log("All chunks recovered! Finalizing file...");
           this.finalizeFile();
         }
+        
       }
 
       // Store a source chunk in our decoded data
@@ -1156,6 +1296,20 @@
         }
       }
 
+      // Base64 decoder for chunk data (added to fountain decoder class)
+      base64ToUint8Array(base64) {
+        try {
+          const binaryString = atob(base64);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          return bytes;
+        } catch (e) {
+          throw new Error(`Base64 decode failed: ${e.message}`);
+        }
+      }
+
       // Get the list of newly recovered chunks since the last check
       getNewlyRecoveredChunks() {
         const chunks = [...this.newlyRecoveredChunks];
@@ -1175,6 +1329,13 @@
 
       // Final step: reconstruct the file from decoded chunks
       finalizeFile() {
+        // Prevent multiple completion calls
+        if (this.fileCompleted) {
+          console.log("File already completed, ignoring duplicate finalization call");
+          return;
+        }
+        
+        this.fileCompleted = true;
         console.log("Finalizing file reconstruction...");
         console.log(`Recovery stats: ${this.recoveredChunkCount}/${this.totalChunks} chunks`);
         console.log(`Packet stats: ${JSON.stringify(this.packetStats)}`);
@@ -1207,51 +1368,106 @@
           const chunkSize = this.metaData.chunkSize || this.sourceChunks[0].length;
           console.log(`Using chunk size: ${chunkSize} bytes`);
 
-          // Combine all chunks in order
+          // Combine all chunks in order with validation
+          console.log(`📋 Reconstructing file from ${this.totalChunks} chunks...`);
+          
           for (let i = 0; i < this.totalChunks; i++) {
             const chunk = this.sourceChunks[i];
 
             // Ensure chunk exists and is a Uint8Array
             if (!chunk) {
-              console.error(`Chunk ${i} is missing`);
+              console.error(`❌ Chunk ${i} is missing`);
               continue;
             }
 
             if (!(chunk instanceof Uint8Array)) {
-              console.error(`Chunk ${i} is not a Uint8Array: ${typeof chunk}`);
+              console.error(`❌ Chunk ${i} is not a Uint8Array: ${typeof chunk}`);
               continue;
             }
 
-            // Calculate how much of this chunk to copy (handle last chunk)
-            const bytesToCopy = Math.min(chunk.length, fileData.length - offset);
-
-            try {
-              fileData.set(chunk.subarray(0, bytesToCopy), offset);
-              offset += bytesToCopy;
-            } catch (e) {
-              console.error(`Error copying chunk ${i}:`, e);
-              console.error(`Chunk length: ${chunk.length}, bytesToCopy: ${bytesToCopy}, offset: ${offset}, fileData.length: ${fileData.length}`);
-              throw e;
+            // Validate chunk index and content for critical chunks
+            if (i === 0) {
+              // First chunk should start with JPEG header for JPEG files
+              if (this.metaData.fileType && this.metaData.fileType.includes('jpeg')) {
+                if (chunk[0] !== 0xFF || chunk[1] !== 0xD8) {
+                  console.warn(`⚠️  Chunk 0 doesn't start with JPEG header [${chunk[0]}, ${chunk[1]}] - may indicate chunk order issue`);
+                  console.warn(`Expected: [255, 216], Got: [${chunk[0]}, ${chunk[1]}]`);
+                }
+              }
             }
 
-            if (offset >= fileData.length) {
-              break;
+            // Calculate how much of this chunk to copy
+            const bytesToCopy = Math.min(chunk.length, Math.max(0, fileData.length - offset));
+
+            if (bytesToCopy > 0) {
+              try {
+                fileData.set(chunk.subarray(0, bytesToCopy), offset);
+                offset += bytesToCopy;
+              } catch (e) {
+                console.error(`Error copying chunk ${i}:`, e);
+                console.error(`Chunk length: ${chunk.length}, bytesToCopy: ${bytesToCopy}, offset: ${offset}, fileData.length: ${fileData.length}`);
+                
+                // If buffer is too small, expand it
+                if (offset + chunk.length > fileData.length) {
+                  console.log(`Expanding buffer from ${fileData.length} to ${offset + chunk.length}`);
+                  const newFileData = new Uint8Array(offset + chunk.length);
+                  newFileData.set(fileData.subarray(0, offset));
+                  fileData = newFileData;
+                  
+                  // Retry the copy
+                  fileData.set(chunk, offset);
+                  offset += chunk.length;
+                } else {
+                  throw e;
+                }
+              }
+            } else if (offset < fileData.length) {
+              // Buffer might be too small, expand it
+              console.log(`Buffer too small, expanding from ${fileData.length} to ${offset + chunk.length}`);
+              const newFileData = new Uint8Array(offset + chunk.length);
+              newFileData.set(fileData.subarray(0, offset));
+              fileData = newFileData;
+              
+              fileData.set(chunk, offset);
+              offset += chunk.length;
             }
           }
 
           console.log(`File reconstruction complete. Total size: ${fileData.length} bytes`);
 
-          // Handle base64 encoding 
-          try {
-            console.log("Decoding base64 data...");
-            const base64String = this.arrayBufferToString(fileData);
-            fileData = this.base64ToArrayBuffer(base64String);
-            console.log(`Base64 decoded size: ${fileData.length} bytes`);
-          } catch (e) {
-            console.error("Error decoding base64:", e);
-            // Continue with the original data if base64 decoding fails
+          // Trim to exact metadata file size to handle any padding/expansion
+          if (fileData.length > this.metaData.fileSize) {
+            console.log(`Trimming file from ${fileData.length} to ${this.metaData.fileSize} bytes`);
+            fileData = fileData.slice(0, this.metaData.fileSize);
           }
 
+          console.log(`Final file size: ${fileData.length} bytes`);
+
+          // Verify file integrity with checksum
+          if (this.metaData.fileChecksum) {
+            const calculatedChecksum = this.calculateFileChecksum(fileData);
+            const expectedChecksum = this.metaData.fileChecksum;
+            
+            if (calculatedChecksum === expectedChecksum) {
+              console.log(`✅ File integrity verified: checksum ${calculatedChecksum}`);
+            } else {
+              console.error(`❌ File integrity check FAILED!`);
+              console.error(`Expected: ${expectedChecksum}, Got: ${calculatedChecksum}`);
+              console.error(`File may be corrupted - check chunk order and data integrity`);
+            }
+          } else {
+            console.warn(`⚠️  No file checksum available for verification`);
+          }
+
+          // Verify JPEG structure for JPEG files
+          if (this.metaData.fileType && this.metaData.fileType.includes('jpeg')) {
+            const isValidJPEG = this.verifyJPEGStructure(fileData);
+            console.log(`📸 JPEG structure: ${isValidJPEG ? '✅ Valid' : '❌ Invalid'}`);
+            
+            if (!isValidJPEG) {
+              console.error(`❌ JPEG structure is invalid - check chunk reconstruction order`);
+            }
+          }
 
           // Notify completion
           if (this.completeCallback) {
@@ -1279,6 +1495,30 @@
           console.error("Base64 decoding error:", e);
           throw e;
         }
+      }
+
+      // Calculate file checksum for integrity verification
+      calculateFileChecksum(binaryData) {
+        let hash = 0;
+        for (let i = 0; i < binaryData.length; i++) {
+          hash = ((hash << 5) - hash) + binaryData[i];
+          hash = hash & hash; // Convert to 32bit integer
+        }
+        return Math.abs(hash).toString(36).substring(0, 8); // 8 chars for file integrity
+      }
+
+      // Verify JPEG file structure
+      verifyJPEGStructure(fileData) {
+        if (fileData.length < 4) return false;
+        
+        // Check JPEG header (FF D8)
+        const hasJPEGHeader = fileData[0] === 0xFF && fileData[1] === 0xD8;
+        
+        // Check JPEG trailer (FF D9)
+        const hasJPEGTrailer = fileData[fileData.length - 2] === 0xFF && 
+                               fileData[fileData.length - 1] === 0xD9;
+        
+        return hasJPEGHeader && hasJPEGTrailer;
       }
     }
 
@@ -1894,6 +2134,7 @@
         this.fileMetadata = null;
         this.recoveredChunks = new Map();
         this.missingChunks = new Set();
+        this.wakeLock = null;
         this.settings = {
           workerCount: 4,
           packetWorkerCount: 2,
@@ -2015,6 +2256,31 @@
         }
       }
 
+      // Request wake lock to prevent screen from sleeping
+      async requestWakeLock() {
+        try {
+          if ('wakeLock' in navigator) {
+            this.wakeLock = await navigator.wakeLock.request('screen');
+            this.logger.info('Screen wake lock activated - screen will stay awake');
+            
+            this.wakeLock.addEventListener('release', () => {
+              this.logger.info('Screen wake lock released');
+            });
+          }
+        } catch (err) {
+          this.logger.warn(`Wake lock failed: ${err.message}`);
+        }
+      }
+
+      // Release wake lock
+      releaseWakeLock() {
+        if (this.wakeLock) {
+          this.wakeLock.release();
+          this.wakeLock = null;
+          this.logger.info('Screen wake lock released manually');
+        }
+      }
+
       async startProcessing() {
         if (!this.videoFile) {
           this.logger.warn("No video file selected");
@@ -2027,6 +2293,9 @@
         }
 
         this.isProcessing = true;
+        
+        // Prevent screen from sleeping during video processing
+        await this.requestWakeLock();
         this.metadataReceived = false;
         this.recoveredChunks.clear();
         this.missingChunks.clear();
@@ -2090,6 +2359,9 @@
         if (!this.isProcessing) return;
 
         this.isProcessing = false;
+
+        // Release wake lock when stopping
+        this.releaseWakeLock();
 
         // Stop video processing
         if (this.videoProcessor) {
@@ -2286,6 +2558,9 @@
 
       handleFileComplete(fileData) {
         this.logger.info("File recovery complete!");
+
+        // Release wake lock since file is complete
+        this.releaseWakeLock();
 
         // Store the recovered file data
         this.recoveredFileData = fileData;

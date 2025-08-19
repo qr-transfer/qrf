@@ -98,46 +98,74 @@ The fountain phase uses the Robust Soliton Distribution to determine the degree 
 ### Metadata Packet
 
 ```
-M:3.0:filename.ext:image/jpeg:1024000:100:150:8:1:10:500:80:H:checksum:ltparams
+M:3.0:filename.ext:image/jpeg:292898:651:913:2:0:6:450:100:H:metaChecksum:fileChecksum:0.03:0.5
 ```
 
 **Format Fields**:
 - `M`: Indicates a metadata frame
-- `3.0`: Protocol version
+- `3.0`: Protocol version  
 - `filename.ext`: Original filename (URL encoded)
 - `image/jpeg`: File MIME type (URL encoded)
-- `1024000`: File size in bytes
-- `100`: Number of chunks
-- `150`: Maximum number of packets
-- `8`: Maximum degree (for fountain coding)
-- `1`: Density parameter (0=normal, 1=high density)
-- `10`: FPS (frames per second)
-- `500`: Chunk size in characters
-- `80`: Redundancy percentage
+- `292898`: File size in bytes
+- `651`: Number of chunks
+- `913`: Maximum number of packets
+- `2`: Maximum chunk count per systematic packet
+- `0`: Density parameter (0=normal, 1=high density)
+- `6`: FPS (frames per second)
+- `450`: Chunk size in bytes
+- `100`: Redundancy percentage
 - `H`: Error correction level
-- `checksum`: File checksum
-- `ltparams`: LT code parameters (c:delta)
+- `metaChecksum`: Metadata integrity checksum
+- `fileChecksum`: File content integrity checksum
+- `0.03:0.5`: LT code parameters (c:delta)
 
 ### Data Packet
 
-#### Single-Chunk Packet (Systematic Phase)
+#### Systematic Single-Chunk Packet (chunkCount=1)
 ```
-D:42:1234:10:100:1:57:chunkData
+D:42:1234:10:651:1:57:base64ChunkData
 ```
 
-#### Multi-Chunk Packet (Dual Systematic or Fountain Phase)
+#### Systematic Multi-Chunk Packet (chunkCount=2,3,4+)  
 ```
-D:42:1234:10:100:3:12:chunk1|34:chunk2|78:chunk3
+D:42:1234:10:651:2:0:base64Chunk0|650:base64Chunk650
+D:43:1235:10:651:3:1:base64Chunk1|2:base64Chunk2|3:base64Chunk3
+```
+
+#### Fountain Packet (XOR combination, always chunkCount=1)
+```
+D:100:1334:10:651:1:12,34,78:base64XorData
 ```
 
 **Format Fields**:
 - `D`: Indicates a data frame
 - `42`: Packet ID
-- `1234`: Seed value
-- `10`: Seed base
-- `100`: Total number of chunks
-- `3`: Degree (number of chunks combined)
-- `12:chunk1|34:chunk2|78:chunk3`: Combined chunks in format `index:chunk|index:chunk|...`
+- `1234`: Seed value for randomization
+- `10`: Seed base for transfer
+- `651`: Total number of chunks in file
+- **Field 5**: Always `chunkCount` (number of records in this packet)
+- **Field 6**: Format determines packet type:
+  - **Contains comma**: Fountain packet (source indices for XOR)
+  - **No comma**: Systematic packet (chunk index)
+
+**Packet Type Detection**:
+```javascript
+if (parts[6].includes(',')) {
+    // FOUNTAIN: comma-separated source indices
+    const degree = parts[6].split(',').length;  // TRUE degree
+    const xorData = parts[7];                   // XOR result
+} else {
+    // SYSTEMATIC: parse chunkCount records separated by |
+    const records = parts.slice(6).join(':').split('|');
+    // Each record: index:base64data
+}
+```
+
+**Key Rules**:
+- **Field 5**: `chunkCount` for ALL packets (systematic: 1-4+, fountain: always 1)
+- **True degree**: Calculated from comma count in field 6 (fountain only)
+- **NO XOR**: Systematic packets (direct chunk storage)
+- **WITH XOR**: Fountain packets (mathematical combination)
 
 #### Truncated Packet
 For data that exceeds QR code capacity:

@@ -260,10 +260,10 @@
 
             <div class="control-group">
                 <div class="control-label">
-                    QR Size <span class="value-display" id="sizeValue">500px</span>
+                    QR Size <span class="value-display" id="sizeValue">800px</span>
                     <span class="tooltip" data-tooltip="Size of the QR code in pixels. Larger QR codes are easier to scan but may not fit on screen.">?</span>
                 </div>
-                <input type="range" id="sizeSlider" min="200" max="800" value="500">
+                <input type="range" id="sizeSlider" min="200" max="800" value="800">
                 <div class="slider-labels">
                     <span>Smaller</span>
                     <span>Larger</span>
@@ -272,10 +272,10 @@
 
             <div class="control-group">
                 <div class="control-label">
-                    Display Speed <span class="value-display" id="speedValue">10 FPS</span>
+                    Display Speed <span class="value-display" id="speedValue">6 FPS</span>
                     <span class="tooltip" data-tooltip="Frames per second. Higher values transfer data faster, but may be harder to scan.">?</span>
                 </div>
-                <input type="range" id="speedSlider" min="1" max="30" value="10">
+                <input type="range" id="speedSlider" min="1" max="30" value="6">
                 <div class="slider-labels">
                     <span>Slower</span>
                     <span>Faster</span>
@@ -284,10 +284,10 @@
 
             <div class="control-group">
                 <div class="control-label">
-                    Chunk Size <span class="value-display" id="chunkValue">500 chars</span>
+                    Chunk Size <span class="value-display" id="chunkValue">450 chars</span>
                     <span class="tooltip" data-tooltip="Size of each data chunk. Larger chunks transfer faster but may be harder to scan.">?</span>
                 </div>
-                <input type="range" id="chunkSlider" min="100" max="1000" step="50" value="500">
+                <input type="range" id="chunkSlider" min="100" max="1000" step="50" value="450">
                 <div class="slider-labels">
                     <span>Smaller chunks</span>
                     <span>Larger chunks</span>
@@ -296,10 +296,10 @@
 
             <div class="control-group">
                 <div class="control-label">
-                    Redundancy <span class="value-display" id="redundancyValue">60%</span>
+                    Redundancy <span class="value-display" id="redundancyValue">100%</span>
                     <span class="tooltip" data-tooltip="Extra data to ensure successful transfer. Higher values improve reliability but increase transfer time.">?</span>
                 </div>
-                <input type="range" id="redundancySlider" min="20" max="200" step="10" value="60">
+                <input type="range" id="redundancySlider" min="20" max="200" step="10" value="100">
                 <div class="slider-labels">
                     <span>Less</span>
                     <span>More</span>
@@ -410,7 +410,7 @@
         <div class="panel">
             <div class="display-container">
                 <div id="frameCounter" style="margin-bottom: 10px; font-weight: bold;">Frame: 0 / 0</div>
-                <div id="qrDisplay" style="width: 500px; height: 500px; display: flex; align-items: center; justify-content: center;">
+                <div id="qrDisplay" style="width: 800px; height: 800px; display: flex; align-items: center; justify-content: center;">
                     <div class="alignment-guide" style="width: 90%; height: 90%; top: 5%; left: 5%;"></div>
                     <div class="alignment-guide" style="width: 70%; height: 70%; top: 15%; left: 15%;"></div>
                     <div class="guide-label" style="top: 2%; left: 50%; transform: translateX(-50%);">Keep QR code within this area</div>
@@ -492,8 +492,8 @@
 
     <script>
         // Constants and configuration
-        const DEFAULT_QR_CONTENT_SIZE = 2500;
-        const HIGH_DENSITY_QR_CONTENT_SIZE = 4000;
+        const DEFAULT_QR_CONTENT_SIZE = 3500;  // Increased to handle dual chunks
+        const HIGH_DENSITY_QR_CONTENT_SIZE = 5000;
         let MAX_QR_CONTENT_SIZE = DEFAULT_QR_CONTENT_SIZE;
 
         // DOM Elements
@@ -560,11 +560,13 @@
         let totalFrames = 0;
         let isPlaying = false;
         let isFullscreen = false;
-        let qrSize = 500;
+        let qrSize = 800;
         let startTime = null;
         let transmissionTimer = null;
         let countdownTimer = null;
         let countdownSeconds = 10;
+        let wakeLock = null;
+        let debugMode = false; // Control debug logging
 
         // Update UI based on slider values
         speedSlider.addEventListener('input', () => {
@@ -661,11 +663,16 @@
                     
                 case 'reliable':
                     reliablePreset.classList.add('active');
-                    speedSlider.value = 10;
-                    chunkSlider.value = 500;
-                    redundancySlider.value = 80;
+                    speedSlider.value = 6;
+                    chunkSlider.value = 450;
+                    redundancySlider.value = 100;
                     maxDegreeSlider.value = 2;
                     errorCorrectionSelect.value = 'H';
+                    sizeSlider.value = 800;
+                    qrSize = 800;
+                    qrDisplay.style.width = `${qrSize}px`;
+                    qrDisplay.style.height = `${qrSize}px`;
+                    sizeValue.textContent = `${qrSize}px`;
                     enableTransitionsCheckbox.checked = true;
                     break;
                     
@@ -718,33 +725,16 @@
             }
         });
         
-        // Calculate optimal display settings based on file size
+        // Use reliable settings as default for all file sizes
         function calculateOptimalSettings(fileSize) {
-            if (fileSize < 50000) { // < 50KB
-                return {
-                    fps: 8, 
-                    chunkSize: 450,
-                    redundancy: 20,
-                    distance: "20-25cm",
-                    preset: "fast"
-                };
-            } else if (fileSize < 500000) { // < 500KB
-                return {
-                    fps: 5,
-                    chunkSize: 450,
-                    redundancy: 40,
-                    distance: "25-30cm",
-                    preset: "reliable"
-                };
-            } else { // >= 500KB
-                return {
-                    fps: 5,
-                    chunkSize: 400,
-                    redundancy: 100,
-                    distance: "25-30cm",
-                    preset: "mobile"
-                };
-            }
+            // Always use reliable settings regardless of file size
+            return {
+                fps: 6,
+                chunkSize: 450,
+                redundancy: 100,  // High redundancy for reliability
+                distance: "25-30cm",
+                preset: "reliable"
+            };
         }
         
         // Apply optimal settings
@@ -821,12 +811,24 @@
             const chunkSize = parseInt(chunkSlider.value);
             const redundancyPercent = parseInt(redundancySlider.value);
             
-            // Read the file
-            const fileData = await readFileAsBase64(file);
-            fileContent = fileData.split(',')[1]; // Remove data URL prefix
+            // Read the file as binary data
+            const fileData = await readFileAsBinary(file);
+            fileContent = fileData;
             
-            // Split file into chunks
-            chunks = chunkFile(fileContent, chunkSize);
+            // Split file into binary chunks  
+            chunks = chunkFileBinary(fileContent, chunkSize);
+            
+            if (debugMode) {
+                console.log(`🔍 ENCODER DEBUG - File reading:`);
+                console.log(`  File size: ${fileData.length} bytes`);
+                console.log(`  File type: ${fileData.constructor.name}`);
+                console.log(`  File first 4 bytes: [${Array.from(fileData.slice(0, 4)).join(', ')}]`);
+                console.log(`  Chunk size: ${chunkSize} bytes`);
+                console.log(`  Created ${chunks.length} chunks`);
+                console.log(`  First chunk: ${chunks[0].length} bytes, type: ${chunks[0].constructor.name}`);
+                console.log(`  First chunk first 4 bytes: [${Array.from(chunks[0].slice(0, 4)).join(', ')}]`);
+                console.log(`  Last chunk: ${chunks[chunks.length-1].length} bytes`);
+            }
             
             // Create LT encoder with systematic extensions
             const ltEncoder = new SystematicLTEncoder(chunks);
@@ -978,12 +980,40 @@
             }, 1000);
         }
         
+        // Request wake lock to prevent screen from sleeping
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('Screen wake lock activated');
+                    
+                    wakeLock.addEventListener('release', () => {
+                        console.log('Screen wake lock released');
+                    });
+                }
+            } catch (err) {
+                console.log('Wake lock failed:', err.message);
+            }
+        }
+
+        // Release wake lock
+        function releaseWakeLock() {
+            if (wakeLock) {
+                wakeLock.release();
+                wakeLock = null;
+                console.log('Screen wake lock released manually');
+            }
+        }
+
         // Start playing QR codes
         function startPlaying() {
             isPlaying = true;
             startBtn.disabled = true;
             stopBtn.disabled = false;
             currentFrame = 0;
+            
+            // Prevent screen from sleeping during QR display
+            requestWakeLock();
             
             // Start timestamp for transmission
             startTime = Date.now();
@@ -1043,6 +1073,9 @@
                 transmissionTimer = null;
             }
             
+            // Release wake lock when stopping
+            releaseWakeLock();
+            
             isPlaying = false;
             startBtn.disabled = false;
             stopBtn.disabled = true;
@@ -1070,10 +1103,12 @@
                 stopPlaying();
             }
             
-            // Make sure current frame is displayed in fullscreen
-            if (currentFrame >= 0 && fountainPackets.length > 0) {
-                generateQRCodeForFrame(currentFrame, true);
-            }
+            // Wait a moment for fullscreen layout to settle, then generate QR code
+            setTimeout(() => {
+                if (currentFrame >= 0 && fountainPackets.length > 0) {
+                    generateQRCodeForFrame(currentFrame, true);
+                }
+            }, 100);
         }
 
         // Exit fullscreen mode
@@ -1083,6 +1118,16 @@
             
             // Stop fullscreen display
             stopPlaying();
+        });
+
+        // Handle window resize for fullscreen mode
+        window.addEventListener('resize', () => {
+            if (isFullscreen && currentFrame >= 0 && fountainPackets.length > 0) {
+                // Regenerate QR code with new fullscreen size
+                setTimeout(() => {
+                    generateQRCodeForFrame(currentFrame, true);
+                }, 100);
+            }
         });
         
         // Update transmission statistics
@@ -1109,6 +1154,28 @@
             return `${mins}:${secs.toString().padStart(2, '0')}`;
         }
 
+        // Calculate optimal fullscreen QR size
+        function calculateFullscreenQRSize() {
+            // Get actual viewport dimensions
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            
+            // Reserve space for UI elements (counter, progress bar, exit button)
+            const topReserved = 80;  // Space for counter and exit button
+            const bottomReserved = 100; // Space for progress bar
+            const sideMargin = 40;   // Side margins for safety
+            
+            // Calculate available space
+            const availableWidth = viewportWidth - (sideMargin * 2);
+            const availableHeight = viewportHeight - topReserved - bottomReserved;
+            
+            // Use the smaller dimension to ensure QR code fits (keep it square)
+            const maxSize = Math.min(availableWidth, availableHeight);
+            
+            // Apply safety margin (90% of available space)
+            return Math.floor(maxSize * 0.9);
+        }
+
         // Helper: Generate QR code for specific frame
         async function generateQRCodeForFrame(frameIndex, forFullscreen = false) {
             try {
@@ -1126,11 +1193,11 @@
                     packetData = packet.dataString;
                 }
                 
-                // Create QR code
+                // Create QR code with proper fullscreen sizing
                 const options = {
                     errorCorrectionLevel: errorCorrectionSelect.value,
                     margin: 1,
-                    width: forFullscreen ? Math.min(window.innerWidth * 0.7, window.innerHeight * 0.7) : qrSize,
+                    width: forFullscreen ? calculateFullscreenQRSize() : qrSize,
                     color: {
                         dark: '#000000',
                         light: '#FFFFFF'
@@ -1262,7 +1329,30 @@
             }
         }
 
-        // Helper: Read file as base64
+        // Helper: Read file as binary data
+        function readFileAsBinary(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const arrayBuffer = reader.result;
+                    resolve(new Uint8Array(arrayBuffer));
+                };
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // Helper: Split binary file into chunks  
+        function chunkFileBinary(data, chunkSize) {
+            const chunks = [];
+            for (let i = 0; i < data.length; i += chunkSize) {
+                const chunk = data.slice(i, i + chunkSize);
+                chunks.push(chunk);
+            }
+            return chunks;
+        }
+
+        // Helper: Read file as base64 (legacy)
         function readFileAsBase64(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -1272,7 +1362,7 @@
             });
         }
 
-        // Helper: Split file into chunks
+        // Helper: Split file into chunks (legacy)
         function chunkFile(data, chunkSize) {
             const chunks = [];
             for (let i = 0; i < data.length; i += chunkSize) {
@@ -1396,7 +1486,7 @@
                     // Try to send two chunks if possible, one from the beginning and one from the end
                     if (this.maxSafeDegree >= 2 && 
                         this.currentSystematicIndex < this.numChunks && 
-                        this.numChunks - 1 - this.currentSystematicIndex > this.currentSystematicIndex) {
+                        this.numChunks - 1 - this.currentSystematicIndex >= 0) {
                         
                         // Create a packet containing two chunks (one from start, one from end)
                         const packet = this.createDualSystematicPacket(
@@ -1435,19 +1525,36 @@
             
             // Create a packet during the systematic phase (single chunk)
             createSystematicPacket(chunkIndex) {
-                // Get the chunk data
+                // Get the chunk data (now binary)
                 const chunkData = this.originalChunks[chunkIndex];
                 
                 // Create a seed based on packet counter
                 const seed = this.seedBase + this.packetCounter;
                 
+                // Convert binary chunk to base64 for transmission
+                const chunkBase64 = this.arrayBufferToBase64(chunkData);
+                
                 // Create data string containing just this chunk
-                // Format: chunkIndex:chunkData
-                const combinedData = `${chunkIndex}:${chunkData}`;
+                // Format: chunkIndex:base64ChunkData
+                const combinedData = `${chunkIndex}:${chunkBase64}`;
                 
                 // Create the packet using compact string format
                 // Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
                 const dataString = `D:${this.packetCounter}:${seed}:${this.seedBase}:${this.numChunks}:1:${combinedData}`;
+                
+                if (debugMode) {
+                    console.log(`🔍 ENCODER DEBUG - Single systematic packet ${this.packetCounter}:`);
+                    console.log(`  Chunk ${chunkIndex}: ${chunkData.length} bytes`);
+                    console.log(`  Chunk type: ${chunkData.constructor.name}`);
+                    console.log(`  First 4 bytes: [${Array.from(chunkData.slice(0, 4)).join(', ')}]`);
+                    console.log(`  Base64 length: ${chunkBase64.length} chars`);
+                    console.log(`  Base64 preview: ${chunkBase64.substring(0, 20)}...`);
+                    console.log(`  Base64 valid: ${/^[A-Za-z0-9+/]*={0,2}$/.test(chunkBase64)}`);
+                    console.log(`  Combined data length: ${combinedData.length} chars`);
+                    console.log(`  Combined preview: ${combinedData.substring(0, 30)}...`);
+                    console.log(`  Final packet length: ${dataString.length} chars`);
+                    console.log(`  Final packet preview: ${dataString.substring(0, 80)}...`);
+                }
                 
                 // Create and return the packet object
                 const packet = {
@@ -1469,27 +1576,51 @@
             
             // Create a systematic packet with two chunks (one from beginning, one from end)
             createDualSystematicPacket(firstChunkIndex, secondChunkIndex) {
-                // Get the chunk data for both chunks
+                // Get the chunk data for both chunks (now binary)
                 const firstChunkData = this.originalChunks[firstChunkIndex];
                 const secondChunkData = this.originalChunks[secondChunkIndex];
+                
+                if (debugMode) {
+                    console.log(`🔍 ENCODER DEBUG - Dual systematic packet ${this.packetCounter}:`);
+                    console.log(`  Chunk ${firstChunkIndex}: ${firstChunkData.length} bytes, type: ${firstChunkData.constructor.name}`);
+                    console.log(`  Chunk ${secondChunkIndex}: ${secondChunkData.length} bytes, type: ${secondChunkData.constructor.name}`);
+                    console.log(`  First chunk first 4 bytes: [${Array.from(firstChunkData.slice(0, 4)).join(', ')}]`);
+                    console.log(`  Second chunk first 4 bytes: [${Array.from(secondChunkData.slice(0, 4)).join(', ')}]`);
+                }
                 
                 // Create a seed based on packet counter
                 const seed = this.seedBase + this.packetCounter;
                 
+                // Convert binary chunks to base64 for transmission
+                const firstChunkBase64 = this.arrayBufferToBase64(firstChunkData);
+                const secondChunkBase64 = this.arrayBufferToBase64(secondChunkData);
+                
                 // Create data string containing both chunks with the specified delimiter format
-                // Format: index1:chunk1|index2:chunk2
-                const combinedData = `${firstChunkIndex}:${firstChunkData}|${secondChunkIndex}:${secondChunkData}`;
+                // Format: index1:base64chunk1|index2:base64chunk2
+                const combinedData = `${firstChunkIndex}:${firstChunkBase64}|${secondChunkIndex}:${secondChunkBase64}`;
                 
                 // Create the packet using compact string format
                 // Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
-                const dataString = `D:${this.packetCounter}:${seed}:${this.seedBase}:${this.numChunks}:1:${combinedData}`;
+                const dataString = `D:${this.packetCounter}:${seed}:${this.seedBase}:${this.numChunks}:2:${combinedData}`;
+                
+                if (debugMode) {
+                    console.log(`  First base64: ${firstChunkBase64.length} chars, preview: ${firstChunkBase64.substring(0, 20)}...`);
+                    console.log(`  First base64 valid: ${/^[A-Za-z0-9+/]*={0,2}$/.test(firstChunkBase64)}`);
+                    console.log(`  Second base64: ${secondChunkBase64.length} chars, preview: ${secondChunkBase64.substring(0, 20)}...`);
+                    console.log(`  Second base64 valid: ${/^[A-Za-z0-9+/]*={0,2}$/.test(secondChunkBase64)}`);
+                    console.log(`  Combined data length: ${combinedData.length} chars`);
+                    console.log(`  Combined preview: ${combinedData.substring(0, 50)}...`);
+                    console.log(`  Contains invalid chars: ${/[^A-Za-z0-9+/=:|]/.test(combinedData)}`);
+                    console.log(`  Final packet length: ${dataString.length} chars`);
+                    console.log(`  Final packet preview: ${dataString.substring(0, 100)}...`);
+                }
                 
                 // Create and return the packet object
                 const packet = {
                     format: "compact",
                     dataString: dataString,
                     s: seed,
-                    d: 1,  // Degree is 2 for systematic packets
+                    d: 2,  // Degree is 2 for dual systematic packets
                     p: this.packetCounter++,
                     n: this.numChunks,
                     b: this.seedBase,
@@ -1516,23 +1647,32 @@
                 // Select chunks according to LT coding rules
                 const selectedIndices = this.selectChunksLT(degree, rng);
                 
-                // Combine the selected chunks
-                const combinedData = this.combineChunks(selectedIndices);
+                // Get binary XOR data for fountain coding (proper LT implementation)
+                const fountainData = this.xorChunks(selectedIndices);
                 
-                // Create the packet using compact string format
-                // Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
-                const dataString = `D:${this.packetCounter}:${seed}:${this.seedBase}:${this.numChunks}:${degree}:${combinedData}`;
+                // Get string representation of the indices for encoding in the packet
+                const indicesStr = selectedIndices.join(',');
+                
+                // Convert the XOR data to a base64 string for transmission
+                const base64Data = this.arrayBufferToBase64(fountainData);
+                
+                // Create the packet using enhanced format for fountain coding
+                // Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:1:<sourceIndices>:<xorData>
+                // Note: Field 5 is always 1 for fountain (treated as single record with XOR data)
+                const dataString = `D:${this.packetCounter}:${seed}:${this.seedBase}:${this.numChunks}:1:${indicesStr}:${base64Data}`;
                 
                 // Create and return the packet object
                 const packet = {
-                    format: "compact",
+                    format: "enhanced",
                     dataString: dataString,
                     s: seed,
                     d: degree,
                     p: this.packetCounter++,
                     n: this.numChunks,
                     b: this.seedBase,
-                    systematic: false
+                    systematic: false,
+                    sourceIndices: selectedIndices,
+                    fountainData: fountainData
                 };
                 
                 // Check packet size for QR code limits
@@ -1665,22 +1805,94 @@
                 return indices;
             }
             
-            // Combine chunks using string concatenation with markers
+            // Combine chunks using XOR operations (proper Fountain/LT coding)
             combineChunks(indices) {
                 if (indices.length === 0) return "";
                 
-                // Concatenate the chunks with a special delimiter and chunk index
+                // For backward compatibility, also create the string format
                 // Format: index1:chunk1|index2:chunk2|index3:chunk3
-                return indices.map(index => {
+                const stringFormat = indices.map(index => {
                     return `${index}:${this.originalChunks[index]}`;
                 }).join("|");
+                
+                // Also create the binary XOR fountain data
+                const fountainData = this.xorChunks(indices);
+                
+                // Return the string format for compatibility
+                return stringFormat;
+            }
+            
+            // Combine chunks using XOR for LT coding
+            xorChunks(indices) {
+                if (indices.length === 0) return new Uint8Array(0);
+                
+                // Get first chunk data as Uint8Array (now handles binary data)
+                const firstChunk = this.ensureUint8Array(this.originalChunks[indices[0]]);
+                
+                // If only one chunk, return it directly
+                if (indices.length === 1) return firstChunk;
+                
+                // Find maximum chunk length to handle different chunk sizes
+                let maxLength = firstChunk.length;
+                for (let i = 1; i < indices.length; i++) {
+                    const chunkData = this.ensureUint8Array(this.originalChunks[indices[i]]);
+                    maxLength = Math.max(maxLength, chunkData.length);
+                }
+                
+                // Create result array initialized with first chunk, padded to max length
+                const result = new Uint8Array(maxLength);
+                result.set(firstChunk);
+                
+                // XOR with remaining chunks
+                for (let i = 1; i < indices.length; i++) {
+                    const chunkIndex = indices[i];
+                    const chunkData = this.ensureUint8Array(this.originalChunks[chunkIndex]);
+                    
+                    // XOR the data
+                    for (let j = 0; j < Math.min(result.length, chunkData.length); j++) {
+                        result[j] ^= chunkData[j];
+                    }
+                }
+                
+                return result;
+            }
+            
+            // Convert string to Uint8Array (for legacy compatibility)
+            stringToUint8Array(str) {
+                const arr = new Uint8Array(str.length);
+                for (let i = 0; i < str.length; i++) {
+                    arr[i] = str.charCodeAt(i);
+                }
+                return arr;
+            }
+            
+            // Ensure data is Uint8Array (works with both binary and string data)
+            ensureUint8Array(data) {
+                if (data instanceof Uint8Array) {
+                    return data;
+                }
+                if (typeof data === 'string') {
+                    return this.stringToUint8Array(data);
+                }
+                // Convert other array types
+                return new Uint8Array(data);
+            }
+            
+            // Convert ArrayBuffer to base64 string
+            arrayBufferToBase64(buffer) {
+                let binary = '';
+                const bytes = new Uint8Array(buffer);
+                for (let i = 0; i < bytes.length; i++) {
+                    binary += String.fromCharCode(bytes[i]);
+                }
+                return btoa(binary);
             }
             
             // Generate metadata packet with LT code specific information
             generateMetadataPacket() {
                 // Basic file metadata
                 const fileNameText = document.getElementById('fileName').textContent;
-                const fileSizeBytes = document.getElementById('fileSize').textContent;
+                const fileSizeBytes = fileInput.files[0].size; // Get actual byte size, not formatted text
                 const fileType = fileInput.files[0].type;
                 
                 // Get encoding parameters
@@ -1691,16 +1903,19 @@
                 const highDensityMode = document.getElementById('highDensityCheckbox').checked ? 1 : 0;
                 const ecLevel = document.getElementById('errorCorrectionSelect').value;
                 
-                // Create checksum
+                // Create file checksum for data integrity verification
+                const fileChecksum = this.calculateFileChecksum(fileContent);
+                
+                // Create metadata checksum  
                 const checksumData = `${fileNameText}:${fileSizeBytes}:${this.numChunks}`;
-                const checksum = this.simpleChecksum(checksumData);
+                const metaChecksum = this.simpleChecksum(checksumData);
                 
                 // Add LT-specific parameters
                 const ltParams = `${this.c}:${this.delta}`;
                 
-                // Create compact metadata string
-                // Format: M:<version>:<filename>:<filetype>:<filesize>:<chunks>:<packets>:<maxdegree>:<density>:<fps>:<chunksize>:<redund>:<ecl>:<checksum>:<ltparams>
-                const metadataString = `M:3.0:${encodeURIComponent(fileNameText)}:${encodeURIComponent(fileType)}:${fileSizeBytes}:${this.numChunks}:${this.calculateTotalPackets()}:${maxDegree}:${highDensityMode}:${fps}:${chunkSize}:${redundancy}:${ecLevel}:${checksum}:${ltParams}`;
+                // Create compact metadata string  
+                // Format: M:<version>:<filename>:<filetype>:<filesize>:<chunks>:<packets>:<maxdegree>:<density>:<fps>:<chunksize>:<redund>:<ecl>:<metachecksum>:<filechecksum>:<ltparams>
+                const metadataString = `M:3.0:${encodeURIComponent(fileNameText)}:${encodeURIComponent(fileType)}:${fileSizeBytes}:${this.numChunks}:${this.calculateTotalPackets()}:${maxDegree}:${highDensityMode}:${fps}:${chunkSize}:${redundancy}:${ecLevel}:${metaChecksum}:${fileChecksum}:${ltParams}`;
                 
                 // Create metadata packet
                 const packet = {
@@ -1715,6 +1930,16 @@
                 return packet;
             }
             
+            // Calculate file checksum for integrity verification
+            calculateFileChecksum(binaryData) {
+                let hash = 0;
+                for (let i = 0; i < binaryData.length; i++) {
+                    hash = ((hash << 5) - hash) + binaryData[i];
+                    hash = hash & hash; // Convert to 32bit integer
+                }
+                return Math.abs(hash).toString(36).substring(0, 8); // 8 chars for file integrity
+            }
+
             // Simple checksum for data verification
             simpleChecksum(str) {
                 let hash = 0;
