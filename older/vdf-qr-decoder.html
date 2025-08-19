@@ -2493,17 +2493,6 @@
           <div><strong>Chunks:</strong> ${metadata.chunksCount}</div>
           <div><strong>Protocol Version:</strong> ${metadata.protocolVersion}</div>
         `);
-        
-        // Show checksums if available
-        if (metadata.fileChecksum || metadata.metaChecksum) {
-          const fileChecksumElement = document.getElementById('fileChecksum');
-          const metaChecksumElement = document.getElementById('metaChecksum');
-          const checksumInfoElement = document.getElementById('checksumInfo');
-          
-          if (fileChecksumElement) fileChecksumElement.textContent = metadata.fileChecksum || '-';
-          if (metaChecksumElement) metaChecksumElement.textContent = metadata.metaChecksum || '-';
-          if (checksumInfoElement) checksumInfoElement.style.display = 'block';
-        }
 
         // Initialize fountain decoder with metadata
         this.fountainDecoder.initialize(metadata);

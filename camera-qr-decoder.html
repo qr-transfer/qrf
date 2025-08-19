@@ -470,6 +470,28 @@
   <!-- Main script -->
   <script>
     // =============================================
+    // Global Variables and Debug Control
+    // =============================================
+    
+    // Global debug mode flag
+    let debugMode = false;
+    
+    // Enable debug mode by pressing Ctrl+Shift+D
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        debugMode = !debugMode;
+        console.log(`🔧 Debug mode: ${debugMode ? 'ENABLED' : 'DISABLED'}`);
+      }
+    });
+    
+    // Warn when tab goes to background (affects camera QR processing)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        console.warn('⚠️ Tab backgrounded - Camera QR processing may be throttled. Keep tab active for best performance.');
+      }
+    });
+    
+    // =============================================
     // Logger Implementation
     // =============================================
     class Logger {
@@ -796,6 +818,7 @@
 
       processDataPacket(dataString, frameIndex) {
         // Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+        // Enhanced Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<sourceIndices>:<xorData>
         const parts = dataString.split(':');
 
         if (parts.length < 7) {
@@ -806,23 +829,54 @@
         const seed = parseInt(parts[2]);
         const seedBase = parseInt(parts[3]);
         const numChunks = parseInt(parts[4]);
-        const degree = parseInt(parts[5]);
-
-        // Get the data part (everything after the 6th colon)
-        const allDataPart = parts.slice(6).join(':');
+        const chunkCount = parseInt(parts[5]); // This is chunk count, not degree!
 
         // Parse source chunks and data
         let sourceChunks = [];
         let systematicDataChunks = [];
         let fountainData = null;
+        let format = "standard";
 
-        // Single chunk (degree 1) - Systematic packet
-        if (degree === 1) {
-          // For systematic packets, the format is: index1:chunk1|index2:chunk2|...
-          const chunksData = allDataPart.split('|');
-
-          for (let i = 0; i < chunksData.length; i++) {
-            const chunkParts = chunksData[i].split(':', 2);
+        // CORRECTED: Detect packet type by format analysis
+        const allDataPart = parts.slice(6).join(':');
+        
+        if (parts[6] && parts[6].includes(',')) {
+          // FOUNTAIN PACKET: Comma-separated indices in field 6 (always chunkCount=1)
+          const sourceIndices = parts[6].split(',').map(idx => parseInt(idx));
+          const actualDegree = sourceIndices.length; // TRUE degree from comma count
+          
+          if (debugMode) {
+            console.debug(`Fountain packet ${packetId} with degree=${actualDegree} (XOR of ${sourceIndices.join(',')})`);
+          }
+          
+          format = "enhanced";
+          sourceChunks = sourceIndices;
+          
+          try {
+            // Field 7 contains base64 XOR data
+            fountainData = this.base64ToUint8Array(parts[7]);
+          } catch (e) {
+            console.error(`Failed to decode fountain XOR data: ${e.message}`);
+            throw e;
+          }
+          
+        } else {
+          // SYSTEMATIC PACKET: Field 5 = chunkCount (1, 2, 3, 4+)
+          if (debugMode) {
+            console.debug(`Systematic packet ${packetId} with chunkCount=${chunkCount}`);
+          }
+          
+          // Parse chunkCount records separated by pipe |
+          const records = allDataPart.split('|');
+          
+          if (debugMode) {
+            console.debug(`Processing ${records.length} systematic records (expected: ${chunkCount})`);
+          }
+          
+          for (let i = 0; i < records.length; i++) {
+            const record = records[i];
+            const chunkParts = record.split(':', 2);
+            
             if (chunkParts.length === 2) {
               const chunkIndex = parseInt(chunkParts[0]);
               const chunkData = chunkParts[1];
@@ -830,32 +884,118 @@
               if (chunkIndex >= 0 && chunkIndex < numChunks) {
                 sourceChunks.push(chunkIndex);
                 systematicDataChunks.push({ chunkIndex: chunkIndex, chunkData: chunkData });
+                
+                if (debugMode) {
+                  console.debug(`  Record ${i+1}: chunk ${chunkIndex} (${chunkData.length} base64 chars)`);
+                }
+              } else {
+                console.warn(`  Invalid chunk index ${chunkIndex} in record ${i+1}`);
               }
+            } else {
+              console.warn(`  Invalid record format: ${record}`);
             }
           }
         }
-        // Multiple chunks (degree > 1) - Fountain packet
-        else {
-          // For fountain packets, determine which chunks were combined
-          // Generate seed-based chunk selection just like the encoder would have
-          const rng = this.createPRNG(seed);
-          sourceChunks = this.selectChunksLT(rng, degree, numChunks);
-
-          // The data is a single combined (XORed) chunk of the original chunks
-          fountainData = this.stringToUint8Array(allDataPart);
-
-          console.debug(`Fountain packet ${packetId} with degree ${degree}, source chunks: ${sourceChunks.join(',')}`);
+          // Check if this is the enhanced format with explicit source indices and XOR data
+          if (parts.length >= 8) {
+            // Enhanced format - process directly
+            format = "enhanced";
+            
+            // Part 6 contains explicit comma-separated indices
+            try {
+              sourceChunks = parts[6].split(',').map(idx => parseInt(idx));
+              
+              // Part 7 contains base64-encoded XOR data
+              fountainData = this.base64ToUint8Array(parts[7]);
+              
+              console.debug(`Enhanced fountain packet ${packetId} with degree ${degree}, explicit source chunks: ${sourceChunks.join(',')}`);
+            } catch (e) {
+              console.error(`Error parsing enhanced fountain packet: ${e.message}, falling back to legacy mode`);
+              // If we fail to parse the enhanced format, fall back to legacy mode
+              format = "legacy";
+            }
+          } 
+          
+          // Legacy format handling or fallback
+          if (format !== "enhanced") {
+            // For older packets or fallback, determine chunks from seed as before
+            const rng = this.createPRNG(seed);
+            sourceChunks = this.selectChunksLT(rng, degree, numChunks);
+            
+            // Get the data part (everything after the 6th colon)
+            const allDataPart = parts.slice(6).join(':');
+            
+            // For legacy format packets, assume the data is string-represented chunks
+            // For the first implementation of fountains, convert from string
+            if (allDataPart.includes('|')) {
+              // This is the old format with concatenated chunks
+              // We need to split it to extract the actual data
+              const chunksData = allDataPart.split('|');
+              const chunkContentArray = [];
+              
+              // Extract the actual data and recreate the proper XOR'd data
+              for (let i = 0; i < chunksData.length; i++) {
+                const chunkParts = chunksData[i].split(':', 2);
+                if (chunkParts.length === 2) {
+                  const chunkData = chunkParts[1];
+                  chunkContentArray.push(this.stringToUint8Array(chunkData));
+                }
+              }
+              
+              // Manually XOR the chunks together
+              if (chunkContentArray.length > 0) {
+                fountainData = chunkContentArray[0];
+                for (let i = 1; i < chunkContentArray.length; i++) {
+                  // XOR the next chunk with the current result
+                  this.xorUint8Arrays(fountainData, chunkContentArray[i]);
+                }
+              }
+            } else {
+              // Simple string to array conversion
+              fountainData = this.stringToUint8Array(allDataPart);
+            }
+            
+            console.debug(`Legacy fountain packet ${packetId} with degree ${degree}, generated source chunks: ${sourceChunks.join(',')}`);
+          }
         }
+        
+        // Method to manually XOR two Uint8Arrays in-place (first array is modified)
+        this.xorUint8Arrays = function(target, source) {
+          const minLength = Math.min(target.length, source.length);
+          for (let i = 0; i < minLength; i++) {
+            target[i] ^= source[i];
+          }
+        };
+        
+        // Add base64 decoder for XOR data
+        this.base64ToUint8Array = function(base64) {
+          try {
+            const binaryString = atob(base64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes;
+          } catch (e) {
+            console.error("Error decoding base64:", e);
+            // Return empty array on error
+            return new Uint8Array(0);
+          }
+        };
 
         // Check for truncated data
         let isTruncated = false;
         let originalLength = 0;
 
-        const truncatedIndex = allDataPart.indexOf(':t:');
-        if (truncatedIndex > 0) {
-          isTruncated = true;
-          const truncatedParts = allDataPart.substring(truncatedIndex + 3).split(':');
-          originalLength = parseInt(truncatedParts[0] || '0');
+        // Only try to find truncation markers in original format
+        if (format !== "enhanced" && format !== "legacy") {
+          const allDataPart = parts.slice(6).join(':'); 
+          const truncatedIndex = allDataPart.indexOf(':t:');
+          if (truncatedIndex > 0) {
+            isTruncated = true;
+            const truncatedParts = allDataPart.substring(truncatedIndex + 3).split(':');
+            originalLength = parseInt(truncatedParts[0] || '0');
+          }
         }
 
         return {
@@ -871,7 +1011,8 @@
             sourceChunks,
             isDegreeOne: degree === 1,
             isTruncated,
-            originalLength
+            originalLength,
+            format  // Include the detected format for debugging
           },
           frameIndex
         };
@@ -1170,6 +1311,20 @@
         const minLength = Math.min(target.length, source.length);
         for (let i = 0; i < minLength; i++) {
           target[i] ^= source[i];
+        }
+      }
+
+      // Base64 decoder for chunk data (added to fountain decoder class)
+      base64ToUint8Array(base64) {
+        try {
+          const binaryString = atob(base64);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          return bytes;
+        } catch (e) {
+          throw new Error(`Base64 decode failed: ${e.message}`);
         }
       }
 
