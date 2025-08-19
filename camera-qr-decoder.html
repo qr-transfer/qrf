@@ -2035,15 +2035,61 @@
       
       async initializeCameraList() {
         try {
-          // Request camera permission
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          // Check if media devices are supported
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error("Camera access not supported in this browser");
+          }
+
+          // First try to enumerate devices without permission (may have limited info)
+          let devices = [];
+          try {
+            devices = await navigator.mediaDevices.enumerateDevices();
+          } catch (enumError) {
+            console.warn("Failed to enumerate devices:", enumError);
+          }
+
+          // Check if we already have camera permission
+          let hasPermission = false;
+          try {
+            const permissions = await navigator.permissions.query({ name: 'camera' });
+            hasPermission = permissions.state === 'granted';
+          } catch (permError) {
+            console.warn("Failed to check camera permission:", permError);
+          }
+
+          // If no permission, request it
+          if (!hasPermission) {
+            try {
+              // Request camera permission with minimal constraints
+              const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                  width: { ideal: 320 }, 
+                  height: { ideal: 240 } 
+                } 
+              });
+              
+              // Stop the stream immediately
+              stream.getTracks().forEach(track => track.stop());
+            } catch (permissionError) {
+              // Handle specific permission errors
+              if (permissionError.name === 'NotAllowedError') {
+                throw new Error("Camera permission denied. Please allow camera access and refresh the page.");
+              } else if (permissionError.name === 'NotFoundError') {
+                throw new Error("No camera found. Please connect a camera and refresh the page.");
+              } else if (permissionError.name === 'NotReadableError') {
+                throw new Error("Camera is in use by another application. Please close other apps using the camera.");
+              } else {
+                throw new Error(`Camera access failed: ${permissionError.message}`);
+              }
+            }
+          }
           
-          // Stop the stream immediately
-          stream.getTracks().forEach(track => track.stop());
-          
-          // Now list available cameras
+          // Now list available cameras with proper error handling
           if (this.cameraProcessor) {
-            await this.cameraProcessor.listCameras();
+            const success = await this.cameraProcessor.listCameras();
+            if (!success) {
+              throw new Error("Failed to list available cameras");
+            }
           } else {
             // Create camera processor if not exists
             this.cameraProcessor = new CameraProcessor({
@@ -2052,13 +2098,26 @@
               errorCallback: (error) => this.logger.error(`Camera error: ${error.message}`)
             });
             
-            await this.cameraProcessor.listCameras();
+            const success = await this.cameraProcessor.listCameras();
+            if (!success) {
+              throw new Error("Failed to list available cameras");
+            }
           }
           
-          this.logger.info("Camera list initialized");
+          // Verify we have at least one camera option
+          const cameraSelect = document.getElementById('cameraSelect');
+          if (cameraSelect.options.length <= 1) {
+            throw new Error("No cameras available. Please connect a camera and refresh the page.");
+          }
+          
+          this.logger.info(`Camera list initialized successfully with ${cameraSelect.options.length - 1} camera(s)`);
         } catch (error) {
           this.logger.error(`Failed to initialize camera list: ${error.message}`);
-          this.ui.showErrorMessage(`Camera access denied. Please grant camera permission and reload the page.`);
+          this.ui.showErrorMessage(error.message);
+          
+          // Disable camera functionality
+          document.getElementById('startCameraBtn').disabled = true;
+          document.getElementById('cameraSelect').disabled = true;
         }
       }
 
@@ -2134,8 +2193,16 @@
         const cameraSelect = document.getElementById('cameraSelect');
         const selectedCamera = cameraSelect.value;
         
+        // Check if camera select is disabled (no cameras available)
+        if (cameraSelect.disabled) {
+          this.logger.error("No cameras available. Please check camera connection and refresh the page.");
+          this.ui.showErrorMessage("No cameras available. Please check camera connection and refresh the page.");
+          return;
+        }
+        
         if (!selectedCamera && cameraSelect.options.length > 1) {
-          this.logger.warn("Please select a camera");
+          this.logger.warn("Please select a camera from the dropdown");
+          this.ui.showErrorMessage("Please select a camera from the dropdown");
           return;
         }
         

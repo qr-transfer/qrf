@@ -1738,6 +1738,9 @@
           // Request next frame if still processing
           if (this.isProcessing && !this.videoElement.paused && !this.videoElement.ended) {
             this.videoElement.requestVideoFrameCallback(processFrame);
+          } else if (this.isProcessing && this.videoElement.ended) {
+            // Video ended but processing continues - restart for another loop
+            this.handleVideoEnd();
           } else {
             this.completed();
           }
@@ -1750,8 +1753,14 @@
         if (!this.isProcessing) return;
 
         // Check if video is playing
-        if (this.videoElement.paused || this.videoElement.ended) {
+        if (this.videoElement.paused) {
           this.completed();
+          return;
+        }
+        
+        // Handle video end in loop mode
+        if (this.videoElement.ended) {
+          this.handleVideoEnd();
           return;
         }
 
@@ -1840,9 +1849,66 @@
         this.completed();
       }
 
+      handleVideoEnd() {
+        // Check if we should continue looping for better completion
+        if (this.shouldContinueLooping()) {
+          console.log(`Video ended, restarting loop ${this.loopCount + 1} with faster frame rate`);
+          this.loopCount = (this.loopCount || 0) + 1;
+          
+          // Increase frame rate for subsequent loops (half the interval = double the rate)
+          if (this.loopCount > 1) {
+            this.frameInterval = Math.max(this.frameInterval / 2, 5); // Min 5ms interval
+            console.log(`Increased frame rate: interval now ${this.frameInterval}ms`);
+          }
+          
+          // Restart video from beginning
+          this.videoElement.currentTime = 0;
+          this.videoElement.play();
+          
+          // Continue processing with new frame rate
+          if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+            this.processWithVideoFrameCallback();
+          } else {
+            // Update interval timer
+            if (this.processTimer) {
+              clearInterval(this.processTimer);
+            }
+            this.processTimer = setInterval(() => {
+              this.processCurrentFrame();
+            }, this.frameInterval);
+          }
+        } else {
+          console.log(`Stopping after ${this.loopCount || 1} loops`);
+          this.completed();
+        }
+      }
+      
+      shouldContinueLooping() {
+        const maxLoops = 5; // Maximum number of loops
+        const currentLoop = this.loopCount || 0;
+        
+        // Don't loop if we've already reached max loops
+        if (currentLoop >= maxLoops) {
+          return false;
+        }
+        
+        // Don't loop if file is already complete
+        if (this.isFileComplete && this.isFileComplete()) {
+          return false;
+        }
+        
+        // Continue looping if we haven't hit the max and file isn't complete
+        return currentLoop < maxLoops;
+      }
+
       completed() {
         this.isProcessing = false;
+        console.log(`Video processing completed after ${this.loopCount || 1} loops`);
         // Clear any resources
+        if (this.processTimer) {
+          clearInterval(this.processTimer);
+          this.processTimer = null;
+        }
       }
     }
 
@@ -2353,6 +2419,13 @@
           errorCallback: (error) => this.logger.error(`Video processing error: ${error.message}`),
           frameInterval: this.settings.frameInterval
         });
+        
+        // Set completion check callback for looping logic
+        this.videoProcessor.isFileComplete = () => {
+          return this.metadataReceived && 
+                 this.fileMetadata && 
+                 this.recoveredChunks.size >= this.fileMetadata.chunksCount;
+        };
       }
 
       stopProcessing() {
