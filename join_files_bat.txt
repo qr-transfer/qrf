@@ -1,0 +1,198 @@
+@echo off
+setlocal enabledelayedexpansion
+
+REM File Joiner - Windows Batch Version
+REM Joins split files back together.
+REM
+REM Usage:
+REM   join_files.bat <pattern> [output_file]
+REM
+REM Examples:
+REM   join_files.bat video.mp4.part               REM Join using auto-detected name
+REM   join_files.bat video.mp4.part merged.mp4   REM Join with custom output name
+
+REM Function to show usage
+:show_usage
+echo File Joiner - Windows Batch Script
+echo.
+echo Usage: %~nx0 ^<pattern^> [output_file]
+echo.
+echo Arguments:
+echo   pattern     Pattern to match chunk files (required)
+echo               Examples: 'file.txt.part', 'data.bin.part'
+echo   output_file Output file path (optional, auto-detected from metadata)
+echo.
+echo Examples:
+echo   %~nx0 video.mp4.part               REM Join using auto-detected name
+echo   %~nx0 video.mp4.part merged.mp4   REM Join with custom output name
+echo.
+echo Note: The script looks for a .meta file to determine the original filename
+echo       and validates chunk integrity during the joining process.
+goto :eof
+
+REM Function to format bytes to human readable
+:format_size
+set bytes=%~1
+set /a kb=!bytes!/1024
+set /a mb=!kb!/1024
+set /a gb=!mb!/1024
+
+if !gb! gtr 0 (
+    echo !gb!GB
+) else if !mb! gtr 0 (
+    echo !mb!MB
+) else if !kb! gtr 0 (
+    echo !kb!KB
+) else (
+    echo !bytes!B
+)
+goto :eof
+
+REM Main program
+if "%~1"=="" goto show_usage
+if "%~1"=="-h" goto show_usage
+if "%~1"=="--help" goto show_usage
+
+set PATTERN=%~1
+set OUTPUT_FILE=%~2
+
+echo INFO: Pattern: !PATTERN!
+if "!OUTPUT_FILE!"=="" (
+    echo INFO: Output file: [auto-detect from metadata]
+) else (
+    echo INFO: Output file: !OUTPUT_FILE!
+)
+echo.
+
+REM Use PowerShell for more robust file operations
+powershell -Command "& {
+    $pattern = '!PATTERN!'
+    $outputFile = '!OUTPUT_FILE!'
+    
+    # Find chunk files
+    if ($pattern.EndsWith('.part')) {
+        $searchPattern = $pattern + '*'
+    } else {
+        $searchPattern = $pattern
+    }
+    
+    $chunkFiles = Get-ChildItem -Path $searchPattern -ErrorAction SilentlyContinue | Sort-Object Name
+    
+    if ($chunkFiles.Count -eq 0) {
+        Write-Host 'ERROR: No chunk files found matching pattern: !PATTERN!'
+        Write-Host 'INFO: Make sure the pattern is correct and files exist'
+        exit 1
+    }
+    
+    Write-Host ('INFO: Found ' + $chunkFiles.Count + ' chunk files')
+    
+    # Try to find metadata file
+    $baseName = $pattern
+    if ($pattern -match '\.part') {
+        $baseName = $pattern -replace '\.part.*', ''
+    }
+    $metadataFile = $baseName + '.meta'
+    
+    $originalName = ''
+    $expectedSize = 0
+    $expectedChunks = 0
+    
+    if (Test-Path $metadataFile) {
+        Write-Host ('INFO: Found metadata file: ' + $metadataFile)
+        $metadata = Get-Content $metadataFile
+        
+        foreach ($line in $metadata) {
+            if ($line -match '^original_name=(.*)$') {
+                $originalName = $matches[1]
+            }
+            elseif ($line -match '^original_size=(.*)$') {
+                $expectedSize = [int64]$matches[1]
+            }
+            elseif ($line -match '^total_chunks=(.*)$') {
+                $expectedChunks = [int]$matches[1]
+            }
+        }
+        
+        if ($expectedChunks -gt 0 -and $chunkFiles.Count -ne $expectedChunks) {
+            Write-Host ('WARNING: Expected ' + $expectedChunks + ' chunks, but found ' + $chunkFiles.Count)
+            Write-Host 'WARNING: Some chunks may be missing!'
+        }
+    } else {
+        Write-Host ('WARNING: No metadata file found (' + $metadataFile + ')')
+        Write-Host 'INFO: Will proceed without metadata validation'
+    }
+    
+    # Determine output filename
+    if ([string]::IsNullOrEmpty($outputFile)) {
+        if (![string]::IsNullOrEmpty($originalName)) {
+            $outputFile = $originalName
+        } else {
+            # Strip .part from the first chunk file
+            $firstChunk = $chunkFiles[0].Name
+            if ($firstChunk -match '\.part') {
+                $outputFile = $firstChunk -replace '\.part.*', ''
+            } else {
+                $outputFile = 'joined_' + $firstChunk
+            }
+        }
+    }
+    
+    Write-Host ('INFO: Joining ' + $chunkFiles.Count + ' chunks into ' + $outputFile + '...')
+    
+    # Check if output file already exists
+    if (Test-Path $outputFile) {
+        Write-Host ('WARNING: Output file ' + $outputFile + ' already exists')
+        $response = Read-Host 'Overwrite? (y/N)'
+        if ($response -notmatch '^[Yy]$') {
+            Write-Host 'INFO: Aborted by user'
+            exit 0
+        }
+        Remove-Item $outputFile -Force
+    }
+    
+    # Join the files
+    $totalSize = 0
+    $chunkNum = 1
+    $outputStream = [System.IO.File]::Create($outputFile)
+    
+    try {
+        foreach ($chunkFile in $chunkFiles) {
+            if (!(Test-Path $chunkFile.FullName)) {
+                Write-Host ('ERROR: Chunk file not found: ' + $chunkFile.FullName)
+                exit 1
+            }
+            
+            $chunkSize = $chunkFile.Length
+            Write-Host ('INFO: Processing chunk ' + $chunkNum + '/' + $chunkFiles.Count + ': ' + $chunkFile.Name + ' (' + [math]::Round($chunkSize/1024, 1) + 'KB)')
+            
+            $chunkData = [System.IO.File]::ReadAllBytes($chunkFile.FullName)
+            $outputStream.Write($chunkData, 0, $chunkData.Length)
+            $totalSize += $chunkSize
+            $chunkNum++
+        }
+    }
+    finally {
+        $outputStream.Close()
+    }
+    
+    Write-Host ''
+    Write-Host 'SUCCESS: Join complete!'
+    Write-Host ('INFO: Output file: ' + $outputFile + ' (' + [math]::Round($totalSize/1024/1024, 1) + 'MB)')
+    
+    # Validate against expected size if available
+    if ($expectedSize -gt 0 -and $totalSize -ne $expectedSize) {
+        Write-Host ('WARNING: Size mismatch! Expected: ' + [math]::Round($expectedSize/1024/1024, 1) + 'MB, Got: ' + [math]::Round($totalSize/1024/1024, 1) + 'MB')
+        Write-Host 'WARNING: The joined file may be corrupted or incomplete'
+    } elseif ($expectedSize -gt 0) {
+        Write-Host ('SUCCESS: Size validation passed: ' + [math]::Round($totalSize/1024/1024, 1) + 'MB')
+    }
+}"
+
+if errorlevel 1 (
+    echo ERROR: Failed to join files
+    exit /b 1
+)
+
+echo.
+echo Operation completed successfully!
+pause

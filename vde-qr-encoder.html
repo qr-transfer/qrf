@@ -86,6 +86,25 @@
         .file-input-label:hover{background:#d1d5db}
         .file-input-container input[type=file]{position:absolute;left:0;top:0;opacity:0;width:100%;height:100%;cursor:pointer}
         
+        /* File list styles */
+        .file-list-container{margin-top:15px;background:#f9fafb;border-radius:8px;padding:15px;display:none}
+        .file-list-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-weight:600}
+        .file-list{max-height:300px;overflow-y:auto}
+        .file-item{display:flex;align-items:center;padding:8px;border-bottom:1px solid #e5e7eb;transition:background .2s}
+        .file-item:hover{background:#f3f4f6}
+        .file-item:last-child{border-bottom:none}
+        .file-checkbox{margin-right:12px;width:18px;height:18px;cursor:pointer}
+        .file-info{flex:1;display:flex;flex-direction:column}
+        .file-name{font-weight:500;margin-bottom:2px}
+        .file-size{font-size:12px;color:#6b7280}
+        .file-status{margin-left:auto;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:500;text-transform:uppercase}
+        .status-pending{background:#fef3c7;color:#d97706}
+        .status-inprogress{background:#dbeafe;color:#2563eb}
+        .status-sent{background:#dcfce7;color:#16a34a}
+        .status-error{background:#fee2e2;color:#dc2626}
+        .batch-controls{display:flex;gap:10px;margin-top:10px}
+        .select-all-btn,.clear-all-btn{font-size:12px;padding:6px 12px}
+        
         /* Checkbox style */
         .control-switch {
             display: flex;
@@ -240,9 +259,23 @@
                 <label class="control-label">Select File</label>
                 <div class="file-input-container">
                     <label class="file-input-label">
-                        <span id="fileLabel">Choose a file</span>
-                        <input type="file" id="fileInput">
+                        <span id="fileLabel">Choose files</span>
+                        <input type="file" id="fileInput" multiple>
                     </label>
+                </div>
+                
+                <!-- File list container -->
+                <div id="fileListContainer" class="file-list-container">
+                    <div class="file-list-header">
+                        <span>Selected Files</span>
+                        <div class="batch-controls">
+                            <button id="selectAllBtn" class="select-all-btn">Select All</button>
+                            <button id="clearAllBtn" class="clear-all-btn">Clear All</button>
+                        </div>
+                    </div>
+                    <div id="fileList" class="file-list">
+                        <!-- File items will be added here dynamically -->
+                    </div>
                 </div>
             </div>
             
@@ -699,14 +732,31 @@
             maxDegreeValue.textContent = maxDegreeSlider.value;
         }
 
+        // File batch management
+        let fileList = [];
+        let currentProcessingIndex = 0;
+
         // File selection handler
         fileInput.addEventListener('change', () => {
             if (fileInput.files.length > 0) {
-                const file = fileInput.files[0];
-                fileNameText = file.name;
-                fileSizeBytes = file.size;
-                fileLabel.textContent = fileNameText;
-                fileName.textContent = fileNameText;
+                // Clear existing file list
+                fileList = [];
+                
+                // Add all selected files to the list
+                Array.from(fileInput.files).forEach((file, index) => {
+                    fileList.push({
+                        id: Date.now() + index,
+                        file: file,
+                        name: file.name,
+                        size: file.size,
+                        selected: true,
+                        status: 'pending' // pending, inprogress, sent, error
+                    });
+                });
+                
+                // Update UI
+                updateFileListDisplay();
+                updateFileLabel();
                 generateBtn.disabled = false;
                 generateAndStartBtn.disabled = false;
                 
@@ -736,6 +786,186 @@
                 preset: "reliable"
             };
         }
+
+        // Update file label with count
+        function updateFileLabel() {
+            const selectedCount = fileList.filter(f => f.selected).length;
+            const totalCount = fileList.length;
+            
+            if (totalCount === 0) {
+                fileLabel.textContent = 'Choose files';
+            } else if (totalCount === 1) {
+                fileLabel.textContent = fileList[0].name;
+            } else {
+                fileLabel.textContent = `${selectedCount}/${totalCount} files selected`;
+            }
+        }
+
+        // Update file list display
+        function updateFileListDisplay() {
+            const container = document.getElementById('fileListContainer');
+            const listElement = document.getElementById('fileList');
+            
+            if (fileList.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+            
+            container.style.display = 'block';
+            listElement.innerHTML = '';
+            
+            fileList.forEach((fileItem, index) => {
+                const itemElement = document.createElement('div');
+                itemElement.className = 'file-item';
+                itemElement.innerHTML = `
+                    <input type="checkbox" class="file-checkbox" id="file-${fileItem.id}" 
+                           ${fileItem.selected ? 'checked' : ''} 
+                           onchange="toggleFileSelection(${fileItem.id})">
+                    <div class="file-info">
+                        <div class="file-name">${fileItem.name}</div>
+                        <div class="file-size">${formatFileSize(fileItem.size)}</div>
+                    </div>
+                    <div class="file-status status-${fileItem.status}">${fileItem.status}</div>
+                `;
+                listElement.appendChild(itemElement);
+            });
+        }
+
+        // Toggle file selection
+        function toggleFileSelection(fileId) {
+            const fileItem = fileList.find(f => f.id === fileId);
+            if (fileItem) {
+                fileItem.selected = !fileItem.selected;
+                updateFileLabel();
+            }
+        }
+
+        // Update file status
+        function updateFileStatus(fileId, status) {
+            const fileItem = fileList.find(f => f.id === fileId);
+            if (fileItem) {
+                fileItem.status = status;
+                updateFileListDisplay();
+            }
+        }
+
+        // Format file size
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Select/Clear all buttons
+        document.getElementById('selectAllBtn').addEventListener('click', () => {
+            fileList.forEach(f => f.selected = true);
+            updateFileListDisplay();
+            updateFileLabel();
+        });
+
+        document.getElementById('clearAllBtn').addEventListener('click', () => {
+            fileList.forEach(f => f.selected = false);
+            updateFileListDisplay();
+            updateFileLabel();
+        });
+
+        // Process batch of files
+        async function processBatchFiles(selectedFiles, autoStart = false) {
+            currentProcessingIndex = 0;
+            
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const fileItem = selectedFiles[i];
+                currentProcessingIndex = i;
+                
+                try {
+                    // Update status to in progress
+                    updateFileStatus(fileItem.id, 'inprogress');
+                    
+                    // Set current file for processing
+                    fileNameText = fileItem.name;
+                    fileSizeBytes = fileItem.size;
+                    
+                    // Generate QR codes for this file
+                    await generateQRCodesForFile(fileItem.file);
+                    
+                    if (autoStart) {
+                        // Display QR codes
+                        if (fullscreenCheckbox.checked) {
+                            enterFullscreenMode();
+                            await startPlayingAndWait();
+                        } else {
+                            await startPlayingAndWait();
+                        }
+                    }
+                    
+                    // Mark as sent after successful processing
+                    updateFileStatus(fileItem.id, 'sent');
+                    fileItem.selected = false; // Uncheck after successful send
+                    updateFileListDisplay();
+                    updateFileLabel();
+                    
+                } catch (error) {
+                    console.error(`Error processing file ${fileItem.name}:`, error);
+                    updateFileStatus(fileItem.id, 'error');
+                }
+            }
+        }
+
+        // Generate QR codes for a specific file
+        async function generateQRCodesForFile(file) {
+            return new Promise((resolve, reject) => {
+                const fileReader = new FileReader();
+                fileReader.onload = async () => {
+                    try {
+                        // Update file name display
+                        fileName.textContent = file.name;
+                        
+                        // Use existing generateQRCodes logic
+                        const arrayBuffer = fileReader.result;
+                        const encoder = new QRFileEncoder(
+                            new Uint8Array(arrayBuffer),
+                            file.name,
+                            file.type,
+                            {
+                                chunkSize: parseInt(chunkSlider.value),
+                                redundancyPercent: parseInt(redundancySlider.value),
+                                fps: parseInt(speedSlider.value),
+                                maxDegree: parseInt(maxDegreeSlider.value),
+                                qrSize: parseInt(sizeSlider.value)
+                            }
+                        );
+                        
+                        allPackets = encoder.encode();
+                        totalPackets = allPackets.length;
+                        updatePacketInfo();
+                        showMetadata();
+                        
+                        resolve();
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                fileReader.onerror = reject;
+                fileReader.readAsArrayBuffer(file);
+            });
+        }
+
+        // Start playing and wait for completion
+        async function startPlayingAndWait() {
+            return new Promise((resolve) => {
+                startPlaying();
+                
+                // Wait for display to complete
+                const checkCompletion = setInterval(() => {
+                    if (!displayInterval) {
+                        clearInterval(checkCompletion);
+                        resolve();
+                    }
+                }, 1000);
+            });
+        }
         
         // Apply optimal settings
         function applyOptimalSettings() {
@@ -762,7 +992,8 @@
 
         // Generate & Start button (combined functionality)
         generateAndStartBtn.addEventListener('click', async () => {
-            if (!fileInput.files.length) return;
+            const selectedFiles = fileList.filter(f => f.selected);
+            if (selectedFiles.length === 0) return;
             
             generateAndStartBtn.disabled = true;
             generateAndStartBtn.textContent = 'Generating...';

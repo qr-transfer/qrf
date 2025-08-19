@@ -379,6 +379,7 @@
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled>Start Scan</button>
+      <button id="continueBtn" disabled style="background-color: #10b981;">Continue</button>
       <button id="stopScanBtn" disabled>Stop Scan</button>
       <button id="resetBtn">Reset Contents</button>
       <button id="settingsBtn">Advanced Settings</button>
@@ -391,7 +392,10 @@
     <canvas id="overlayCanvas"></canvas>
     <div class="progress-container">
       <div class="progress-bar" id="scanProgressBar"></div>
-      <div class="progress-text" id="scanProgressText">Frames: 0/0 | Time Remaining: --:--</div>
+      <div class="progress-text" id="scanProgressText">Frames: 0/0 | Time Remaining: --:-- | Loop: 1</div>
+      <div class="loop-info" id="loopInfo" style="font-size: 12px; margin-top: 5px; color: #666;">
+        Status: Processing video...
+      </div>
     </div>
   </div>
 
@@ -609,7 +613,8 @@
         const remainingSeconds = Math.floor(remainingTime % 60);
         const timeString = `${remainingMinutes}:${remainingSeconds.toString().padStart(2, '0')}`;
 
-        progressText.textContent = `Frames: ${currentFrame}/${totalFrames} | Time Remaining: ${timeString}`;
+        const currentLoop = window.qrFileDecoder?.videoProcessor?.loopCount || 1;
+        progressText.textContent = `Frames: ${currentFrame}/${totalFrames} | Time Remaining: ${timeString} | Loop: ${currentLoop}`;
       }
 
       updateFileInfo(htmlContent) {
@@ -1688,6 +1693,16 @@
             this.videoElement.onloadedmetadata = () => resolve();
           });
 
+          // Add event listener for when video ends
+          this.videoElement.addEventListener('ended', () => {
+            console.log('🎬 Video ended event fired');
+            console.log(`🔄 Processing status: ${this.isProcessing}, Loop count: ${this.loopCount || 0}`);
+            if (this.isProcessing) {
+              // Prevent multiple end events
+              setTimeout(() => this.handleVideoEnd(), 100);
+            }
+          });
+
           // Get video metadata
           this.totalFrames = Math.ceil(this.videoElement.duration * 30); // Estimate 30 fps
 
@@ -1711,6 +1726,7 @@
 
         this.isProcessing = true;
         this.startTime = performance.now();
+        this.loopCount = 1; // Initialize loop counter
 
         // Start playing the video
         this.videoElement.currentTime = 0;
@@ -1740,9 +1756,11 @@
             this.videoElement.requestVideoFrameCallback(processFrame);
           } else if (this.isProcessing && this.videoElement.ended) {
             // Video ended but processing continues - restart for another loop
+            console.log('🔄 Frame callback detected video end');
             this.handleVideoEnd();
-          } else {
-            this.completed();
+          } else if (!this.isProcessing) {
+            console.log('🔄 Frame callback stopping - processing disabled');
+            return; // Don't call completed here - let the event handler manage it
           }
         };
 
@@ -1754,12 +1772,14 @@
 
         // Check if video is playing
         if (this.videoElement.paused) {
-          this.completed();
+          console.log('🔄 Video paused - stopping processing');
+          this.isProcessing = false;
           return;
         }
         
         // Handle video end in loop mode
         if (this.videoElement.ended) {
+          console.log('🔄 ProcessCurrentFrame detected video end');
           this.handleVideoEnd();
           return;
         }
@@ -1850,35 +1870,70 @@
       }
 
       handleVideoEnd() {
+        console.log(`🔄 Video ended - checking if should loop. Current loop: ${this.loopCount || 0}`);
+        
+        // Update loop info UI
+        const loopInfo = document.getElementById('loopInfo');
+        if (loopInfo) {
+          loopInfo.textContent = `Status: Video ended, checking if should continue...`;
+        }
+        
         // Check if we should continue looping for better completion
         if (this.shouldContinueLooping()) {
-          console.log(`Video ended, restarting loop ${this.loopCount + 1} with faster frame rate`);
           this.loopCount = (this.loopCount || 0) + 1;
+          console.log(`🔄 Video ended, restarting loop ${this.loopCount} with higher frame rate for better detection`);
           
-          // Increase frame rate for subsequent loops (half the interval = double the rate)
+          // Update loop info UI
+          if (loopInfo) {
+            loopInfo.textContent = `Status: Starting loop ${this.loopCount} with faster frame rate...`;
+          }
+          
+          // Store original interval on first loop
+          if (!this.originalFrameInterval) {
+            this.originalFrameInterval = this.frameInterval;
+          }
+          
+          // Decrease interval for subsequent loops to get more frames
           if (this.loopCount > 1) {
-            this.frameInterval = Math.max(this.frameInterval / 2, 5); // Min 5ms interval
-            console.log(`Increased frame rate: interval now ${this.frameInterval}ms`);
+            this.frameInterval = Math.max(this.frameInterval / 2, 1); // Min 1ms interval
+            console.log(`⚡ Increased frame rate: interval now ${this.frameInterval}ms (was ${this.frameInterval * 2}ms)`);
           }
           
           // Restart video from beginning
+          console.log(`🎬 Restarting video from beginning...`);
           this.videoElement.currentTime = 0;
-          this.videoElement.play();
           
-          // Continue processing with new frame rate
-          if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
-            this.processWithVideoFrameCallback();
-          } else {
-            // Update interval timer
-            if (this.processTimer) {
-              clearInterval(this.processTimer);
+          // Directly restart video and continue processing
+          this.videoElement.play().then(() => {
+            console.log(`✅ Video restarted, resuming processing with ${this.frameInterval}ms interval...`);
+            
+            // Continue processing with new frame rate
+            if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+              this.processWithVideoFrameCallback();
+            } else {
+              // Update interval timer
+              if (this.processTimer) {
+                clearInterval(this.processTimer);
+              }
+              this.processTimer = setInterval(() => {
+                this.processCurrentFrame();
+              }, this.frameInterval);
             }
-            this.processTimer = setInterval(() => {
-              this.processCurrentFrame();
-            }, this.frameInterval);
-          }
+          }).catch(err => {
+            console.error('Failed to restart video:', err);
+            this.completed();
+          });
+          
         } else {
-          console.log(`Stopping after ${this.loopCount || 1} loops`);
+          const reason = this.isFileComplete && this.isFileComplete() ? 'file complete' : 'max loops reached';
+          console.log(`⏹️ Stopping after ${this.loopCount || 1} loops (${reason})`);
+          
+          // Update loop info UI
+          const loopInfo = document.getElementById('loopInfo');
+          if (loopInfo) {
+            loopInfo.textContent = `Status: Finished - ${reason} after ${this.loopCount || 1} loops`;
+          }
+          
           this.completed();
         }
       }
@@ -1887,18 +1942,46 @@
         const maxLoops = 5; // Maximum number of loops
         const currentLoop = this.loopCount || 0;
         
+        console.log(`🔍 shouldContinueLooping check: currentLoop=${currentLoop}, maxLoops=${maxLoops}`);
+        
         // Don't loop if we've already reached max loops
         if (currentLoop >= maxLoops) {
+          console.log(`⏹️ Max loops reached (${currentLoop}/${maxLoops})`);
           return false;
         }
         
-        // Don't loop if file is already complete
+        // Check if file is complete
         if (this.isFileComplete && this.isFileComplete()) {
+          console.log(`✅ File complete - stopping loops`);
           return false;
+        }
+        
+        // Get completion status for debugging
+        if (window.qrFileDecoder && window.qrFileDecoder.fountainDecoder) {
+          const progress = window.qrFileDecoder.fountainDecoder.getRecoveryProgress();
+          console.log(`📊 Recovery progress: ${progress.recovered}/${progress.total} chunks (${progress.percentage}%)`);
+          
+          // Continue if we don't have all chunks yet OR if we haven't done enough loops
+          const minLoopsForCompletion = 3; // Ensure at least 3 loops before checking completion
+          if (progress.recovered < progress.total || currentLoop < minLoopsForCompletion) {
+            const reason = progress.recovered < progress.total ? 
+              `missing ${progress.total - progress.recovered} chunks` : 
+              `only ${currentLoop} loops completed (min ${minLoopsForCompletion})`;
+            console.log(`🔄 Continuing loop - ${reason}`);
+            return true;
+          }
+          
+          // If we have all chunks but haven't hit max loops, still do a few more for safety
+          if (progress.recovered >= progress.total && currentLoop < maxLoops) {
+            console.log(`🔄 File seems complete but doing safety loop ${currentLoop + 1}/${maxLoops}`);
+            return true;
+          }
         }
         
         // Continue looping if we haven't hit the max and file isn't complete
-        return currentLoop < maxLoops;
+        const shouldContinue = currentLoop < maxLoops;
+        console.log(`🔄 Should continue: ${shouldContinue}`);
+        return shouldContinue;
       }
 
       completed() {
@@ -2276,6 +2359,7 @@
 
         // Button clicks
         document.getElementById('startScanBtn').addEventListener('click', this.startProcessing.bind(this));
+        document.getElementById('continueBtn').addEventListener('click', this.continueProcessing.bind(this));
         document.getElementById('stopScanBtn').addEventListener('click', this.stopProcessing.bind(this));
         document.getElementById('downloadBtn').addEventListener('click', this.downloadFile.bind(this));
         document.getElementById('settingsBtn').addEventListener('click', this.ui.showSettingsModal.bind(this.ui));
@@ -2314,6 +2398,10 @@
           // Enable start button once video is loaded
           videoElement.onloadedmetadata = () => {
             document.getElementById('startScanBtn').disabled = false;
+            // Enable continue button if we have metadata and missing chunks
+            if (this.metadataReceived && this.recoveredChunks.size < this.fileMetadata.chunksCount) {
+              document.getElementById('continueBtn').disabled = false;
+            }
             this.logger.info(`Video duration: ${videoElement.duration.toFixed(2)} seconds`);
           };
         } catch (error) {
@@ -2371,6 +2459,7 @@
 
         // Update UI
         document.getElementById('startScanBtn').disabled = true;
+        document.getElementById('continueBtn').disabled = true;
         document.getElementById('stopScanBtn').disabled = false;
         document.getElementById('downloadContainer').style.display = 'none';
         this.ui.resetChunkGrid();
@@ -2428,6 +2517,59 @@
         };
       }
 
+      continueProcessing() {
+        if (this.isProcessing) return;
+        
+        this.logger.info("Continuing video processing with additional loops...");
+        
+        // Re-enable processing and force additional loops
+        if (this.videoProcessor && this.videoFile) {
+          this.isProcessing = true;
+          
+          // Continue from where we left off, increment loop count
+          this.videoProcessor.loopCount = (this.videoProcessor.loopCount || 1) + 1;
+          this.videoProcessor.isProcessing = true;
+          
+          // Increase frame rate for better detection (faster processing)
+          this.videoProcessor.frameInterval = Math.max(this.videoProcessor.frameInterval / 2, 1);
+          
+          console.log(`🔄 Manual continue: Starting loop ${this.videoProcessor.loopCount} with ${this.videoProcessor.frameInterval}ms interval`);
+          
+          // Update status
+          const loopInfo = document.getElementById('loopInfo');
+          if (loopInfo) {
+            loopInfo.textContent = `Status: Manual continue - loop ${this.videoProcessor.loopCount} with faster frame rate...`;
+          }
+          
+          // Restart video from beginning with full frame processing
+          this.videoProcessor.videoElement.currentTime = 0;
+          this.videoProcessor.videoElement.play().then(() => {
+            console.log(`✅ Manual continue: Video restarted, resuming processing...`);
+            
+            // Start frame processing again
+            if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+              this.videoProcessor.processWithVideoFrameCallback();
+            } else {
+              // Update interval timer
+              if (this.videoProcessor.processTimer) {
+                clearInterval(this.videoProcessor.processTimer);
+              }
+              this.videoProcessor.processTimer = setInterval(() => {
+                this.videoProcessor.processCurrentFrame();
+              }, this.videoProcessor.frameInterval);
+            }
+          }).catch(err => {
+            console.error('Failed to continue video processing:', err);
+            this.isProcessing = false;
+          });
+          
+          // Update UI
+          document.getElementById('startScanBtn').disabled = true;
+          document.getElementById('continueBtn').disabled = true;
+          document.getElementById('stopScanBtn').disabled = false;
+        }
+      }
+
       stopProcessing() {
         if (!this.isProcessing) return;
 
@@ -2452,6 +2594,12 @@
         // Update UI
         document.getElementById('startScanBtn').disabled = false;
         document.getElementById('stopScanBtn').disabled = true;
+        
+        // Enable continue button if file isn't complete
+        if (this.metadataReceived && this.recoveredChunks.size < this.fileMetadata.chunksCount) {
+          document.getElementById('continueBtn').disabled = false;
+        }
+        
         this.logger.info("Processing stopped");
 
         // Show stats

@@ -1,0 +1,222 @@
+#!/bin/bash
+
+# File Joiner - Bash/Linux Version
+# Joins split files back together.
+#
+# Usage:
+#   ./join_files.sh <pattern> [output_file]
+#
+# Examples:
+#   ./join_files.sh video.mp4.part              # Join using auto-detected name
+#   ./join_files.sh video.mp4.part merged.mp4  # Join with custom output name
+#   ./join_files.sh "data.bin.part*"            # Join with wildcard pattern
+
+set -e  # Exit on any error
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Print colored output
+print_info() { echo -e "${BLUE}INFO:${NC} $1"; }
+print_success() { echo -e "${GREEN}SUCCESS:${NC} $1"; }
+print_warning() { echo -e "${YELLOW}WARNING:${NC} $1"; }
+print_error() { echo -e "${RED}ERROR:${NC} $1"; }
+
+# Show usage information
+show_usage() {
+    echo "File Joiner - Bash Script"
+    echo ""
+    echo "Usage: $0 <pattern> [output_file]"
+    echo ""
+    echo "Arguments:"
+    echo "  pattern     Pattern to match chunk files (required)"
+    echo "              Examples: 'file.txt.part', 'data.bin.part*'"
+    echo "  output_file Output file path (optional, auto-detected from metadata)"
+    echo ""
+    echo "Examples:"
+    echo "  $0 video.mp4.part              # Join using auto-detected name"
+    echo "  $0 video.mp4.part merged.mp4  # Join with custom output name"
+    echo "  $0 \"data.bin.part*\"            # Join with wildcard pattern"
+    echo ""
+    echo "Note: The script looks for a .meta file to determine the original filename"
+    echo "      and validates chunk integrity during the joining process."
+}
+
+# Format bytes to human readable
+format_size() {
+    local bytes=$1
+    local units=("B" "KB" "MB" "GB" "TB")
+    local unit_index=0
+    local size=$bytes
+    
+    while [[ $size -ge 1024 && $unit_index -lt 4 ]]; do
+        size=$((size / 1024))
+        unit_index=$((unit_index + 1))
+    done
+    
+    echo "${size}${units[$unit_index]}"
+}
+
+# Find and sort chunk files
+find_chunk_files() {
+    local pattern="$1"
+    local chunk_files=()
+    
+    # If pattern ends with .part, add wildcard for numbered parts
+    if [[ "$pattern" == *.part ]]; then
+        pattern="${pattern}[0-9]*"
+    fi
+    
+    # Find all matching files and sort them
+    while IFS= read -r -d '' file; do
+        chunk_files+=("$file")
+    done < <(find . -maxdepth 2 -name "$(basename "$pattern")" -print0 2>/dev/null | sort -z)
+    
+    # If no files found with find, try glob expansion
+    if [[ ${#chunk_files[@]} -eq 0 ]]; then
+        # Enable nullglob to handle cases where no files match
+        shopt -s nullglob
+        chunk_files=($(echo $pattern | tr ' ' '\n' | sort -V))
+        shopt -u nullglob
+    fi
+    
+    printf '%s\n' "${chunk_files[@]}"
+}
+
+# Read metadata file
+read_metadata() {
+    local metadata_file="$1"
+    local key="$2"
+    
+    if [[ -f "$metadata_file" ]]; then
+        grep "^${key}=" "$metadata_file" 2>/dev/null | cut -d'=' -f2- || echo ""
+    else
+        echo ""
+    fi
+}
+
+# Main joining function
+join_files() {
+    local pattern="$1"
+    local output_file="$2"
+    
+    # Find chunk files
+    local chunk_files=($(find_chunk_files "$pattern"))
+    
+    if [[ ${#chunk_files[@]} -eq 0 ]]; then
+        print_error "No chunk files found matching pattern: $pattern"
+        print_info "Make sure the pattern is correct and files exist"
+        exit 1
+    fi
+    
+    print_info "Found ${#chunk_files[@]} chunk files"
+    
+    # Try to find metadata file
+    local base_pattern="$pattern"
+    if [[ "$pattern" == *.part* ]]; then
+        base_pattern=$(echo "$pattern" | sed 's/\.part.*//')
+    fi
+    
+    local metadata_file="${base_pattern}.meta"
+    local original_name=""
+    local expected_size=""
+    local expected_chunks=""
+    
+    if [[ -f "$metadata_file" ]]; then
+        print_info "Found metadata file: $metadata_file"
+        original_name=$(read_metadata "$metadata_file" "original_name")
+        expected_size=$(read_metadata "$metadata_file" "original_size")
+        expected_chunks=$(read_metadata "$metadata_file" "total_chunks")
+        
+        if [[ -n "$expected_chunks" && ${#chunk_files[@]} -ne $expected_chunks ]]; then
+            print_warning "Expected $expected_chunks chunks, but found ${#chunk_files[@]}"
+            print_warning "Some chunks may be missing!"
+        fi
+    else
+        print_warning "No metadata file found ($metadata_file)"
+        print_info "Will proceed without metadata validation"
+    fi
+    
+    # Determine output filename
+    if [[ -z "$output_file" ]]; then
+        if [[ -n "$original_name" ]]; then
+            output_file="$original_name"
+        else
+            # Strip .part from the first chunk file
+            local first_chunk=$(basename "${chunk_files[0]}")
+            if [[ "$first_chunk" == *.part* ]]; then
+                output_file=$(echo "$first_chunk" | sed 's/\.part.*//')
+            else
+                output_file="joined_${first_chunk}"
+            fi
+        fi
+    fi
+    
+    print_info "Joining ${#chunk_files[@]} chunks into '$output_file'..."
+    
+    # Check if output file already exists
+    if [[ -f "$output_file" ]]; then
+        print_warning "Output file '$output_file' already exists"
+        read -p "Overwrite? (y/N): " -r
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            print_info "Aborted by user"
+            exit 0
+        fi
+        rm -f "$output_file"
+    fi
+    
+    # Join the files
+    local total_size=0
+    local chunk_num=1
+    
+    for chunk_file in "${chunk_files[@]}"; do
+        if [[ ! -f "$chunk_file" ]]; then
+            print_error "Chunk file not found: $chunk_file"
+            exit 1
+        fi
+        
+        local chunk_size=$(stat -f%z "$chunk_file" 2>/dev/null || stat -c%s "$chunk_file" 2>/dev/null)
+        print_info "Processing chunk $chunk_num/${#chunk_files[@]}: $(basename "$chunk_file") ($(format_size $chunk_size))"
+        
+        cat "$chunk_file" >> "$output_file"
+        total_size=$((total_size + chunk_size))
+        chunk_num=$((chunk_num + 1))
+    done
+    
+    print_success "Join complete!"
+    print_info "Output file: $output_file ($(format_size $total_size))"
+    
+    # Validate against expected size if available
+    if [[ -n "$expected_size" && $total_size -ne $expected_size ]]; then
+        print_warning "Size mismatch! Expected: $(format_size $expected_size), Got: $(format_size $total_size)"
+        print_warning "The joined file may be corrupted or incomplete"
+    elif [[ -n "$expected_size" ]]; then
+        print_success "Size validation passed: $(format_size $total_size)"
+    fi
+    
+    return 0
+}
+
+# Parse command line arguments
+if [[ $# -lt 1 || "$1" == "-h" || "$1" == "--help" ]]; then
+    show_usage
+    exit 0
+fi
+
+PATTERN="$1"
+OUTPUT_FILE="$2"
+
+print_info "Pattern: $PATTERN"
+if [[ -n "$OUTPUT_FILE" ]]; then
+    print_info "Output file: $OUTPUT_FILE"
+else
+    print_info "Output file: [auto-detect from metadata]"
+fi
+print_info ""
+
+# Perform the join
+join_files "$PATTERN" "$OUTPUT_FILE"

@@ -1,0 +1,16 @@
+{
+  "name": "qrcoder-optimizer",
+  "version": "1.0.0",
+  "description": "Optimization tools for QR code encoder/decoder",
+  "main": "optimize.js",
+  "scripts": {
+    "optimize": "node optimize.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "terser": "^5.24.0",
+    "clean-css": "^5.3.2",
+    "html-minifier-terser": "^7.2.0",
+    "axios": "^1.6.2"
+  }
+}
