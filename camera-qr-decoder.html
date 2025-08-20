@@ -957,32 +957,7 @@
             
             console.debug('Legacy fountain packet ' + (packetId) + ' with degree ' + (degree) + ', generated source chunks: ' + (sourceChunks.join(',')));
           }
-        }
         
-        // Method to manually XOR two Uint8Arrays in-place (first array is modified)
-        this.xorUint8Arrays = function(target, source) {
-          const minLength = Math.min(target.length, source.length);
-          for (let i = 0; i < minLength; i++) {
-            target[i] ^= source[i];
-          }
-        };
-        
-        // Add base64 decoder for XOR data
-        this.base64ToUint8Array = function(base64) {
-          try {
-            const binaryString = atob(base64);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
-            }
-            return bytes;
-          } catch (e) {
-            console.error("Error decoding base64:", e);
-            // Return empty array on error
-            return new Uint8Array(0);
-          }
-        };
-
         // Check for truncated data
         let isTruncated = false;
         let originalLength = 0;
@@ -1057,6 +1032,36 @@
       }
 
       // Convert string to Uint8Array
+      stringToUint8Array(str) {
+        const arr = new Uint8Array(str.length);
+        for (let i = 0; i < str.length; i++) {
+          arr[i] = str.charCodeAt(i);
+        }
+        return arr;
+      }
+
+      // Method to manually XOR two Uint8Arrays in-place (first array is modified)
+      xorUint8Arrays(target, source) {
+        const minLength = Math.min(target.length, source.length);
+        for (let i = 0; i < minLength; i++) {
+          target[i] ^= source[i];
+        }
+      }
+
+      // Add base64 decoder for XOR data
+      base64ToUint8Array(base64) {
+        try {
+          const binaryString = atob(base64);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          return bytes;
+        } catch (e) {
+          throw new Error(`Base64 decode failed: ${e.message}`);
+        }
+      }
+
       stringToUint8Array(str) {
         const arr = new Uint8Array(str.length);
         for (let i = 0; i < str.length; i++) {
@@ -2122,10 +2127,15 @@
       }
 
       checkCompatibility() {
-        // Check for camera support
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        // Check for camera support with fallbacks
+        const hasModernAPI = navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+        const hasLegacyAPI = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+        
+        if (!hasModernAPI && !hasLegacyAPI) {
           this.ui.showErrorMessage("Camera access is not supported in your browser. Please use a modern browser with camera support.");
           document.getElementById('startCameraBtn').disabled = true;
+        } else if (!hasModernAPI) {
+          this.ui.showErrorMessage("Using legacy camera API. Some features may not work optimally.");
         }
 
         // Check for HTML5QRCode library
