@@ -362,16 +362,31 @@
             
             <div class="control-group">
                 <div class="control-label">
-                    Max Combined Chunks <span class="value-display" id="maxDegreeValue">2</span>
-                    <span class="tooltip" data-tooltip="Maximum number of chunks to combine in a single QR code. Lower is safer for reliable scanning.">?</span>
+                    Systematic Chunks per QR <span class="value-display" id="systematicChunksValue">2</span>
+                    <span class="tooltip" data-tooltip="Number of chunks to combine in systematic QR codes (reliable phase). 1=one chunk per QR, 2=two chunks per QR.">?</span>
                 </div>
-                <input type="range" id="maxDegreeSlider" min="1" max="4" step="1" value="2">
+                <input type="range" id="systematicChunksSlider" min="1" max="4" step="1" value="2">
                 <div class="slider-labels">
-                    <span>Safer (1)</span>
-                    <span>Denser (4)</span>
+                    <span>Single (1)</span>
+                    <span>Quad (4)</span>
                 </div>
                 <div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
-                    Recommend 1-2 for highest reliability; 3-4 only for perfect conditions
+                    Systematic phase: Recommend 1-2 for highest reliability
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    Fountain Max Degree <span class="value-display" id="fountainDegreeValue">3</span>
+                    <span class="tooltip" data-tooltip="Maximum degree for fountain coding phase (redundancy). Higher values create more complex combinations but better error recovery.">?</span>
+                </div>
+                <input type="range" id="fountainDegreeSlider" min="2" max="20" step="1" value="3">
+                <div class="slider-labels">
+                    <span>Simple (2)</span>
+                    <span>Complex (20)</span>
+                </div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+                    Fountain phase: Higher degrees improve recovery but need more processing
                 </div>
             </div>
             
@@ -537,12 +552,14 @@
         const chunkSlider = document.getElementById('chunkSlider');
         const redundancySlider = document.getElementById('redundancySlider');
         const countdownSlider = document.getElementById('countdownSlider');
-        const maxDegreeSlider = document.getElementById('maxDegreeSlider');
+        const systematicChunksSlider = document.getElementById('systematicChunksSlider');
+        const fountainDegreeSlider = document.getElementById('fountainDegreeSlider');
         const speedValue = document.getElementById('speedValue');
         const sizeValue = document.getElementById('sizeValue');
         const chunkValue = document.getElementById('chunkValue');
         const redundancyValue = document.getElementById('redundancyValue');
-        const maxDegreeValue = document.getElementById('maxDegreeValue');
+        const systematicChunksValue = document.getElementById('systematicChunksValue');
+        const fountainDegreeValue = document.getElementById('fountainDegreeValue');
         const countdownValue = document.getElementById('countdownValue');
         const errorCorrectionSelect = document.getElementById('errorCorrectionSelect');
         const fullscreenCheckbox = document.getElementById('fullscreenCheckbox');
@@ -629,9 +646,14 @@
             countdownValue.textContent = countdownSeconds > 0 ? `${countdownSeconds}s` : 'None';
         });
         
-        maxDegreeSlider.addEventListener('input', () => {
-            const maxDegree = maxDegreeSlider.value;
-            maxDegreeValue.textContent = maxDegree;
+        systematicChunksSlider.addEventListener('input', () => {
+            const systematicChunks = systematicChunksSlider.value;
+            systematicChunksValue.textContent = systematicChunks;
+        });
+        
+        fountainDegreeSlider.addEventListener('input', () => {
+            const fountainDegree = fountainDegreeSlider.value;
+            fountainDegreeValue.textContent = fountainDegree;
         });
 
         // Show alignment guides
@@ -689,7 +711,8 @@
                     speedSlider.value = 12;
                     chunkSlider.value = 600;
                     redundancySlider.value = 50;
-                    maxDegreeSlider.value = 2;
+                    systematicChunksSlider.value = 2;
+                    fountainDegreeSlider.value = 3;
                     errorCorrectionSelect.value = 'M';
                     enableTransitionsCheckbox.checked = true;
                     break;
@@ -699,7 +722,8 @@
                     speedSlider.value = 6;
                     chunkSlider.value = 450;
                     redundancySlider.value = 100;
-                    maxDegreeSlider.value = 2;
+                    systematicChunksSlider.value = 2;
+                    fountainDegreeSlider.value = 3;
                     errorCorrectionSelect.value = 'H';
                     sizeSlider.value = 800;
                     qrSize = 800;
@@ -714,7 +738,8 @@
                     speedSlider.value = 8;
                     chunkSlider.value = 400;
                     redundancySlider.value = 100;
-                    maxDegreeSlider.value = 1;
+                    systematicChunksSlider.value = 1;
+                    fountainDegreeSlider.value = 4;
                     errorCorrectionSelect.value = 'H';
                     sizeSlider.value = 600;
                     qrSize = 600;
@@ -729,7 +754,8 @@
             speedValue.textContent = `${speedSlider.value} FPS`;
             chunkValue.textContent = `${chunkSlider.value} chars`;
             redundancyValue.textContent = `${redundancySlider.value}%`;
-            maxDegreeValue.textContent = maxDegreeSlider.value;
+            systematicChunksValue.textContent = systematicChunksSlider.value;
+            fountainDegreeValue.textContent = fountainDegreeSlider.value;
         }
 
         // File batch management
@@ -874,12 +900,15 @@
         // Process batch of files
         async function processBatchFiles(selectedFiles, autoStart = false) {
             currentProcessingIndex = 0;
+            console.log(`📁 Starting batch processing of ${selectedFiles.length} files...`);
             
             for (let i = 0; i < selectedFiles.length; i++) {
                 const fileItem = selectedFiles[i];
                 currentProcessingIndex = i;
                 
                 try {
+                    console.log(`📄 Processing file ${i + 1}/${selectedFiles.length}: ${fileItem.name}`);
+                    
                     // Update status to in progress
                     updateFileStatus(fileItem.id, 'inprogress');
                     
@@ -891,12 +920,52 @@
                     await generateQRCodesForFile(fileItem.file);
                     
                     if (autoStart) {
-                        // Display QR codes
+                        console.log(`🎬 Starting display for ${fileItem.name}...`);
+                        
+                        // Update file info to show current file in batch
+                        const fileInfoElement = document.getElementById('fileInfo');
+                        if (fileInfoElement) {
+                            const batchInfo = document.createElement('div');
+                            batchInfo.id = 'batchInfo';
+                            batchInfo.style.cssText = 'background: #dbeafe; padding: 10px; margin-bottom: 10px; border-radius: 4px; font-weight: bold;';
+                            batchInfo.innerHTML = `📁 Batch Progress: File ${i + 1} of ${selectedFiles.length}`;
+                            
+                            // Remove existing batch info
+                            const existingBatchInfo = document.getElementById('batchInfo');
+                            if (existingBatchInfo) {
+                                existingBatchInfo.remove();
+                            }
+                            
+                            fileInfoElement.insertBefore(batchInfo, fileInfoElement.firstChild);
+                        }
+                        
+                        // Display QR codes and wait for completion
                         if (fullscreenCheckbox.checked) {
                             enterFullscreenMode();
-                            await startPlayingAndWait();
+                            
+                            // Check if countdown is enabled
+                            if (countdownSeconds > 0) {
+                                await startCountdownAndWait();
+                            } else {
+                                await startPlayingAndWait();
+                            }
+                            
+                            exitFullscreenMode(); // Exit fullscreen between files
                         } else {
-                            await startPlayingAndWait();
+                            // Check if countdown is enabled for regular mode
+                            if (countdownSeconds > 0) {
+                                await startCountdownAndWait();
+                            } else {
+                                await startPlayingAndWait();
+                            }
+                        }
+                        
+                        console.log(`✅ Completed transfer for ${fileItem.name}`);
+                        
+                        // Short pause between files
+                        if (i < selectedFiles.length - 1) {
+                            console.log(`⏸️ Pausing 2 seconds before next file...`);
+                            await new Promise(resolve => setTimeout(resolve, 2000));
                         }
                     }
                     
@@ -907,48 +976,141 @@
                     updateFileLabel();
                     
                 } catch (error) {
-                    console.error(`Error processing file ${fileItem.name}:`, error);
+                    console.error(`❌ Error processing file ${fileItem.name}:`, error);
                     updateFileStatus(fileItem.id, 'error');
+                    
+                    // Ask user if they want to continue with remaining files
+                    if (i < selectedFiles.length - 1) {
+                        const continueProcessing = confirm(`Error processing ${fileItem.name}. Continue with remaining files?`);
+                        if (!continueProcessing) {
+                            break;
+                        }
+                    }
                 }
+            }
+            
+            console.log(`📁 Batch processing complete!`);
+            const successCount = selectedFiles.filter(f => f.status === 'sent').length;
+            const errorCount = selectedFiles.filter(f => f.status === 'error').length;
+            console.log(`✅ Successfully processed: ${successCount}/${selectedFiles.length} files`);
+            if (errorCount > 0) {
+                console.log(`❌ Failed: ${errorCount} files (you can reselect and retry these)`);
             }
         }
 
         // Generate QR codes for a specific file
         async function generateQRCodesForFile(file) {
             return new Promise((resolve, reject) => {
-                const fileReader = new FileReader();
-                fileReader.onload = async () => {
-                    try {
-                        // Update file name display
-                        fileName.textContent = file.name;
-                        
-                        // Use existing generateQRCodes logic
-                        const arrayBuffer = fileReader.result;
-                        const encoder = new QRFileEncoder(
-                            new Uint8Array(arrayBuffer),
-                            file.name,
-                            file.type,
-                            {
-                                chunkSize: parseInt(chunkSlider.value),
-                                redundancyPercent: parseInt(redundancySlider.value),
-                                fps: parseInt(speedSlider.value),
-                                maxDegree: parseInt(maxDegreeSlider.value),
-                                qrSize: parseInt(sizeSlider.value)
+                try {
+                    console.log(`🔧 Starting QR generation for ${file.name} (${file.size} bytes)`);
+                    
+                    const fileReader = new FileReader();
+                    fileReader.onload = async () => {
+                        try {
+                            console.log(`📖 File read complete, processing...`);
+                            
+                            // Update file name display
+                            fileName.textContent = file.name;
+                            
+                            // Use existing generateQRCodes logic - same as the main function
+                            const arrayBuffer = fileReader.result;
+                            const fileData = new Uint8Array(arrayBuffer);
+                            
+                            console.log(`📦 File data loaded: ${fileData.length} bytes`);
+                            
+                            // Apply file data to globals for encoding
+                            fileNameText = file.name;
+                            fileSizeBytes = file.size;
+                            
+                            // Split file into chunks
+                            const chunkSize = parseInt(chunkSlider.value);
+                            const chunks = [];
+                            
+                            console.log(`✂️ Splitting into ${chunkSize} byte chunks...`);
+                            
+                            for (let offset = 0; offset < fileData.length; offset += chunkSize) {
+                                const chunk = fileData.slice(offset, offset + chunkSize);
+                                chunks.push(chunk);
                             }
-                        );
-                        
-                        allPackets = encoder.encode();
-                        totalPackets = allPackets.length;
-                        updatePacketInfo();
-                        showMetadata();
-                        
-                        resolve();
-                    } catch (error) {
+                            
+                            console.log(`📊 Created ${chunks.length} chunks`);
+                            
+                            // Create LT encoder with systematic extensions
+                            console.log(`🏗️ Creating SystematicLTEncoder...`);
+                            const ltEncoder = new SystematicLTEncoder(chunks);
+                            ltEncoder.systematicChunksPerQR = parseInt(systematicChunksSlider.value);
+                            ltEncoder.fountainMaxDegree = parseInt(fountainDegreeSlider.value);
+                            
+                            // Set current file info for metadata generation
+                            ltEncoder.currentFileName = file.name;
+                            ltEncoder.currentFileSize = file.size;
+                            ltEncoder.currentFileType = file.type;
+                            
+                            console.log(`⚙️ Encoder configured: systematic=${ltEncoder.systematicChunksPerQR}, fountain=${ltEncoder.fountainMaxDegree}`);
+                            
+                            // Generate packets
+                            console.log(`📤 Generating metadata packet...`);
+                            const fountainPackets = [ltEncoder.generateMetadataPacket()];
+                            
+                            console.log(`🔢 Calculating total packets needed...`);
+                            const totalPackets = ltEncoder.calculateTotalPackets();
+                            console.log(`📊 Will generate ${totalPackets} total packets`);
+                            
+                            for (let i = 1; i < totalPackets; i++) {
+                                const packet = ltEncoder.generatePacket();
+                                fountainPackets.push(packet);
+                                
+                                // Progress logging every 50 packets
+                                if (i % 50 === 0) {
+                                    console.log(`📤 Generated ${i}/${totalPackets} packets...`);
+                                }
+                            }
+                            
+                            console.log(`✅ Generated all ${fountainPackets.length} packets`);
+                            
+                            // Set global variables for display
+                            allPackets = fountainPackets;
+                            totalPackets = allPackets.length;
+                            
+                            console.log(`📊 Calling updatePacketInfo()...`);
+                            try {
+                                updatePacketInfo();
+                                console.log(`✅ updatePacketInfo() completed`);
+                            } catch (err) {
+                                console.error(`❌ Error in updatePacketInfo():`, err);
+                                throw err;
+                            }
+                            
+                            console.log(`📋 Calling showMetadata()...`);
+                            try {
+                                showMetadata();
+                                console.log(`✅ showMetadata() completed`);
+                            } catch (err) {
+                                console.error(`❌ Error in showMetadata():`, err);
+                                throw err;
+                            }
+                            
+                            console.log(`🎯 QR generation complete for ${file.name}`);
+                            resolve();
+                        } catch (error) {
+                            console.error(`❌ Error in file processing:`, error);
+                            console.error(`❌ Error details:`, error.message);
+                            console.error(`❌ Error stack:`, error.stack);
+                            reject(error);
+                        }
+                    };
+                    
+                    fileReader.onerror = (error) => {
+                        console.error(`❌ File reader error:`, error);
                         reject(error);
-                    }
-                };
-                fileReader.onerror = reject;
-                fileReader.readAsArrayBuffer(file);
+                    };
+                    
+                    console.log(`📖 Reading file as ArrayBuffer...`);
+                    fileReader.readAsArrayBuffer(file);
+                } catch (error) {
+                    console.error(`❌ Error setting up file reader:`, error);
+                    reject(error);
+                }
             });
         }
 
@@ -957,14 +1119,49 @@
             return new Promise((resolve) => {
                 startPlaying();
                 
-                // Wait for display to complete
+                // Wait for display to complete (now using setTimeout for display)
                 const checkCompletion = setInterval(() => {
-                    if (!displayInterval) {
+                    if (!displayInterval && !isPlaying) {
                         clearInterval(checkCompletion);
                         resolve();
                     }
                 }, 1000);
             });
+        }
+
+        // Start countdown and wait for completion
+        async function startCountdownAndWait() {
+            return new Promise((resolve) => {
+                // Start countdown first
+                startCountdown();
+                
+                // Wait for countdown + display to complete
+                const checkCompletion = setInterval(() => {
+                    if (!displayInterval && !countdownInterval && !isPlaying) {
+                        clearInterval(checkCompletion);
+                        resolve();
+                    }
+                }, 1000);
+            });
+        }
+        
+        // Exit fullscreen mode
+        function exitFullscreenMode() {
+            const fullscreenDisplay = document.getElementById('fullscreenDisplay');
+            if (fullscreenDisplay) {
+                fullscreenDisplay.style.display = 'none';
+            }
+            
+            // Exit browser fullscreen if active
+            if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement) {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.mozCancelFullScreen) {
+                    document.mozCancelFullScreen();
+                }
+            }
         }
         
         // Apply optimal settings
@@ -993,22 +1190,18 @@
         // Generate & Start button (combined functionality)
         generateAndStartBtn.addEventListener('click', async () => {
             const selectedFiles = fileList.filter(f => f.selected);
-            if (selectedFiles.length === 0) return;
+            if (selectedFiles.length === 0) {
+                alert('Please select at least one file to process');
+                return;
+            }
             
             generateAndStartBtn.disabled = true;
-            generateAndStartBtn.textContent = 'Generating...';
+            generateAndStartBtn.textContent = 'Processing Batch...';
             
             try {
-                await generateQRCodes();
-                
-                if (fullscreenCheckbox.checked) {
-                    enterFullscreenMode();
-                    startPlaying();
-                } else {
-                    startPlaying();
-                }
+                await processBatchFiles(selectedFiles, true);
             } catch (error) {
-                alert('Error: ' + error.message);
+                alert('Error during batch processing: ' + error.message);
             } finally {
                 generateAndStartBtn.textContent = 'Generate & Start Display';
                 generateAndStartBtn.disabled = false;
@@ -1017,13 +1210,17 @@
 
         // Generate QR codes
         generateBtn.addEventListener('click', async () => {
-            if (!fileInput.files.length) return;
+            const selectedFiles = fileList.filter(f => f.selected);
+            if (selectedFiles.length === 0) {
+                alert('Please select at least one file to generate QR codes');
+                return;
+            }
             
             generateBtn.disabled = true;
-            generateBtn.textContent = 'Generating...';
+            generateBtn.textContent = 'Generating Batch...';
             
             try {
-                await generateQRCodes();
+                await processBatchFiles(selectedFiles, false);
                 startBtn.disabled = false;
                 fullscreenBtn.disabled = false;
             } catch (error) {
@@ -1064,8 +1261,14 @@
             // Create LT encoder with systematic extensions
             const ltEncoder = new SystematicLTEncoder(chunks);
             
-            // Force max degree to be the one from the slider
-            ltEncoder.maxSafeDegree = parseInt(maxDegreeSlider.value);
+            // Set systematic and fountain parameters separately
+            ltEncoder.systematicChunksPerQR = parseInt(systematicChunksSlider.value);
+            ltEncoder.fountainMaxDegree = parseInt(fountainDegreeSlider.value);
+            
+            // Set current file info for metadata generation
+            ltEncoder.currentFileName = fileNameText;
+            ltEncoder.currentFileSize = fileSizeBytes;
+            ltEncoder.currentFileType = fileInput.files[0] ? fileInput.files[0].type : '';
             
             // Generate metadata packet first
             fountainPackets = [ltEncoder.generateMetadataPacket()];
@@ -1254,29 +1457,35 @@
             transmissionTimer = setInterval(updateTransmissionStats, 1000);
             
             // Display QR codes at specified frame rate
-            const interval = 1000 / parseInt(speedSlider.value);
+            const baseInterval = 1000 / parseInt(speedSlider.value);
+            let nextFrameDelay = baseInterval;
             
             // Simplified transition implementation
-            displayInterval = setInterval(async () => {
+            const scheduleNextFrame = async () => {
+                // Generate QR code for current frame
+                await generateQRCodeForFrame(currentFrame);
+                
+                // Check if current frame is metadata (first frame or has metaString)
+                const currentPacket = fountainPackets[currentFrame];
+                const isMetadata = currentFrame === 0 || (currentPacket && currentPacket.metaString);
+                
+                // Set delay - metadata packets get 3x longer display time
+                if (isMetadata) {
+                    nextFrameDelay = Math.max(baseInterval * 3, 3000); // At least 3 seconds for metadata
+                    console.log(`📋 Metadata QR displayed for ${nextFrameDelay}ms (3x longer)`);
+                } else {
+                    nextFrameDelay = baseInterval;
+                }
+                
                 // Update frame index
                 currentFrame = (currentFrame + 1) % totalFrames;
                 
-                // Generate new QR code
-                await generateQRCodeForFrame(currentFrame);
-                updateProgress();
-                
-                // Apply transition class to all generated QR images
-                if (enableTransitionsCheckbox.checked) {
-                    const regularQRImage = qrDisplay.querySelector('img');
-                    if (regularQRImage) {
-                        regularQRImage.classList.add('qr-image');
-                    }
-                    
-                    if (isFullscreen && fullscreenQR) {
-                        fullscreenQR.classList.add('qr-image');
-                    }
-                }
-            }, interval);
+                // Schedule next frame
+                displayInterval = setTimeout(scheduleNextFrame, nextFrameDelay);
+            };
+            
+            // Start the display sequence
+            scheduleNextFrame();
         }
 
         // Stop display
@@ -1295,7 +1504,7 @@
             }
             
             if (displayInterval) {
-                clearInterval(displayInterval);
+                clearTimeout(displayInterval); // Changed from clearInterval to clearTimeout
                 displayInterval = null;
             }
             
@@ -1622,7 +1831,8 @@
                 // New properties for systematic LT coding
                 this.systematicPhase = true;  // Start in systematic phase
                 this.currentSystematicIndex = 0;  // Track which systematic chunk to send next
-                this.maxSafeDegree = this.calculateMaxSafeDegree();
+                this.systematicChunksPerQR = 2;  // Default systematic chunks per QR (will be overridden)
+                this.fountainMaxDegree = 3;  // Default fountain max degree (will be overridden)
                 
                 // LT code parameters
                 this.c = 0.03;  // Robust Soliton parameter c
@@ -1642,39 +1852,8 @@
             }
             
             // Calculate maximum safe degree based on QR code capacity
-            calculateMaxSafeDegree() {
-                // Use user-configured max degree if available
-                if (maxDegreeSlider) {
-                    const userMaxDegree = parseInt(maxDegreeSlider.value);
-                    if (!isNaN(userMaxDegree) && userMaxDegree > 0) {
-                        return userMaxDegree;
-                    }
-                }
-                
-                // Packet overhead estimate
-                const packetOverhead = 150;
-                
-                // Delimiter and index overhead per chunk
-                const delimiterOverhead = 5;
-                
-                // Calculate safe QR code size (90% of max for safety margin)
-                const safeQrSize = Math.floor(MAX_QR_CONTENT_SIZE * 0.9);
-                
-                // Calculate max characters available for data
-                const charsAvailableForData = safeQrSize - packetOverhead;
-                
-                // Calculate max number of chunks we can safely combine
-                const maxDegree = Math.floor(charsAvailableForData / (this.avgChunkSize + delimiterOverhead));
-                
-                // For LT codes, we might want to limit the maximum degree further
-                const ltRecommendedMax = Math.min(
-                    Math.max(8, Math.ceil(Math.sqrt(this.numChunks))),
-                    this.numChunks
-                );
-                
-                // Return the smallest of the calculated value, LT recommended max, and general cap
-                return Math.max(1, Math.min(maxDegree, ltRecommendedMax, 20));
-            }
+            // This method is no longer needed - using separate systematic and fountain parameters
+            // calculateMaxSafeDegree() removed - replaced with systematicChunksPerQR and fountainMaxDegree
             
             // Calculate the total number of packets needed
             calculateTotalPackets() {
@@ -1682,10 +1861,10 @@
                 // 1. We need packets for the systematic phase
                 // If we're using dual chunks, we need fewer systematic packets
                 let systematicPackets;
-                if (this.maxSafeDegree >= 2) {
-                    // When using dual chunks during systematic phase, we need approximately half
-                    // plus any leftover for odd number of chunks
-                    systematicPackets = Math.ceil(this.numChunks / 2);
+                if (this.systematicChunksPerQR >= 2) {
+                    // When using multiple chunks during systematic phase, we need approximately numChunks/systematicChunksPerQR
+                    // plus any leftover for remainder chunks
+                    systematicPackets = Math.ceil(this.numChunks / this.systematicChunksPerQR);
                 } else {
                     // Standard case: one packet per chunk
                     systematicPackets = this.numChunks;
@@ -1699,8 +1878,8 @@
                 // We need more redundant packets if we have dual-chunk systematic packets
                 const additionalPackets = Math.ceil(this.numChunks * redundancyFactor);
                 
-                // Add extra safety packets for higher redundancy when using dual-chunk
-                const extraPackets = this.maxSafeDegree >= 2 ? Math.ceil(this.numChunks * 0.1) : 0;
+                // Add extra safety packets for higher redundancy when using multi-chunk
+                const extraPackets = this.systematicChunksPerQR >= 2 ? Math.ceil(this.numChunks * 0.1) : 0;
                 
                 // Total packets = systematic + additional + extra
                 return systematicPackets + additionalPackets + extraPackets;
@@ -1714,8 +1893,8 @@
                     const maxQRSize = document.getElementById('highDensityCheckbox').checked ? 
                         HIGH_DENSITY_QR_CONTENT_SIZE : DEFAULT_QR_CONTENT_SIZE;
                     
-                    // Try to send two chunks if possible, one from the beginning and one from the end
-                    if (this.maxSafeDegree >= 2 && 
+                    // Try to send multiple chunks if configured
+                    if (this.systematicChunksPerQR >= 2 && 
                         this.currentSystematicIndex < this.numChunks && 
                         this.numChunks - 1 - this.currentSystematicIndex >= 0) {
                         
@@ -1975,8 +2154,8 @@
                 // Calculate R parameter (from LT codes paper)
                 const R = c * Math.log(this.numChunks / delta) * Math.sqrt(this.numChunks);
                 
-                // Cap max degree by the smaller of maxSafeDegree or numChunks
-                const maxDegree = Math.min(this.maxSafeDegree, this.numChunks);
+                // Cap max degree by the smaller of fountainMaxDegree or numChunks
+                const maxDegree = Math.min(this.fountainMaxDegree, this.numChunks);
                 
                 // Generate a value in [0,1) to use for degree selection
                 const r = rng();
@@ -2121,21 +2300,23 @@
             
             // Generate metadata packet with LT code specific information
             generateMetadataPacket() {
-                // Basic file metadata
-                const fileNameText = document.getElementById('fileName').textContent;
-                const fileSizeBytes = fileInput.files[0].size; // Get actual byte size, not formatted text
-                const fileType = fileInput.files[0].type;
+                // Basic file metadata - use current processing file, not UI elements
+                const fileNameText = this.currentFileName || document.getElementById('fileName').textContent;
+                const fileSizeBytes = this.currentFileSize || (fileInput.files[0] ? fileInput.files[0].size : 0);
+                const fileType = this.currentFileType || (fileInput.files[0] ? fileInput.files[0].type : '');
                 
                 // Get encoding parameters
                 const fps = parseInt(document.getElementById('speedSlider').value);
-                const maxDegree = parseInt(document.getElementById('maxDegreeSlider').value);
+                const systematicChunks = parseInt(document.getElementById('systematicChunksSlider').value);
+                const fountainMaxDegree = parseInt(document.getElementById('fountainDegreeSlider').value);
                 const chunkSize = parseInt(document.getElementById('chunkSlider').value);
                 const redundancy = parseInt(document.getElementById('redundancySlider').value);
                 const highDensityMode = document.getElementById('highDensityCheckbox').checked ? 1 : 0;
                 const ecLevel = document.getElementById('errorCorrectionSelect').value;
                 
                 // Create file checksum for data integrity verification
-                const fileChecksum = this.calculateFileChecksum(fileContent);
+                // Use current file data chunks to calculate checksum
+                const fileChecksum = this.calculateFileChecksumFromChunks(this.originalChunks);
                 
                 // Create metadata checksum  
                 const checksumData = `${fileNameText}:${fileSizeBytes}:${this.numChunks}`;
@@ -2145,8 +2326,15 @@
                 const ltParams = `${this.c}:${this.delta}`;
                 
                 // Create compact metadata string  
-                // Format: M:<version>:<filename>:<filetype>:<filesize>:<chunks>:<packets>:<maxdegree>:<density>:<fps>:<chunksize>:<redund>:<ecl>:<metachecksum>:<filechecksum>:<ltparams>
-                const metadataString = `M:3.0:${encodeURIComponent(fileNameText)}:${encodeURIComponent(fileType)}:${fileSizeBytes}:${this.numChunks}:${this.calculateTotalPackets()}:${maxDegree}:${highDensityMode}:${fps}:${chunkSize}:${redundancy}:${ecLevel}:${metaChecksum}:${fileChecksum}:${ltParams}`;
+                // Format: M:<version>:<filename>:<filetype>:<filesize>:<chunks>:<packets>:<systematicchunks>:<density>:<fps>:<chunksize>:<redund>:<ecl>:<metachecksum>:<filechecksum>:<ltparams>:<fountainmaxdegree>
+                const metadataString = `M:3.0:${encodeURIComponent(fileNameText)}:${encodeURIComponent(fileType)}:${fileSizeBytes}:${this.numChunks}:${this.calculateTotalPackets()}:${systematicChunks}:${highDensityMode}:${fps}:${chunkSize}:${redundancy}:${ecLevel}:${metaChecksum}:${fileChecksum}:${ltParams}:${fountainMaxDegree}`;
+                
+                // Debug the metadata being generated
+                console.log(`📋 METADATA DEBUG:`);
+                console.log(`  fileName: "${fileNameText}"`);
+                console.log(`  fileType: "${fileType}"`);
+                console.log(`  fileSize: ${fileSizeBytes}`);
+                console.log(`  metadata string: ${metadataString.substring(0, 100)}...`);
                 
                 // Create metadata packet
                 const packet = {
@@ -2163,12 +2351,35 @@
             
             // Calculate file checksum for integrity verification
             calculateFileChecksum(binaryData) {
+                if (!binaryData) {
+                    console.warn('calculateFileChecksum: binaryData is null, returning default');
+                    return 'nullchk';
+                }
+                
                 let hash = 0;
                 for (let i = 0; i < binaryData.length; i++) {
                     hash = ((hash << 5) - hash) + binaryData[i];
                     hash = hash & hash; // Convert to 32bit integer
                 }
                 return Math.abs(hash).toString(36).substring(0, 8); // 8 chars for file integrity
+            }
+            
+            // Calculate file checksum from chunks
+            calculateFileChecksumFromChunks(chunks) {
+                if (!chunks || chunks.length === 0) {
+                    console.warn('calculateFileChecksumFromChunks: chunks is null/empty, returning default');
+                    return 'nochunk';
+                }
+                
+                let hash = 0;
+                // Calculate hash across all chunks
+                for (const chunk of chunks) {
+                    for (let i = 0; i < chunk.length; i++) {
+                        hash = ((hash << 5) - hash) + chunk[i];
+                        hash = hash & hash; // Convert to 32bit integer
+                    }
+                }
+                return Math.abs(hash).toString(36).substring(0, 8);
             }
 
             // Simple checksum for data verification

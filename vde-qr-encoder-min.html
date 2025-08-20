@@ -220,8 +220,11 @@ Error Correction Level
 <span class="tooltip" data-tooltip="QR code error correction level. Higher levels are more reliable but create larger, more complex QR codes.">?</span></div><div style="display: flex; justify-content: space-between; margin-top: 5px;"><select id="errorCorrectionSelect" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #d1d5db;"><option value="H">High (30% recovery)</option><option value="M">Medium (15% recovery)</option><option value="L">Low (7% recovery)</option></select></div><div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
 Higher correction = more reliable but larger QR codes
 </div></div><div class="control-group"><div class="control-label">
-Max Combined Chunks <span class="value-display" id="maxDegreeValue">2</span><span class="tooltip" data-tooltip="Maximum number of chunks to combine in a single QR code. Lower is safer for reliable scanning.">?</span></div><input type="range" id="maxDegreeSlider" min="1" max="4" step="1" value="2"><div class="slider-labels"><span>Safer (1)</span><span>Denser (4)</span></div><div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
-Recommend 1-2 for highest reliability; 3-4 only for perfect conditions
+Systematic Chunks per QR <span class="value-display" id="systematicChunksValue">2</span><span class="tooltip" data-tooltip="Number of chunks to combine in systematic QR codes (reliable phase). 1=one chunk per QR, 2=two chunks per QR.">?</span></div><input type="range" id="systematicChunksSlider" min="1" max="4" step="1" value="2"><div class="slider-labels"><span>Single (1)</span><span>Quad (4)</span></div><div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+Systematic phase: Recommend 1-2 for highest reliability
+</div></div><div class="control-group"><div class="control-label">
+Fountain Max Degree <span class="value-display" id="fountainDegreeValue">3</span><span class="tooltip" data-tooltip="Maximum degree for fountain coding phase (redundancy). Higher values create more complex combinations but better error recovery.">?</span></div><input type="range" id="fountainDegreeSlider" min="2" max="20" step="1" value="3"><div class="slider-labels"><span>Simple (2)</span><span>Complex (20)</span></div><div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+Fountain phase: Higher degrees improve recovery but need more processing
 </div></div><div class="control-group"><div class="control-label">
 Countdown Before Start <span class="value-display" id="countdownValue">10s</span><span class="tooltip" data-tooltip="Time to prepare before QR codes start displaying.">?</span></div><input type="range" id="countdownSlider" min="0" max="30" value="10"><div class="slider-labels"><span>None</span><span>30s</span></div></div><div class="control-group"><label class="control-switch"><input type="checkbox" id="fullscreenCheckbox" checked><span class="switch-label">Start in Fullscreen Mode (Recommended)</span></label></div><div class="control-group"><label class="control-switch"><input type="checkbox" id="showGuidesCheckbox"><span class="switch-label">Show Scanner Alignment Guides</span></label></div><div class="control-group"><label class="control-switch"><input type="checkbox" id="enableTransitionsCheckbox" checked><span class="switch-label">Enable Smooth Transitions</span><span class="tooltip" data-tooltip="Enables subtle transitions between QR codes to improve scanning reliability.">?</span></label><div style="font-size: 12px; color: #6b7280; margin-top: 5px; margin-left: 24px;">
 Always on for best results; disable only for older devices
@@ -238,12 +241,14 @@ const sizeSlider = document.getElementById('sizeSlider');
 const chunkSlider = document.getElementById('chunkSlider');
 const redundancySlider = document.getElementById('redundancySlider');
 const countdownSlider = document.getElementById('countdownSlider');
-const maxDegreeSlider = document.getElementById('maxDegreeSlider');
+const systematicChunksSlider = document.getElementById('systematicChunksSlider');
+const fountainDegreeSlider = document.getElementById('fountainDegreeSlider');
 const speedValue = document.getElementById('speedValue');
 const sizeValue = document.getElementById('sizeValue');
 const chunkValue = document.getElementById('chunkValue');
 const redundancyValue = document.getElementById('redundancyValue');
-const maxDegreeValue = document.getElementById('maxDegreeValue');
+const systematicChunksValue = document.getElementById('systematicChunksValue');
+const fountainDegreeValue = document.getElementById('fountainDegreeValue');
 const countdownValue = document.getElementById('countdownValue');
 const errorCorrectionSelect = document.getElementById('errorCorrectionSelect');
 const fullscreenCheckbox = document.getElementById('fullscreenCheckbox');
@@ -321,9 +326,13 @@ countdownSlider.addEventListener('input', () => {
 countdownSeconds = parseInt(countdownSlider.value);
 countdownValue.textContent = countdownSeconds > 0 ? `${countdownSeconds}s` : 'None';
 });
-maxDegreeSlider.addEventListener('input', () => {
-const maxDegree = maxDegreeSlider.value;
-maxDegreeValue.textContent = maxDegree;
+systematicChunksSlider.addEventListener('input', () => {
+const systematicChunks = systematicChunksSlider.value;
+systematicChunksValue.textContent = systematicChunks;
+});
+fountainDegreeSlider.addEventListener('input', () => {
+const fountainDegree = fountainDegreeSlider.value;
+fountainDegreeValue.textContent = fountainDegree;
 });
 showGuidesCheckbox.addEventListener('change', () => {
 if (showGuidesCheckbox.checked) {
@@ -367,7 +376,8 @@ fastPreset.classList.add('active');
 speedSlider.value = 12;
 chunkSlider.value = 600;
 redundancySlider.value = 50;
-maxDegreeSlider.value = 2;
+systematicChunksSlider.value = 2;
+fountainDegreeSlider.value = 3;
 errorCorrectionSelect.value = 'M';
 enableTransitionsCheckbox.checked = true;
 break;
@@ -376,7 +386,8 @@ reliablePreset.classList.add('active');
 speedSlider.value = 6;
 chunkSlider.value = 450;
 redundancySlider.value = 100;
-maxDegreeSlider.value = 2;
+systematicChunksSlider.value = 2;
+fountainDegreeSlider.value = 3;
 errorCorrectionSelect.value = 'H';
 sizeSlider.value = 800;
 qrSize = 800;
@@ -390,7 +401,8 @@ mobilePreset.classList.add('active');
 speedSlider.value = 8;
 chunkSlider.value = 400;
 redundancySlider.value = 100;
-maxDegreeSlider.value = 1;
+systematicChunksSlider.value = 1;
+fountainDegreeSlider.value = 4;
 errorCorrectionSelect.value = 'H';
 sizeSlider.value = 600;
 qrSize = 600;
@@ -403,7 +415,8 @@ break;
 speedValue.textContent = `${speedSlider.value} FPS`;
 chunkValue.textContent = `${chunkSlider.value} chars`;
 redundancyValue.textContent = `${redundancySlider.value}%`;
-maxDegreeValue.textContent = maxDegreeSlider.value;
+systematicChunksValue.textContent = systematicChunksSlider.value;
+fountainDegreeValue.textContent = fountainDegreeSlider.value;
 }
 let fileList = [];
 let currentProcessingIndex = 0;
@@ -508,20 +521,49 @@ updateFileLabel();
 });
 async function processBatchFiles(selectedFiles, autoStart = false) {
 currentProcessingIndex = 0;
+console.log(`📁 Starting batch processing of ${selectedFiles.length} files...`);
 for (let i = 0; i < selectedFiles.length; i++) {
 const fileItem = selectedFiles[i];
 currentProcessingIndex = i;
 try {
+console.log(`📄 Processing file ${i + 1}/${selectedFiles.length}: ${fileItem.name}`);
 updateFileStatus(fileItem.id, 'inprogress');
 fileNameText = fileItem.name;
 fileSizeBytes = fileItem.size;
 await generateQRCodesForFile(fileItem.file);
 if (autoStart) {
+console.log(`🎬 Starting display for ${fileItem.name}...`);
+const fileInfoElement = document.getElementById('fileInfo');
+if (fileInfoElement) {
+const batchInfo = document.createElement('div');
+batchInfo.id = 'batchInfo';
+batchInfo.style.cssText = 'background: #dbeafe; padding: 10px; margin-bottom: 10px; border-radius: 4px; font-weight: bold;';
+batchInfo.innerHTML = `📁 Batch Progress: File ${i + 1} of ${selectedFiles.length}`;
+const existingBatchInfo = document.getElementById('batchInfo');
+if (existingBatchInfo) {
+existingBatchInfo.remove();
+}
+fileInfoElement.insertBefore(batchInfo, fileInfoElement.firstChild);
+}
 if (fullscreenCheckbox.checked) {
 enterFullscreenMode();
-await startPlayingAndWait();
+if (countdownSeconds > 0) {
+await startCountdownAndWait();
 } else {
 await startPlayingAndWait();
+}
+exitFullscreenMode();
+} else {
+if (countdownSeconds > 0) {
+await startCountdownAndWait();
+} else {
+await startPlayingAndWait();
+}
+}
+console.log(`✅ Completed transfer for ${fileItem.name}`);
+if (i < selectedFiles.length - 1) {
+console.log(`⏸️ Pausing 2 seconds before next file...`);
+await new Promise(resolve => setTimeout(resolve, 2000));
 }
 }
 updateFileStatus(fileItem.id, 'sent');
@@ -529,53 +571,142 @@ fileItem.selected = false;
 updateFileListDisplay();
 updateFileLabel();
 } catch (error) {
-console.error(`Error processing file ${fileItem.name}:`, error);
+console.error(`❌ Error processing file ${fileItem.name}:`, error);
 updateFileStatus(fileItem.id, 'error');
+if (i < selectedFiles.length - 1) {
+const continueProcessing = confirm(`Error processing ${fileItem.name}. Continue with remaining files?`);
+if (!continueProcessing) {
+break;
 }
+}
+}
+}
+console.log(`📁 Batch processing complete!`);
+const successCount = selectedFiles.filter(f => f.status === 'sent').length;
+const errorCount = selectedFiles.filter(f => f.status === 'error').length;
+console.log(`✅ Successfully processed: ${successCount}/${selectedFiles.length} files`);
+if (errorCount > 0) {
+console.log(`❌ Failed: ${errorCount} files (you can reselect and retry these)`);
 }
 }
 async function generateQRCodesForFile(file) {
 return new Promise((resolve, reject) => {
+try {
+console.log(`🔧 Starting QR generation for ${file.name} (${file.size} bytes)`);
 const fileReader = new FileReader();
 fileReader.onload = async () => {
 try {
+console.log(`📖 File read complete, processing...`);
 fileName.textContent = file.name;
 const arrayBuffer = fileReader.result;
-const encoder = new QRFileEncoder(
-new Uint8Array(arrayBuffer),
-file.name,
-file.type,
-{
-chunkSize: parseInt(chunkSlider.value),
-redundancyPercent: parseInt(redundancySlider.value),
-fps: parseInt(speedSlider.value),
-maxDegree: parseInt(maxDegreeSlider.value),
-qrSize: parseInt(sizeSlider.value)
+const fileData = new Uint8Array(arrayBuffer);
+console.log(`📦 File data loaded: ${fileData.length} bytes`);
+fileNameText = file.name;
+fileSizeBytes = file.size;
+const chunkSize = parseInt(chunkSlider.value);
+const chunks = [];
+console.log(`✂️ Splitting into ${chunkSize} byte chunks...`);
+for (let offset = 0; offset < fileData.length; offset += chunkSize) {
+const chunk = fileData.slice(offset, offset + chunkSize);
+chunks.push(chunk);
 }
-);
-allPackets = encoder.encode();
+console.log(`📊 Created ${chunks.length} chunks`);
+console.log(`🏗️ Creating SystematicLTEncoder...`);
+const ltEncoder = new SystematicLTEncoder(chunks);
+ltEncoder.systematicChunksPerQR = parseInt(systematicChunksSlider.value);
+ltEncoder.fountainMaxDegree = parseInt(fountainDegreeSlider.value);
+ltEncoder.currentFileName = file.name;
+ltEncoder.currentFileSize = file.size;
+ltEncoder.currentFileType = file.type;
+console.log(`⚙️ Encoder configured: systematic=${ltEncoder.systematicChunksPerQR}, fountain=${ltEncoder.fountainMaxDegree}`);
+console.log(`📤 Generating metadata packet...`);
+const fountainPackets = [ltEncoder.generateMetadataPacket()];
+console.log(`🔢 Calculating total packets needed...`);
+const totalPackets = ltEncoder.calculateTotalPackets();
+console.log(`📊 Will generate ${totalPackets} total packets`);
+for (let i = 1; i < totalPackets; i++) {
+const packet = ltEncoder.generatePacket();
+fountainPackets.push(packet);
+if (i % 50 === 0) {
+console.log(`📤 Generated ${i}/${totalPackets} packets...`);
+}
+}
+console.log(`✅ Generated all ${fountainPackets.length} packets`);
+allPackets = fountainPackets;
 totalPackets = allPackets.length;
+console.log(`📊 Calling updatePacketInfo()...`);
+try {
 updatePacketInfo();
+console.log(`✅ updatePacketInfo() completed`);
+} catch (err) {
+console.error(`❌ Error in updatePacketInfo():`, err);
+throw err;
+}
+console.log(`📋 Calling showMetadata()...`);
+try {
 showMetadata();
+console.log(`✅ showMetadata() completed`);
+} catch (err) {
+console.error(`❌ Error in showMetadata():`, err);
+throw err;
+}
+console.log(`🎯 QR generation complete for ${file.name}`);
 resolve();
 } catch (error) {
+console.error(`❌ Error in file processing:`, error);
+console.error(`❌ Error details:`, error.message);
+console.error(`❌ Error stack:`, error.stack);
 reject(error);
 }
 };
-fileReader.onerror = reject;
+fileReader.onerror = (error) => {
+console.error(`❌ File reader error:`, error);
+reject(error);
+};
+console.log(`📖 Reading file as ArrayBuffer...`);
 fileReader.readAsArrayBuffer(file);
+} catch (error) {
+console.error(`❌ Error setting up file reader:`, error);
+reject(error);
+}
 });
 }
 async function startPlayingAndWait() {
 return new Promise((resolve) => {
 startPlaying();
 const checkCompletion = setInterval(() => {
-if (!displayInterval) {
+if (!displayInterval && !isPlaying) {
 clearInterval(checkCompletion);
 resolve();
 }
 }, 1000);
 });
+}
+async function startCountdownAndWait() {
+return new Promise((resolve) => {
+startCountdown();
+const checkCompletion = setInterval(() => {
+if (!displayInterval && !countdownInterval && !isPlaying) {
+clearInterval(checkCompletion);
+resolve();
+}
+}, 1000);
+});
+}
+function exitFullscreenMode() {
+const fullscreenDisplay = document.getElementById('fullscreenDisplay');
+if (fullscreenDisplay) {
+fullscreenDisplay.style.display = 'none';
+}
+if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement) {
+if (document.exitFullscreen) {
+document.exitFullscreen();
+} else if (document.webkitExitFullscreen) {
+document.webkitExitFullscreen();
+} else if (document.mozCancelFullScreen) {
+document.mozCancelFullScreen();
+}
+}
 }
 function applyOptimalSettings() {
 if (!fileInput.files.length) return;
@@ -591,30 +722,31 @@ applyPreset(optimal.preset);
 }
 generateAndStartBtn.addEventListener('click', async () => {
 const selectedFiles = fileList.filter(f => f.selected);
-if (selectedFiles.length === 0) return;
-generateAndStartBtn.disabled = true;
-generateAndStartBtn.textContent = 'Generating...';
-try {
-await generateQRCodes();
-if (fullscreenCheckbox.checked) {
-enterFullscreenMode();
-startPlaying();
-} else {
-startPlaying();
+if (selectedFiles.length === 0) {
+alert('Please select at least one file to process');
+return;
 }
+generateAndStartBtn.disabled = true;
+generateAndStartBtn.textContent = 'Processing Batch...';
+try {
+await processBatchFiles(selectedFiles, true);
 } catch (error) {
-alert('Error: ' + error.message);
+alert('Error during batch processing: ' + error.message);
 } finally {
 generateAndStartBtn.textContent = 'Generate & Start Display';
 generateAndStartBtn.disabled = false;
 }
 });
 generateBtn.addEventListener('click', async () => {
-if (!fileInput.files.length) return;
+const selectedFiles = fileList.filter(f => f.selected);
+if (selectedFiles.length === 0) {
+alert('Please select at least one file to generate QR codes');
+return;
+}
 generateBtn.disabled = true;
-generateBtn.textContent = 'Generating...';
+generateBtn.textContent = 'Generating Batch...';
 try {
-await generateQRCodes();
+await processBatchFiles(selectedFiles, false);
 startBtn.disabled = false;
 fullscreenBtn.disabled = false;
 } catch (error) {
@@ -644,7 +776,11 @@ console.log(` First chunk first 4 bytes: [${Array.from(chunks[0].slice(0, 4)).jo
 console.log(` Last chunk: ${chunks[chunks.length-1].length} bytes`);
 }
 const ltEncoder = new SystematicLTEncoder(chunks);
-ltEncoder.maxSafeDegree = parseInt(maxDegreeSlider.value);
+ltEncoder.systematicChunksPerQR = parseInt(systematicChunksSlider.value);
+ltEncoder.fountainMaxDegree = parseInt(fountainDegreeSlider.value);
+ltEncoder.currentFileName = fileNameText;
+ltEncoder.currentFileSize = fileSizeBytes;
+ltEncoder.currentFileType = fileInput.files[0] ? fileInput.files[0].type : '';
 fountainPackets = [ltEncoder.generateMetadataPacket()];
 const totalPackets = ltEncoder.calculateTotalPackets();
 for (let i = 1; i < totalPackets; i++) {
@@ -765,21 +901,22 @@ requestWakeLock();
 startTime = Date.now();
 metadataInfo.style.display = 'block';
 transmissionTimer = setInterval(updateTransmissionStats, 1000);
-const interval = 1000 / parseInt(speedSlider.value);
-displayInterval = setInterval(async () => {
-currentFrame = (currentFrame + 1) % totalFrames;
+const baseInterval = 1000 / parseInt(speedSlider.value);
+let nextFrameDelay = baseInterval;
+const scheduleNextFrame = async () => {
 await generateQRCodeForFrame(currentFrame);
-updateProgress();
-if (enableTransitionsCheckbox.checked) {
-const regularQRImage = qrDisplay.querySelector('img');
-if (regularQRImage) {
-regularQRImage.classList.add('qr-image');
+const currentPacket = fountainPackets[currentFrame];
+const isMetadata = currentFrame === 0 || (currentPacket && currentPacket.metaString);
+if (isMetadata) {
+nextFrameDelay = Math.max(baseInterval * 3, 3000);
+console.log(`📋 Metadata QR displayed for ${nextFrameDelay}ms (3x longer)`);
+} else {
+nextFrameDelay = baseInterval;
 }
-if (isFullscreen && fullscreenQR) {
-fullscreenQR.classList.add('qr-image');
-}
-}
-}, interval);
+currentFrame = (currentFrame + 1) % totalFrames;
+displayInterval = setTimeout(scheduleNextFrame, nextFrameDelay);
+};
+scheduleNextFrame();
 }
 stopBtn.addEventListener('click', () => {
 stopPlaying();
@@ -794,7 +931,7 @@ fsCountdownDisplay.style.display = 'none';
 }
 }
 if (displayInterval) {
-clearInterval(displayInterval);
+clearTimeout(displayInterval);
 displayInterval = null;
 }
 if (transmissionTimer) {
@@ -1020,7 +1157,8 @@ this.packetCounter = 0;
 this.avgChunkSize = this.calculateAverageChunkSize();
 this.systematicPhase = true;
 this.currentSystematicIndex = 0;
-this.maxSafeDegree = this.calculateMaxSafeDegree();
+this.systematicChunksPerQR = 2;
+this.fountainMaxDegree = 3;
 this.c = 0.03;
 this.delta = 0.5;
 }
@@ -1032,42 +1170,24 @@ sum += this.originalChunks[i].length;
 }
 return Math.ceil(sum / sampleSize);
 }
-calculateMaxSafeDegree() {
-if (maxDegreeSlider) {
-const userMaxDegree = parseInt(maxDegreeSlider.value);
-if (!isNaN(userMaxDegree) && userMaxDegree > 0) {
-return userMaxDegree;
-}
-}
-const packetOverhead = 150;
-const delimiterOverhead = 5;
-const safeQrSize = Math.floor(MAX_QR_CONTENT_SIZE * 0.9);
-const charsAvailableForData = safeQrSize - packetOverhead;
-const maxDegree = Math.floor(charsAvailableForData / (this.avgChunkSize + delimiterOverhead));
-const ltRecommendedMax = Math.min(
-Math.max(8, Math.ceil(Math.sqrt(this.numChunks))),
-this.numChunks
-);
-return Math.max(1, Math.min(maxDegree, ltRecommendedMax, 20));
-}
 calculateTotalPackets() {
 let systematicPackets;
-if (this.maxSafeDegree >= 2) {
-systematicPackets = Math.ceil(this.numChunks / 2);
+if (this.systematicChunksPerQR >= 2) {
+systematicPackets = Math.ceil(this.numChunks / this.systematicChunksPerQR);
 } else {
 systematicPackets = this.numChunks;
 }
 const redundancyPercent = parseInt(document.getElementById('redundancySlider').value);
 const redundancyFactor = redundancyPercent / 100;
 const additionalPackets = Math.ceil(this.numChunks * redundancyFactor);
-const extraPackets = this.maxSafeDegree >= 2 ? Math.ceil(this.numChunks * 0.1) : 0;
+const extraPackets = this.systematicChunksPerQR >= 2 ? Math.ceil(this.numChunks * 0.1) : 0;
 return systematicPackets + additionalPackets + extraPackets;
 }
 generatePacket() {
 if (this.systematicPhase) {
 const maxQRSize = document.getElementById('highDensityCheckbox').checked ?
 HIGH_DENSITY_QR_CONTENT_SIZE : DEFAULT_QR_CONTENT_SIZE;
-if (this.maxSafeDegree >= 2 &&
+if (this.systematicChunksPerQR >= 2 &&
 this.currentSystematicIndex < this.numChunks &&
 this.numChunks - 1 - this.currentSystematicIndex >= 0) {
 const packet = this.createDualSystematicPacket(
@@ -1217,7 +1337,7 @@ if (this.numChunks <= 1) return 1;
 const c = this.c;
 const delta = this.delta;
 const R = c * Math.log(this.numChunks / delta) * Math.sqrt(this.numChunks);
-const maxDegree = Math.min(this.maxSafeDegree, this.numChunks);
+const maxDegree = Math.min(this.fountainMaxDegree, this.numChunks);
 const r = rng();
 let cdf = 0;
 const p1 = (1.0 / this.numChunks) + (R / this.numChunks);
@@ -1300,20 +1420,26 @@ binary += String.fromCharCode(bytes[i]);
 return btoa(binary);
 }
 generateMetadataPacket() {
-const fileNameText = document.getElementById('fileName').textContent;
-const fileSizeBytes = fileInput.files[0].size;
-const fileType = fileInput.files[0].type;
+const fileNameText = this.currentFileName || document.getElementById('fileName').textContent;
+const fileSizeBytes = this.currentFileSize || (fileInput.files[0] ? fileInput.files[0].size : 0);
+const fileType = this.currentFileType || (fileInput.files[0] ? fileInput.files[0].type : '');
 const fps = parseInt(document.getElementById('speedSlider').value);
-const maxDegree = parseInt(document.getElementById('maxDegreeSlider').value);
+const systematicChunks = parseInt(document.getElementById('systematicChunksSlider').value);
+const fountainMaxDegree = parseInt(document.getElementById('fountainDegreeSlider').value);
 const chunkSize = parseInt(document.getElementById('chunkSlider').value);
 const redundancy = parseInt(document.getElementById('redundancySlider').value);
 const highDensityMode = document.getElementById('highDensityCheckbox').checked ? 1 : 0;
 const ecLevel = document.getElementById('errorCorrectionSelect').value;
-const fileChecksum = this.calculateFileChecksum(fileContent);
+const fileChecksum = this.calculateFileChecksumFromChunks(this.originalChunks);
 const checksumData = `${fileNameText}:${fileSizeBytes}:${this.numChunks}`;
 const metaChecksum = this.simpleChecksum(checksumData);
 const ltParams = `${this.c}:${this.delta}`;
-const metadataString = `M:3.0:${encodeURIComponent(fileNameText)}:${encodeURIComponent(fileType)}:${fileSizeBytes}:${this.numChunks}:${this.calculateTotalPackets()}:${maxDegree}:${highDensityMode}:${fps}:${chunkSize}:${redundancy}:${ecLevel}:${metaChecksum}:${fileChecksum}:${ltParams}`;
+const metadataString = `M:3.0:${encodeURIComponent(fileNameText)}:${encodeURIComponent(fileType)}:${fileSizeBytes}:${this.numChunks}:${this.calculateTotalPackets()}:${systematicChunks}:${highDensityMode}:${fps}:${chunkSize}:${redundancy}:${ecLevel}:${metaChecksum}:${fileChecksum}:${ltParams}:${fountainMaxDegree}`;
+console.log(`📋 METADATA DEBUG:`);
+console.log(` fileName: "${fileNameText}"`);
+console.log(` fileType: "${fileType}"`);
+console.log(` fileSize: ${fileSizeBytes}`);
+console.log(` metadata string: ${metadataString.substring(0, 100)}...`);
 const packet = {
 format: "compact",
 metaString: metadataString,
@@ -1325,10 +1451,28 @@ b: this.seedBase
 return packet;
 }
 calculateFileChecksum(binaryData) {
+if (!binaryData) {
+console.warn('calculateFileChecksum: binaryData is null, returning default');
+return 'nullchk';
+}
 let hash = 0;
 for (let i = 0; i < binaryData.length; i++) {
 hash = ((hash << 5) - hash) + binaryData[i];
 hash = hash & hash;
+}
+return Math.abs(hash).toString(36).substring(0, 8);
+}
+calculateFileChecksumFromChunks(chunks) {
+if (!chunks || chunks.length === 0) {
+console.warn('calculateFileChecksumFromChunks: chunks is null/empty, returning default');
+return 'nochunk';
+}
+let hash = 0;
+for (const chunk of chunks) {
+for (let i = 0; i < chunk.length; i++) {
+hash = ((hash << 5) - hash) + chunk[i];
+hash = hash & hash;
+}
 }
 return Math.abs(hash).toString(36).substring(0, 8);
 }

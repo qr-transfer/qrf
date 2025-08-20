@@ -440,6 +440,9 @@ packetWorkerCount: 2,
 frameInterval: 20,
 qrDetectionConfidence: 0.5
 };
+this.discoveryMode = false;
+this.discoveredFiles = new Map();
+this.currentActiveFile = null;
 this.qrCodesDetected = 0;
 this.packetsProcessed = 0;
 this.recoveredFileData = null;
@@ -462,6 +465,14 @@ resetContents() {
 if (this.isProcessing) {
 this.stopProcessing();
 }
+if (this.qrProcessor) {
+this.qrProcessor.dispose();
+this.qrProcessor = null;
+}
+if (this.videoProcessor) {
+this.videoProcessor.stopProcessing();
+this.videoProcessor = null;
+}
 this.metadataReceived = false;
 this.fileMetadata = null;
 this.recoveredChunks = new Map();
@@ -473,22 +484,25 @@ this.ui.resetChunkGrid();
 this.ui.updateFileInfo("No file detected yet");
 document.getElementById('missingChunks').textContent = "Waiting for metadata...";
 document.getElementById('scanProgressBar').style.width = '0%';
-document.getElementById('scanProgressText').textContent = 'Frames: 0/0 | Time Remaining: --:--';
+document.getElementById('scanProgressText').textContent = 'Frames: 0/0 | Time Remaining: --:-- | Loop: 1';
 document.getElementById('downloadContainer').style.display = 'none';
+document.getElementById('continueBtn').disabled = true;
 this.ui.clearQRHighlight();
 this.ui.hideErrorMessage();
 document.getElementById('startScanBtn').disabled = this.videoFile ? false : true;
-this.logger.info("Contents reset, ready for new scan");
+document.getElementById('discoverBtn').disabled = this.videoFile ? false : true;
+this.logger.info("Contents completely reset, ready for new scan");
 }
 initEventListeners() {
 document.getElementById('videoInput').addEventListener('change', this.handleVideoInput.bind(this));
-document.getElementById('startScanBtn').addEventListener('click', this.startProcessing.bind(this));
+document.getElementById('startScanBtn').addEventListener('click', this.startScanAndDiscover.bind(this));
 document.getElementById('continueBtn').addEventListener('click', this.continueProcessing.bind(this));
 document.getElementById('stopScanBtn').addEventListener('click', this.stopProcessing.bind(this));
 document.getElementById('downloadBtn').addEventListener('click', this.downloadFile.bind(this));
 document.getElementById('settingsBtn').addEventListener('click', this.ui.showSettingsModal.bind(this.ui));
 document.getElementById('saveSettingsBtn').addEventListener('click', this.saveSettings.bind(this));
 document.getElementById('clearLogBtn').addEventListener('click', this.logger.clear.bind(this.logger));
+document.getElementById('copyLogBtn').addEventListener('click', this.copyDebugLog.bind(this));
 document.querySelectorAll('.log-filter').forEach(btn => {
 btn.addEventListener('click', (e) => {
 this.logger.setFilter(e.target.dataset.level);
@@ -599,9 +613,18 @@ this.fileMetadata &&
 this.recoveredChunks.size >= this.fileMetadata.chunksCount;
 };
 }
-continueProcessing() {
+async continueProcessing() {
 if (this.isProcessing) return;
 this.logger.info("Continuing video processing with additional loops...");
+if (!this.qrProcessor) {
+this.logger.info("Reinitializing QR processor for continue...");
+this.qrProcessor = new EnhancedQRProcessor({
+onQrDetected: this.handleQRCodeResult.bind(this),
+onError: (error) => this.logger.error(`QR processing error: ${error.message}`),
+detectionConfidence: this.settings.qrDetectionConfidence
+});
+await this.qrProcessor.initialize();
+}
 if (this.videoProcessor && this.videoFile) {
 this.isProcessing = true;
 this.videoProcessor.loopCount = (this.videoProcessor.loopCount || 1) + 1;
@@ -632,25 +655,89 @@ this.isProcessing = false;
 document.getElementById('startScanBtn').disabled = true;
 document.getElementById('continueBtn').disabled = true;
 document.getElementById('stopScanBtn').disabled = false;
+} else {
+this.logger.error("Cannot continue - video processor or file not available");
+}
+}
+async startScanAndDiscover() {
+if (this.isProcessing) return;
+this.logger.info("Starting scan with automatic file discovery...");
+this.discoveryMode = true;
+this.discoveredFiles.clear();
+this.isProcessing = true;
+this.ui.resetChunkGrid();
+this.ui.updateFileInfo("Scanning video and discovering files...");
+document.getElementById('discoveredFilesContainer').style.display = 'none';
+document.getElementById('startScanBtn').disabled = true;
+document.getElementById('continueBtn').disabled = true;
+document.getElementById('stopScanBtn').disabled = false;
+try {
+await this.initializeComponents();
+await this.videoProcessor.initialize(this.videoFile);
+this.videoProcessor.discoveryMode = true;
+this.videoProcessor.startProcessing();
+this.logger.info("First loop started - discovering files and capturing chunks simultaneously");
+} catch (error) {
+this.logger.error(`Failed to start processing: ${error.message}`);
+this.ui.showErrorMessage(`Failed to start processing: ${error.message}`);
+this.stopProcessing();
+}
+}
+startFileProcessing(filename, startTime) {
+if (this.isProcessing) return;
+this.logger.info(`Starting focused processing for file: ${filename} at ${startTime.toFixed(2)}s`);
+this.currentActiveFile = filename;
+this.metadataReceived = false;
+this.fileMetadata = null;
+this.recoveredChunks = new Map();
+this.missingChunks = new Set();
+if (this.fountainDecoder) {
+this.fountainDecoder = new EnhancedFountainDecoder();
+this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+}
+if (this.videoProcessor) {
+this.videoProcessor.videoElement.currentTime = startTime;
+this.videoProcessor.discoveryMode = false;
+this.isProcessing = true;
+this.videoProcessor.isProcessing = true;
+this.videoProcessor.loopCount = 1;
+document.getElementById('startScanBtn').disabled = true;
+document.getElementById('discoverBtn').disabled = true;
+document.getElementById('continueBtn').disabled = true;
+document.getElementById('stopScanBtn').disabled = false;
+this.ui.updateFileInfo(`Processing file: ${filename}`);
+this.ui.resetChunkGrid();
+this.videoProcessor.videoElement.play();
 }
 }
 stopProcessing() {
 if (!this.isProcessing) return;
+console.log(`🛑 Stop button pressed - halting all processing`);
 this.isProcessing = false;
+this.discoveryMode = false;
 this.releaseWakeLock();
 if (this.videoProcessor) {
 this.videoProcessor.stopProcessing();
-}
-if (this.qrProcessor) {
-this.qrProcessor.dispose();
+this.videoProcessor.discoveryMode = false;
+this.videoProcessor.rangeMode = false;
 }
 this.ui.clearQRHighlight();
 document.getElementById('startScanBtn').disabled = false;
 document.getElementById('stopScanBtn').disabled = true;
-if (this.metadataReceived && this.recoveredChunks.size < this.fileMetadata.chunksCount) {
+if (this.metadataReceived &&
+this.recoveredChunks.size < this.fileMetadata.chunksCount &&
+this.videoFile &&
+this.videoProcessor) {
 document.getElementById('continueBtn').disabled = false;
+this.logger.info("Continue button enabled - you can resume processing");
 }
-this.logger.info("Processing stopped");
+if (this.videoFile) {
+const discoverBtn = document.getElementById('discoverBtn');
+if (discoverBtn) {
+discoverBtn.disabled = false;
+}
+}
+this.logger.info("All processing stopped - use Continue to resume or Start Scan & Discover to restart");
 this.logger.info(`Processing summary: Detected ${this.qrCodesDetected} QR codes, processed ${this.packetsProcessed} packets`);
 if (this.metadataReceived) {
 const progress = this.fountainDecoder.getRecoveryProgress();
@@ -707,12 +794,39 @@ return;
 this.packetsProcessed++;
 const { packetType, packetData } = result;
 if (packetType === 'metadata') {
-this.handleMetadataPacket(packetData);
+const currentTime = this.videoProcessor ? this.videoProcessor.videoElement.currentTime : 0;
+this.handleMetadataPacket(packetData, currentTime);
 } else if (packetType === 'data') {
 this.handleDataPacket(packetData);
 }
 }
-handleMetadataPacket(metadata) {
+handleMetadataPacket(metadata, currentTime = 0) {
+const fileName = metadata.fileName;
+if (this.discoveryMode) {
+console.log(`🔍 DISCOVERY: Processing metadata for ${fileName} at ${currentTime.toFixed(2)}s`);
+if (!this.discoveredFiles.has(fileName)) {
+this.discoveredFiles.set(fileName, {
+metadata: metadata,
+firstSeenAt: currentTime,
+lastSeenAt: currentTime
+});
+this.logger.info(`📁 DISCOVERY: NEW file found: ${fileName} at ${currentTime.toFixed(2)}s`);
+this.switchToFile(metadata, fileName);
+} else {
+const fileInfo = this.discoveredFiles.get(fileName);
+fileInfo.lastSeenAt = currentTime;
+this.logger.debug(`📁 DISCOVERY: Existing file ${fileName} seen again at ${currentTime.toFixed(2)}s`);
+if (!this.currentActiveFile || this.currentActiveFile !== fileName) {
+this.logger.info(`🔄 DISCOVERY: Switching from ${this.currentActiveFile || 'none'} to ${fileName}`);
+this.switchToFile(metadata, fileName);
+} else {
+this.logger.debug(`📁 DISCOVERY: Duplicate metadata for current file ${fileName}`);
+return;
+}
+}
+this.updateDiscoveredFilesUI();
+return;
+}
 if (this.metadataReceived) {
 if (metadata.fileName === this.fileMetadata.fileName &&
 metadata.fileSize === this.fileMetadata.fileSize &&
@@ -748,6 +862,9 @@ handleDataPacket(packet) {
 if (!this.metadataReceived) {
 this.logger.warn("Received data packet before metadata, ignoring");
 return;
+}
+if (this.discoveryMode) {
+this.logger.debug(`📦 DISCOVERY: Processing data packet for ${this.currentActiveFile || 'unknown file'}`);
 }
 if (packet.sourceChunks) {
 packet.sourceChunks.forEach(chunkIndex => {
@@ -788,10 +905,40 @@ const fileInfo = document.getElementById('fileInfo').innerHTML;
 document.getElementById('fileInfo').innerHTML = fileInfo + `
 <div style="margin-top: 10px; color: var(--success-color);"><strong>File Successfully Recovered!</strong></div>
 `;
-if (this.isProcessing) {
-this.stopProcessing();
+if (this.discoveryMode) {
+console.log(`✅ File ${this.fileMetadata.fileName} COMPLETED during discovery - storing and continuing scan`);
+const fileName = this.fileMetadata.fileName;
+if (this.discoveredFiles.has(fileName)) {
+const fileInfo = this.discoveredFiles.get(fileName);
+fileInfo.completed = true;
+fileInfo.recoveredData = fileData;
+fileInfo.recoveredAt = performance.now();
+this.logger.info(`💾 DISCOVERY: Stored completed file: ${fileName} (${fileData.byteLength} bytes)`);
 }
+this.logger.info(`🔄 DISCOVERY: Resetting state after ${fileName} completion - ready for next file`);
+this.fountainDecoder = new EnhancedFountainDecoder();
+this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+this.metadataReceived = false;
+this.fileMetadata = null;
+this.recoveredChunks = new Map();
+this.missingChunks = new Set();
+this.currentActiveFile = null;
+this.ui.resetChunkGrid();
+this.ui.updateFileInfo(`✅ File ${fileName} completed during discovery! Scanning for more files...`);
+this.updateDiscoveredFilesUI();
+return;
+}
+if (this.isProcessing) {
+try {
+this.stopProcessing();
+} catch (error) {
+console.error('Error during stopProcessing in handleFileComplete:', error);
+this.isProcessing = false;
+}
+}
+if (!this.discoveryMode) {
 this.downloadFile();
+}
 }
 downloadFile() {
 if (!this.recoveredFileData || !this.fileMetadata) {
@@ -829,6 +976,243 @@ qrDetectionConfidence: isNaN(qrDetectionConfidence) ? 0.5 : Math.min(Math.max(qr
 };
 this.logger.info(`Settings updated: ${JSON.stringify(this.settings)}`);
 this.ui.hideSettingsModal();
+}
+switchToFile(metadata, fileName) {
+this.logger.info(`🔄 DISCOVERY: Switching to process file: ${fileName}`);
+this.currentActiveFile = fileName;
+this.fountainDecoder = new EnhancedFountainDecoder();
+this.fountainDecoder.initialize(metadata);
+this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+this.metadataReceived = true;
+this.fileMetadata = metadata;
+this.recoveredChunks = new Map();
+this.missingChunks = new Set();
+this.ui.initializeChunkGrid(metadata.chunksCount);
+this.ui.updateFileInfo(`
+<div><strong>DISCOVERY - Current File:</strong> ${metadata.fileName}</div><div><strong>File Type:</strong> ${metadata.fileType}</div><div><strong>File Size:</strong> ${this.formatFileSize(metadata.fileSize)}</div><div><strong>Chunks:</strong> ${metadata.chunksCount}</div><div><strong>Time:</strong> ${this.videoProcessor ? this.videoProcessor.videoElement.currentTime.toFixed(1) : '?'}s</div>
+`);
+for (let i = 0; i < metadata.chunksCount; i++) {
+this.missingChunks.add(i);
+}
+this.updateMissingChunksUI();
+this.logger.info(`🎯 DISCOVERY: Now actively processing ${fileName} - ready for data packets`);
+}
+resetForNewFile(metadata, fileName) {
+this.logger.info(`🔄 Resetting UI and decoder for new file: ${fileName}`);
+this.currentActiveFile = fileName;
+this.fountainDecoder = new EnhancedFountainDecoder();
+this.fountainDecoder.initialize(metadata);
+this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+this.metadataReceived = true;
+this.fileMetadata = metadata;
+this.recoveredChunks = new Map();
+this.missingChunks = new Set();
+this.ui.initializeChunkGrid(metadata.chunksCount);
+this.ui.updateFileInfo(`
+<div><strong>Current File:</strong> ${metadata.fileName}</div><div><strong>File Type:</strong> ${metadata.fileType}</div><div><strong>File Size:</strong> ${this.formatFileSize(metadata.fileSize)}</div><div><strong>Chunks:</strong> ${metadata.chunksCount}</div><div><strong>Discovery Mode:</strong> Active</div>
+`);
+for (let i = 0; i < metadata.chunksCount; i++) {
+this.missingChunks.add(i);
+}
+this.updateMissingChunksUI();
+this.logger.info(`🎯 Ready to process ${fileName} during discovery scan`);
+}
+copyDebugLog() {
+try {
+const logWindow = document.getElementById('logWindow');
+const logEntries = logWindow.querySelectorAll('.log-entry');
+let logText = '=== QR File Decoder Debug Log ===\n';
+logText += `Generated: ${new Date().toISOString()}\n`;
+logText += `Video: ${this.videoFile ? this.videoFile.name : 'None'}\n`;
+logText += `Discovered Files: ${this.discoveredFiles.size}\n`;
+logText += '=====================================\n\n';
+logEntries.forEach(entry => {
+logText += entry.textContent + '\n';
+});
+navigator.clipboard.writeText(logText).then(() => {
+this.logger.info('Debug log copied to clipboard');
+const copyBtn = document.getElementById('copyLogBtn');
+const originalText = copyBtn.textContent;
+copyBtn.textContent = 'Copied!';
+copyBtn.style.backgroundColor = '#10b981';
+setTimeout(() => {
+copyBtn.textContent = originalText;
+copyBtn.style.backgroundColor = '';
+}, 2000);
+}).catch(err => {
+this.logger.error('Failed to copy log to clipboard: ' + err.message);
+});
+} catch (error) {
+this.logger.error('Error copying debug log: ' + error.message);
+}
+}
+handleDiscoveryComplete() {
+this.logger.info(`🎯 Discovery complete! Found ${this.discoveredFiles.size} files in video`);
+this.updateDiscoveredFilesUI();
+if (this.discoveredFiles.size === 1) {
+const [filename, fileInfo] = Array.from(this.discoveredFiles.entries())[0];
+this.ui.updateFileInfo(`Found 1 file: ${filename}. Continuing to process with loops...`);
+} else if (this.discoveredFiles.size > 1) {
+this.checkAndAutoRepeatIncompleteFiles();
+} else {
+this.ui.updateFileInfo("No file metadata found yet. Continuing scan...");
+}
+}
+updateDiscoveredFilesUI() {
+const container = document.getElementById('discoveredFilesContainer');
+const filesList = document.getElementById('discoveredFilesList');
+if (this.discoveredFiles.size === 0) {
+container.style.display = 'none';
+return;
+}
+container.style.display = 'block';
+filesList.innerHTML = '';
+Array.from(this.discoveredFiles.entries()).forEach(([filename, fileInfo], index) => {
+const fileButton = document.createElement('div');
+fileButton.style.cssText = 'margin-bottom: 10px; padding: 10px; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb;';
+const fileSize = this.formatFileSize(fileInfo.metadata.fileSize);
+const timeRange = `${fileInfo.firstSeenAt.toFixed(1)}s - ${fileInfo.lastSeenAt.toFixed(1)}s`;
+const isCompleted = fileInfo.completed || false;
+const statusBadge = isCompleted ?
+'<span style="background: #dcfce7; color: #16a34a; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold;">COMPLETED</span>' :
+'<span style="background: #fef3c7; color: #d97706; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold;">NEEDS PROCESSING</span>';
+fileButton.innerHTML = `
+<div style="display: flex; justify-content: space-between; align-items: center;"><div><div style="display: flex; align-items: center; gap: 8px;"><span style="font-weight: bold; color: #1f2937;">${filename}</span>
+${statusBadge}
+</div><div style="font-size: 12px; color: #6b7280;">
+Size: ${fileSize} | Chunks: ${fileInfo.metadata.chunksCount} | Time: ${timeRange}
+</div></div><div style="display: flex; gap: 5px;"><button onclick="window.qrFileDecoder.startFileProcessing('${filename}', ${fileInfo.firstSeenAt})"
+style="padding: 6px 12px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;">
+Decode Full
+</button><button onclick="window.qrFileDecoder.repeatFileRange('${filename}', ${fileInfo.firstSeenAt}, ${fileInfo.lastSeenAt})"
+style="padding: 6px 12px; background: #f59e0b; color: white; border: none; border-radius: 4px; cursor: pointer;">
+Repeat Range
+</button>
+${isCompleted ? `<button onclick="window.qrFileDecoder.downloadCompletedFile('${filename}')"
+style="padding: 6px 12px; background: #16a34a; color: white; border: none; border-radius: 4px; cursor: pointer;">
+Download
+</button>` : ''}
+</div></div>
+`;
+filesList.appendChild(fileButton);
+});
+}
+repeatFileRange(filename, startTime, endTime) {
+if (this.isProcessing) return;
+this.logger.info(`Repeating range for ${filename}: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s`);
+this.currentActiveFile = filename;
+this.discoveryMode = false;
+const fileInfo = this.discoveredFiles.get(filename);
+if (fileInfo && fileInfo.metadata) {
+this.fileMetadata = fileInfo.metadata;
+this.metadataReceived = true;
+this.fountainDecoder = new EnhancedFountainDecoder();
+this.fountainDecoder.initialize(fileInfo.metadata);
+this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+this.ui.initializeChunkGrid(fileInfo.metadata.chunksCount);
+}
+if (this.videoProcessor) {
+this.videoProcessor.videoElement.currentTime = startTime;
+this.videoProcessor.discoveryMode = false;
+this.videoProcessor.rangeMode = true;
+this.videoProcessor.endTime = endTime;
+this.isProcessing = true;
+this.videoProcessor.isProcessing = true;
+this.videoProcessor.loopCount = 1;
+document.getElementById('startScanBtn').disabled = true;
+document.getElementById('continueBtn').disabled = true;
+document.getElementById('stopScanBtn').disabled = false;
+this.ui.updateFileInfo(`Repeating range for: ${filename} (${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s)`);
+this.videoProcessor.videoElement.play();
+}
+}
+async checkAndAutoRepeatIncompleteFiles() {
+this.isProcessing = false;
+this.ui.updateFileInfo(`Discovery complete - found ${this.discoveredFiles.size} files. Checking completion status...`);
+this.updateDiscoveredFilesUI();
+const incompleteFiles = [];
+for (const [filename, fileInfo] of this.discoveredFiles.entries()) {
+incompleteFiles.push({filename, fileInfo});
+}
+if (incompleteFiles.length > 0) {
+this.logger.info(`🔄 Found ${incompleteFiles.length} files that may need additional processing`);
+this.logger.info(`🎯 Starting automatic range repeats (5 loops each) for better completion...`);
+for (const {filename, fileInfo} of incompleteFiles) {
+await this.autoRepeatFileRange(filename, fileInfo.firstSeenAt, fileInfo.lastSeenAt, 5);
+}
+this.logger.info(`✅ Automatic range processing complete for all files`);
+}
+document.getElementById('startScanBtn').disabled = false;
+document.getElementById('stopScanBtn').disabled = true;
+this.ui.updateFileInfo(`All files processed. Select a file above to decode or retry specific ranges.`);
+}
+async autoRepeatFileRange(filename, startTime, endTime, maxLoops = 5) {
+this.logger.info(`🔄 Auto-repeating ${filename} range ${maxLoops} times: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s`);
+for (let loop = 1; loop <= maxLoops; loop++) {
+this.logger.info(`📹 Auto-repeat loop ${loop}/${maxLoops} for ${filename}`);
+this.currentActiveFile = filename;
+this.discoveryMode = false;
+const fileInfo = this.discoveredFiles.get(filename);
+if (fileInfo && fileInfo.metadata) {
+this.fileMetadata = fileInfo.metadata;
+this.metadataReceived = true;
+this.fountainDecoder = new EnhancedFountainDecoder();
+this.fountainDecoder.initialize(fileInfo.metadata);
+this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+this.ui.initializeChunkGrid(fileInfo.metadata.chunksCount);
+}
+await this.processVideoRange(startTime, endTime, loop);
+if (loop < maxLoops) {
+await new Promise(resolve => setTimeout(resolve, 1000));
+}
+}
+}
+async processVideoRange(startTime, endTime, loopNumber) {
+return new Promise((resolve) => {
+if (this.videoProcessor) {
+this.videoProcessor.videoElement.currentTime = startTime;
+this.videoProcessor.discoveryMode = false;
+this.videoProcessor.rangeMode = true;
+this.videoProcessor.endTime = endTime;
+this.videoProcessor.loopCount = loopNumber;
+this.ui.updateFileInfo(`Auto-processing ${this.currentActiveFile} - Loop ${loopNumber} (${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s)`);
+this.videoProcessor.isProcessing = true;
+this.videoProcessor.videoElement.play();
+const checkCompletion = setInterval(() => {
+if (!this.videoProcessor.isProcessing || this.videoProcessor.videoElement.paused) {
+clearInterval(checkCompletion);
+resolve();
+}
+}, 500);
+} else {
+resolve();
+}
+});
+}
+downloadCompletedFile(filename) {
+const fileInfo = this.discoveredFiles.get(filename);
+if (!fileInfo || !fileInfo.completed || !fileInfo.recoveredData) {
+this.logger.warn(`File ${filename} is not available for download`);
+return;
+}
+try {
+const blob = new Blob([fileInfo.recoveredData], {
+type: fileInfo.metadata.fileType || 'application/octet-stream'
+});
+const url = URL.createObjectURL(blob);
+const a = document.createElement('a');
+a.href = url;
+a.download = filename;
+document.body.appendChild(a);
+a.click();
+setTimeout(() => {
+document.body.removeChild(a);
+URL.revokeObjectURL(url);
+}, 100);
+this.logger.info(`📥 Downloaded completed file: ${filename} (${this.formatFileSize(fileInfo.recoveredData.byteLength)})`);
+} catch (error) {
+this.logger.error(`Error downloading file ${filename}: ${error.message}`);
+}
 }
 formatFileSize(bytes) {
 if (bytes < 1024) return `${bytes} bytes`;
