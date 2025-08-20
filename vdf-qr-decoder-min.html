@@ -911,6 +911,9 @@ document.getElementById('fileInfo').innerHTML = fileInfo + `
 if (this.discoveryMode) {
 console.log(`✅ File ${this.fileMetadata.fileName} COMPLETED during discovery - storing and continuing scan`);
 const fileName = this.fileMetadata.fileName;
+const ACCURATE_RECOVERED_COUNT = this.fountainDecoder.recoveredChunkCount;
+const ACCURATE_TOTAL_COUNT = this.fileMetadata.chunksCount;
+console.log(`🎯 ENTERPRISE ACCURATE DATA: ${fileName} has ${ACCURATE_RECOVERED_COUNT}/${ACCURATE_TOTAL_COUNT} chunks (captured at completion moment)`);
 if (this.discoveredFiles.has(fileName)) {
 const fileInfo = this.discoveredFiles.get(fileName);
 fileInfo.completed = true;
@@ -925,9 +928,9 @@ console.log(`🔍 DISCOVERY: File ${fileName} downloaded but continuing discover
 console.log(`⏭️ ENTERPRISE: File ${fileName} already downloaded during discovery - skipping duplicate`);
 }
 }
-const totalChunks = this.fileMetadata.chunksCount;
-const actualRecoveredChunks = this.fountainDecoder ? this.fountainDecoder.recoveredChunkCount : this.recoveredChunks.size;
-console.log(`🔍 ENTERPRISE UI FIX: Using fountain decoder count ${actualRecoveredChunks} instead of stale main decoder count ${this.recoveredChunks.size}`);
+const totalChunks = ACCURATE_TOTAL_COUNT;
+const actualRecoveredChunks = ACCURATE_RECOVERED_COUNT;
+console.log(`🔍 ENTERPRISE UI FIX: Using captured accurate data: ${actualRecoveredChunks}/${totalChunks}`);
 document.getElementById('missingChunks').innerHTML = `
 <div>Recovered chunks: ${actualRecoveredChunks}/${totalChunks} (100%)</div><div>Missing chunks: 0</div><div style="color: #16a34a; font-weight: bold;">✅ FILE COMPLETE - DOWNLOADED</div>
 `;

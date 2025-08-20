@@ -3113,8 +3113,14 @@
         if (this.discoveryMode) {
           console.log(`✅ File ${this.fileMetadata.fileName} COMPLETED during discovery - storing and continuing scan`);
           
-          // Store the completed file data in the discovered files map
+          // CAPTURE ACCURATE DATA RIGHT NOW before any state changes
           const fileName = this.fileMetadata.fileName;
+          const ACCURATE_RECOVERED_COUNT = this.fountainDecoder.recoveredChunkCount;
+          const ACCURATE_TOTAL_COUNT = this.fileMetadata.chunksCount;
+          
+          console.log(`🎯 ENTERPRISE ACCURATE DATA: ${fileName} has ${ACCURATE_RECOVERED_COUNT}/${ACCURATE_TOTAL_COUNT} chunks (captured at completion moment)`);
+          
+          // Store the completed file data in the discovered files map
           if (this.discoveredFiles.has(fileName)) {
             const fileInfo = this.discoveredFiles.get(fileName);
             fileInfo.completed = true;
@@ -3135,11 +3141,11 @@
             }
           }
           
-          // Get ACCURATE completion data from the fountain decoder that just completed
-          const totalChunks = this.fileMetadata.chunksCount;
-          const actualRecoveredChunks = this.fountainDecoder ? this.fountainDecoder.recoveredChunkCount : this.recoveredChunks.size;
+          // Use the ACCURATE data captured at completion moment
+          const totalChunks = ACCURATE_TOTAL_COUNT;
+          const actualRecoveredChunks = ACCURATE_RECOVERED_COUNT;
           
-          console.log(`🔍 ENTERPRISE UI FIX: Using fountain decoder count ${actualRecoveredChunks} instead of stale main decoder count ${this.recoveredChunks.size}`);
+          console.log(`🔍 ENTERPRISE UI FIX: Using captured accurate data: ${actualRecoveredChunks}/${totalChunks}`);
           
           // Manually update the missing chunks UI to show 100% completion with CORRECT count
           document.getElementById('missingChunks').innerHTML = `
@@ -3150,11 +3156,11 @@
           
           this.ui.updateFileInfo(`✅ File ${fileName} FULLY COMPLETE (${actualRecoveredChunks}/${totalChunks} chunks)! Downloaded and continuing discovery...`);
           
-          // Store completion info for UI display (use the CORRECT fountain decoder count)
+          // Store completion info for UI display (use the ACCURATE captured data)
           const completionInfo = {
             fileName: fileName,
             totalChunks: totalChunks,
-            recoveredChunks: actualRecoveredChunks // Use the accurate fountain decoder count
+            recoveredChunks: actualRecoveredChunks // Use the captured accurate count
           };
           
           // Completely reset state for next file discovery

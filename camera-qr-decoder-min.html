@@ -297,7 +297,7 @@ height: 15px;
 document.addEventListener('keydown', (e) => {
 if (e.ctrlKey && e.shiftKey && e.key === 'D') {
 debugMode = !debugMode;
-console.log(`🔧 Debug mode: ${debugMode ? 'ENABLED' : 'DISABLED'}`);
+console.log('🔧 Debug mode: ' + (debugMode ? 'ENABLED' : 'DISABLED'));
 }
 });
 document.addEventListener('visibilitychange', () => {
@@ -335,9 +335,9 @@ if (this.entries.length > this.maxEntries) {
 this.entries.shift();
 }
 const entryElement = document.createElement('div');
-entryElement.className = `log-entry log-${level}`;
+entryElement.className = 'log-entry log-' + (level);
 const timestamp = entry.timestamp.toLocaleTimeString();
-entryElement.innerHTML = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+entryElement.innerHTML = '[' + (timestamp) + '] [' + (level.toUpperCase()) + '] ' + (message);
 if (this.filter !== 'all' && this.filter !== level) {
 entryElement.style.display = 'none';
 }
@@ -388,18 +388,18 @@ chunksGrid.appendChild(chunkElement);
 }
 updateProgress(progress, qrCodesDetected, elapsedTime) {
 const progressBar = document.getElementById('scanProgressBar');
-progressBar.style.width = `${progress * 100}%`;
+progressBar.style.width = (progress * 100) + '%';
 const progressText = document.getElementById('scanProgressText');
 const minutes = Math.floor(elapsedTime / 60);
 const seconds = Math.floor(elapsedTime % 60);
-const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-progressText.textContent = `QR Codes: ${qrCodesDetected} | Time: ${timeString}`;
+const timeString = (minutes.toString().padStart(2, '0')) + ':' + (seconds.toString().padStart(2, '0'));
+progressText.textContent = 'QR Codes: ' + (qrCodesDetected) + ' | Time: ' + (timeString);
 }
 updateFileInfo(htmlContent) {
 document.getElementById('fileInfo').innerHTML = htmlContent;
 }
 blinkChunk(chunkIndex) {
-const chunkElement = document.querySelector(`.chunk[data-index="${chunkIndex}"]`);
+const chunkElement = document.querySelector('.chunk[data-index="' + (chunkIndex) + '"]');
 if (chunkElement) {
 chunkElement.classList.remove('blinking');
 void chunkElement.offsetWidth;
@@ -407,7 +407,7 @@ chunkElement.classList.add('blinking');
 }
 }
 markChunkAsRecovered(chunkIndex) {
-const chunkElement = document.querySelector(`.chunk[data-index="${chunkIndex}"]`);
+const chunkElement = document.querySelector('.chunk[data-index="' + (chunkIndex) + '"]');
 if (chunkElement) {
 chunkElement.classList.remove('pending');
 chunkElement.classList.add('received');
@@ -487,7 +487,7 @@ return this.processMetadataPacket(qrData, frameIndex);
 } else if (qrData.startsWith('D:')) {
 return this.processDataPacket(qrData, frameIndex);
 } else {
-throw new Error(`Unknown packet format: ${qrData.substring(0, 10)}...`);
+throw new Error('Unknown packet format: ' + (qrData.substring(0, 10)) + '...');
 }
 } catch (error) {
 return {
@@ -500,13 +500,13 @@ frameIndex
 processMetadataPacket(metaString, frameIndex) {
 const parts = metaString.split(':');
 if (parts.length < 10) {
-throw new Error(`Invalid metadata packet format: ${metaString.substring(0, 30)}...`);
+throw new Error('Invalid metadata packet format: ' + (metaString.substring(0, 30)) + '...');
 }
 let fileSize = -1;
 try {
 fileSize = parseInt(parts[4])
 } catch (e) {
-console.error(`Invalid file size: ${parts[4]}`);
+console.error('Invalid file size: ' + (parts[4]));
 }
 const metadata = {
 protocolVersion: parts[1],
@@ -526,10 +526,10 @@ ltParams: parts.slice(14).join(':')
 };
 if (isNaN(metadata.fileSize) || metadata.fileSize <= 0) {
 metadata.fileSize = -1;
-console.error(`Invalid file size: ${parts[4]}`);
+console.error('Invalid file size: ' + (parts[4]));
 }
 if (isNaN(metadata.chunksCount) || metadata.chunksCount <= 0) {
-throw new Error(`Invalid chunk count: ${parts[5]}`);
+throw new Error('Invalid chunk count: ' + (parts[5]));
 }
 return {
 success: true,
@@ -541,7 +541,7 @@ frameIndex
 processDataPacket(dataString, frameIndex) {
 const parts = dataString.split(':');
 if (parts.length < 7) {
-throw new Error(`Invalid data packet format: ${dataString.substring(0, 30)}...`);
+throw new Error('Invalid data packet format: ' + (dataString.substring(0, 30)) + '...');
 }
 const packetId = parseInt(parts[1]);
 const seed = parseInt(parts[2]);
@@ -557,23 +557,23 @@ if (parts[6] && parts[6].includes(',')) {
 const sourceIndices = parts[6].split(',').map(idx => parseInt(idx));
 const actualDegree = sourceIndices.length;
 if (debugMode) {
-console.debug(`Fountain packet ${packetId} with degree=${actualDegree} (XOR of ${sourceIndices.join(',')})`);
+console.debug('Fountain packet ' + (packetId) + ' with degree=' + (actualDegree) + ' (XOR of ' + (sourceIndices.join(',')) + ')');
 }
 format = "enhanced";
 sourceChunks = sourceIndices;
 try {
 fountainData = this.base64ToUint8Array(parts[7]);
 } catch (e) {
-console.error(`Failed to decode fountain XOR data: ${e.message}`);
+console.error('Failed to decode fountain XOR data: ' + (e.message));
 throw e;
 }
 } else {
 if (debugMode) {
-console.debug(`Systematic packet ${packetId} with chunkCount=${chunkCount}`);
+console.debug('Systematic packet ' + (packetId) + ' with chunkCount=' + (chunkCount));
 }
 const records = allDataPart.split('|');
 if (debugMode) {
-console.debug(`Processing ${records.length} systematic records (expected: ${chunkCount})`);
+console.debug('Processing ' + (records.length) + ' systematic records (expected: ' + (chunkCount) + ')');
 }
 for (let i = 0; i < records.length; i++) {
 const record = records[i];
@@ -585,13 +585,13 @@ if (chunkIndex >= 0 && chunkIndex < numChunks) {
 sourceChunks.push(chunkIndex);
 systematicDataChunks.push({ chunkIndex: chunkIndex, chunkData: chunkData });
 if (debugMode) {
-console.debug(` Record ${i+1}: chunk ${chunkIndex} (${chunkData.length} base64 chars)`);
+console.debug(' Record ' + (i+1) + ': chunk ' + (chunkIndex) + ' (' + (chunkData.length) + ' base64 chars)');
 }
 } else {
-console.warn(` Invalid chunk index ${chunkIndex} in record ${i+1}`);
+console.warn(' Invalid chunk index ' + (chunkIndex) + ' in record ' + (i+1));
 }
 } else {
-console.warn(` Invalid record format: ${record}`);
+console.warn(' Invalid record format: ' + (record));
 }
 }
 }
@@ -600,9 +600,9 @@ format = "enhanced";
 try {
 sourceChunks = parts[6].split(',').map(idx => parseInt(idx));
 fountainData = this.base64ToUint8Array(parts[7]);
-console.debug(`Enhanced fountain packet ${packetId} with degree ${degree}, explicit source chunks: ${sourceChunks.join(',')}`);
+console.debug('Enhanced fountain packet ' + (packetId) + ' with degree ' + (degree) + ', explicit source chunks: ' + (sourceChunks.join(',')));
 } catch (e) {
-console.error(`Error parsing enhanced fountain packet: ${e.message}, falling back to legacy mode`);
+console.error('Error parsing enhanced fountain packet: ' + (e.message) + ', falling back to legacy mode');
 format = "legacy";
 }
 }
@@ -629,7 +629,7 @@ this.xorUint8Arrays(fountainData, chunkContentArray[i]);
 } else {
 fountainData = this.stringToUint8Array(allDataPart);
 }
-console.debug(`Legacy fountain packet ${packetId} with degree ${degree}, generated source chunks: ${sourceChunks.join(',')}`);
+console.debug('Legacy fountain packet ' + (packetId) + ' with degree ' + (degree) + ', generated source chunks: ' + (sourceChunks.join(',')));
 }
 }
 this.xorUint8Arrays = function(target, source) {
@@ -746,7 +746,7 @@ degree1: 0,
 degreeN: 0,
 usefulPackets: 0
 };
-console.log(`Fountain decoder initialized with ${metadata.chunksCount} chunks, file size: ${metadata.fileSize} bytes`);
+console.log('Fountain decoder initialized with ' + (metadata.chunksCount) + ' chunks, file size: ' + (metadata.fileSize) + ' bytes');
 }
 setCompleteCallback(callback) {
 this.completeCallback = callback;
@@ -842,12 +842,12 @@ this.finalizeFile();
 storeSourceChunk(index, data) {
 if (!this.sourceChunks[index]) {
 if (!(data instanceof Uint8Array)) {
-console.warn(`Chunk ${index} data is not a Uint8Array. Converting...`);
+console.warn('Chunk ' + (index) + ' data is not a Uint8Array. Converting...');
 data = this.ensureUint8Array(data);
 }
 this.sourceChunks[index] = data;
 this.recoveredChunkCount++;
-console.debug(`Stored chunk ${index}, now have ${this.recoveredChunkCount}/${this.totalChunks} chunks`);
+console.debug('Stored chunk ' + (index) + ', now have ' + (this.recoveredChunkCount) + '/' + (this.totalChunks) + ' chunks');
 if (index > this.lastProcessedChunk) {
 this.lastProcessedChunk = index;
 }
@@ -888,7 +888,7 @@ bytes[i] = binaryString.charCodeAt(i);
 }
 return bytes;
 } catch (e) {
-throw new Error(`Base64 decode failed: ${e.message}`);
+throw new Error('Base64 decode failed: ' + (e.message));
 }
 }
 getNewlyRecoveredChunks() {
@@ -906,12 +906,12 @@ packetStats: this.packetStats
 }
 finalizeFile() {
 console.log("Finalizing file reconstruction...");
-console.log(`Recovery stats: ${this.recoveredChunkCount}/${this.totalChunks} chunks`);
-console.log(`Packet stats: ${JSON.stringify(this.packetStats)}`);
+console.log('Recovery stats: ' + (this.recoveredChunkCount) + '/' + (this.totalChunks) + ' chunks');
+console.log('Packet stats: ' + (JSON.stringify(this.packetStats)));
 try {
 for (let i = 0; i < this.totalChunks; i++) {
 if (!this.sourceChunks[i]) {
-console.error(`Missing chunk ${i} during file reconstruction, cannot finalize`);
+console.error('Missing chunk ' + (i) + ' during file reconstruction, cannot finalize');
 return;
 }
 }
@@ -921,20 +921,20 @@ fileSize = 0;
 for (let i = 0; i < this.totalChunks; i++) {
 fileSize += this.sourceChunks[i].length;
 }
-console.log(`File size not provided in metadata, calculated: ${fileSize} bytes`);
+console.log('File size not provided in metadata, calculated: ' + (fileSize) + ' bytes');
 }
 let fileData = new Uint8Array(fileSize);
 let offset = 0;
 const chunkSize = this.metaData.chunkSize || this.sourceChunks[0].length;
-console.log(`Using chunk size: ${chunkSize} bytes`);
+console.log('Using chunk size: ' + (chunkSize) + ' bytes');
 for (let i = 0; i < this.totalChunks; i++) {
 const chunk = this.sourceChunks[i];
 if (!chunk) {
-console.error(`Chunk ${i} is missing`);
+console.error('Chunk ' + (i) + ' is missing');
 continue;
 }
 if (!(chunk instanceof Uint8Array)) {
-console.error(`Chunk ${i} is not a Uint8Array: ${typeof chunk}`);
+console.error('Chunk ' + (i) + ' is not a Uint8Array: ' + (typeof chunk));
 continue;
 }
 const bytesToCopy = Math.min(chunk.length, fileData.length - offset);
@@ -942,20 +942,20 @@ try {
 fileData.set(chunk.subarray(0, bytesToCopy), offset);
 offset += bytesToCopy;
 } catch (e) {
-console.error(`Error copying chunk ${i}:`, e);
-console.error(`Chunk length: ${chunk.length}, bytesToCopy: ${bytesToCopy}, offset: ${offset}, fileData.length: ${fileData.length}`);
+console.error('Error copying chunk ' + (i) + ':', e);
+console.error('Chunk length: ' + (chunk.length) + ', bytesToCopy: ' + (bytesToCopy) + ', offset: ' + (offset) + ', fileData.length: ' + (fileData.length));
 throw e;
 }
 if (offset >= fileData.length) {
 break;
 }
 }
-console.log(`File reconstruction complete. Total size: ${fileData.length} bytes`);
+console.log('File reconstruction complete. Total size: ' + (fileData.length) + ' bytes');
 try {
 console.log("Decoding base64 data...");
 const base64String = this.arrayBufferToString(fileData);
 fileData = this.base64ToArrayBuffer(base64String);
-console.log(`Base64 decoded size: ${fileData.length} bytes`);
+console.log('Base64 decoded size: ' + (fileData.length) + ' bytes');
 } catch (e) {
 console.error("Error decoding base64:", e);
 }
@@ -1063,7 +1063,7 @@ frameIndex: frameIndex
 this.addToRecentlySeen(decodedText, frameIndex);
 this.detectionStats.lastDetectedFrameIndex = frameIndex;
 if (this.detectionStats.successes % 10 === 0) {
-console.log(`QR detection stats: ${this.detectionStats.successes}/${this.detectionStats.attempts} successful (${this.detectionStats.duplicates} duplicates)`);
+console.log('QR detection stats: ' + (this.detectionStats.successes) + '/' + (this.detectionStats.attempts) + ' successful (' + (this.detectionStats.duplicates) + ' duplicates)');
 }
 const lastResult = this.html5QrCode._lastScanResult || null;
 resolve({
@@ -1173,7 +1173,7 @@ console.error("Error clearing HTML5QRCode", error);
 if (this.qrElement && this.qrElement.parentNode) {
 this.qrElement.parentNode.removeChild(this.qrElement);
 }
-console.log(`QR processor disposed. Final stats: ${JSON.stringify(this.detectionStats)}`);
+console.log('QR processor disposed. Final stats: ' + (JSON.stringify(this.detectionStats)));
 }
 }
 class CameraProcessor {
@@ -1211,7 +1211,7 @@ this.cameraSelect.appendChild(defaultOption);
 videoDevices.forEach((device, index) => {
 const option = document.createElement('option');
 option.value = device.deviceId;
-option.textContent = device.label || `Camera ${index + 1}`;
+option.textContent = device.label || 'Camera ' + (index + 1);
 this.cameraSelect.appendChild(option);
 });
 if (videoDevices.length === 1) {
@@ -1261,7 +1261,7 @@ resolve();
 });
 this.canvas.width = this.videoElement.videoWidth;
 this.canvas.height = this.videoElement.videoHeight;
-console.log(`Camera initialized: ${this.videoElement.videoWidth}x${this.videoElement.videoHeight}`);
+console.log('Camera initialized: ' + (this.videoElement.videoWidth) + 'x' + (this.videoElement.videoHeight));
 return true;
 } catch (error) {
 console.error('Error initializing camera:', error);
@@ -1288,7 +1288,7 @@ this.processTimer = setInterval(() => {
 this.processCurrentFrame();
 }, this.frameInterval);
 }
-console.log(`Camera processing started with frame interval: ${this.frameInterval}ms`);
+console.log('Camera processing started with frame interval: ' + (this.frameInterval) + 'ms');
 }
 processWithVideoFrameCallback() {
 const processFrame = (now, metadata) => {
@@ -1321,11 +1321,11 @@ this.frameStats.processingTimes.push(processingTime);
 if (this.frameStats.processed % 30 === 0) {
 const avgTime = this.frameStats.processingTimes.reduce((sum, time) => sum + time, 0) /
 this.frameStats.processingTimes.length;
-console.log(`Avg frame processing time: ${avgTime.toFixed(2)}ms over last ${this.frameStats.processingTimes.length} frames`);
+console.log('Avg frame processing time: ' + (avgTime.toFixed(2)) + 'ms over last ' + (this.frameStats.processingTimes.length) + ' frames');
 this.frameStats.processingTimes = [];
 if (avgTime > this.frameInterval * 1.5) {
 const newInterval = Math.min(Math.ceil(avgTime * 1.2), 200);
-console.log(`Adjusting frame interval from ${this.frameInterval}ms to ${newInterval}ms due to performance`);
+console.log('Adjusting frame interval from ' + (this.frameInterval) + 'ms to ' + (newInterval) + 'ms due to performance');
 this.frameInterval = newInterval;
 if (this.processTimer) {
 clearInterval(this.processTimer);
@@ -1348,7 +1348,7 @@ if (this.processTimer) {
 clearInterval(this.processTimer);
 this.processTimer = null;
 }
-console.log(`Camera processing stopped. Processed ${this.frameStats.processed} frames, detected ${this.frameStats.qrCodesDetected} QR codes`);
+console.log('Camera processing stopped. Processed ' + (this.frameStats.processed) + ' frames, detected ' + (this.frameStats.qrCodesDetected) + ' QR codes');
 }
 stopCamera() {
 this.stopProcessing();
@@ -1423,7 +1423,7 @@ throw new Error("No camera found. Please connect a camera and refresh the page."
 } else if (permissionError.name === 'NotReadableError') {
 throw new Error("Camera is in use by another application. Please close other apps using the camera.");
 } else {
-throw new Error(`Camera access failed: ${permissionError.message}`);
+throw new Error('Camera access failed: ' + (permissionError.message));
 }
 }
 }
@@ -1436,7 +1436,7 @@ throw new Error("Failed to list available cameras");
 this.cameraProcessor = new CameraProcessor({
 frameCallback: this.handleVideoFrame.bind(this),
 progressCallback: this.handleProgress.bind(this),
-errorCallback: (error) => this.logger.error(`Camera error: ${error.message}`)
+errorCallback: (error) => this.logger.error('Camera error: ' + (error.message))
 });
 const success = await this.cameraProcessor.listCameras();
 if (!success) {
@@ -1447,9 +1447,9 @@ const cameraSelect = document.getElementById('cameraSelect');
 if (cameraSelect.options.length <= 1) {
 throw new Error("No cameras available. Please connect a camera and refresh the page.");
 }
-this.logger.info(`Camera list initialized successfully with ${cameraSelect.options.length - 1} camera(s)`);
+this.logger.info('Camera list initialized successfully with ' + (cameraSelect.options.length - 1) + ' camera(s)');
 } catch (error) {
-this.logger.error(`Failed to initialize camera list: ${error.message}`);
+this.logger.error('Failed to initialize camera list: ' + (error.message));
 this.ui.showErrorMessage(error.message);
 document.getElementById('startCameraBtn').disabled = true;
 document.getElementById('cameraSelect').disabled = true;
@@ -1541,8 +1541,8 @@ this.logger.info("Camera processing started");
 throw new Error("Failed to initialize camera");
 }
 } catch (error) {
-this.logger.error(`Failed to start camera: ${error.message}`);
-this.ui.showErrorMessage(`Failed to start camera: ${error.message}`);
+this.logger.error('Failed to start camera: ' + (error.message));
+this.ui.showErrorMessage('Failed to start camera: ' + (error.message));
 this.stopCamera();
 }
 }
@@ -1551,7 +1551,7 @@ if (!this.cameraProcessor) {
 this.cameraProcessor = new CameraProcessor({
 frameCallback: this.handleVideoFrame.bind(this),
 progressCallback: this.handleProgress.bind(this),
-errorCallback: (error) => this.logger.error(`Camera error: ${error.message}`),
+errorCallback: (error) => this.logger.error('Camera error: ' + (error.message)),
 frameInterval: this.settings.frameInterval
 });
 } else {
@@ -1559,7 +1559,7 @@ this.cameraProcessor.frameInterval = this.settings.frameInterval;
 }
 this.qrProcessor = new EnhancedQRProcessor({
 onQrDetected: this.handleQRCodeResult.bind(this),
-onError: (error) => this.logger.error(`QR processing error: ${error.message}`),
+onError: (error) => this.logger.error('QR processing error: ' + (error.message)),
 detectionConfidence: this.settings.qrDetectionConfidence
 });
 await this.qrProcessor.initialize();
@@ -1580,12 +1580,12 @@ this.ui.clearQRHighlight();
 document.getElementById('startCameraBtn').disabled = false;
 document.getElementById('stopCameraBtn').disabled = true;
 this.logger.info("Camera processing stopped");
-this.logger.info(`Processing summary: Detected ${this.qrCodesDetected} QR codes, processed ${this.packetsProcessed} packets`);
+this.logger.info('Processing summary: Detected ' + (this.qrCodesDetected) + ' QR codes, processed ' + (this.packetsProcessed) + ' packets');
 if (this.metadataReceived) {
 const progress = this.fountainDecoder.getRecoveryProgress();
-this.logger.info(`File recovery progress: ${progress.recovered}/${progress.total} chunks (${progress.percentage}%)`);
+this.logger.info('File recovery progress: ' + (progress.recovered) + '/' + (progress.total) + ' chunks (' + (progress.percentage) + '%)');
 if (progress.packetStats) {
-this.logger.info(`Packet statistics: ${JSON.stringify(progress.packetStats)}`);
+this.logger.info('Packet statistics: ' + (JSON.stringify(progress.packetStats)));
 }
 }
 }
@@ -1616,9 +1616,9 @@ result.bounds.y,
 result.bounds.width,
 result.bounds.height
 );
-this.logger.info(`QR code detected in frame ${frameIndex} at position [${result.bounds.x.toFixed(0)}, ${result.bounds.y.toFixed(0)}]`);
+this.logger.info('QR code detected in frame ' + (frameIndex) + ' at position [' + (result.bounds.x.toFixed(0)) + ', ' + (result.bounds.y.toFixed(0)) + ']');
 } else {
-this.logger.info(`QR code detected in frame ${frameIndex}`);
+this.logger.info('QR code detected in frame ' + (frameIndex));
 }
 this.handleQRCodeResult(result);
 } else if (result.isDuplicate) {
@@ -1626,7 +1626,7 @@ this.handleQRCodeResult(result);
 this.ui.clearQRHighlight();
 }
 } catch (error) {
-this.logger.error(`Error processing frame ${frameIndex}: ${error.message}`);
+this.logger.error('Error processing frame ' + (frameIndex) + ': ' + (error.message));
 }
 }
 handleQRCodeResult(result) {
@@ -1634,17 +1634,17 @@ if (!result.success) {
 return;
 }
 const { qrData, frameIndex } = result;
-this.logger.debug(`QR code detected in frame ${frameIndex}: ${qrData.substring(0, 30)}...`);
+this.logger.debug('QR code detected in frame ' + (frameIndex) + ': ' + (qrData.substring(0, 30)) + '...');
 const packetResult = this.packetProcessor.processQRData(qrData, frameIndex);
 if (packetResult.success) {
 this.handlePacketResult(packetResult);
 } else {
-this.logger.warn(`Failed to process QR data: ${packetResult.error}`);
+this.logger.warn('Failed to process QR data: ' + (packetResult.error));
 }
 }
 handlePacketResult(result) {
 if (!result.success) {
-this.logger.warn(`Failed to process packet: ${result.error}`);
+this.logger.warn('Failed to process packet: ' + (result.error));
 return;
 }
 this.packetsProcessed++;
@@ -1669,15 +1669,13 @@ this.logger.warn("Received metadata for a different file, reinitializing");
 this.metadataReceived = true;
 this.fileMetadata = metadata;
 this.ui.initializeChunkGrid(metadata.chunksCount);
-this.ui.updateFileInfo(`
-<div><strong>File Name:</strong> ${metadata.fileName}</div><div><strong>File Type:</strong> ${metadata.fileType}</div><div><strong>File Size:</strong> ${this.formatFileSize(metadata.fileSize)}</div><div><strong>Chunks:</strong> ${metadata.chunksCount}</div><div><strong>Protocol Version:</strong> ${metadata.protocolVersion}</div>
-`);
+this.ui.updateFileInfo('\n <div><strong>File Name:</strong> ' + (metadata.fileName) + '</div>\n <div><strong>File Type:</strong> ' + (metadata.fileType) + '</div>\n <div><strong>File Size:</strong> ' + (this.formatFileSize(metadata.fileSize)) + '</div>\n <div><strong>Chunks:</strong> ' + (metadata.chunksCount) + '</div>\n <div><strong>Protocol Version:</strong> ' + (metadata.protocolVersion) + '</div>\n ');
 this.fountainDecoder.initialize(metadata);
 for (let i = 0; i < metadata.chunksCount; i++) {
 this.missingChunks.add(i);
 }
 this.updateMissingChunksUI();
-this.logger.info(`Metadata received: ${metadata.fileName} (${this.formatFileSize(metadata.fileSize)}), ${metadata.chunksCount} chunks`);
+this.logger.info('Metadata received: ' + (metadata.fileName) + ' (' + (this.formatFileSize(metadata.fileSize)) + '), ' + (metadata.chunksCount) + ' chunks');
 }
 handleDataPacket(packet) {
 if (!this.metadataReceived) {
@@ -1699,7 +1697,7 @@ this.missingChunks.delete(chunkIndex);
 this.ui.markChunkAsRecovered(chunkIndex);
 });
 this.updateMissingChunksUI();
-this.logger.info(`Recovered ${newlyRecovered.length} new chunks, total: ${this.recoveredChunks.size}/${this.fileMetadata.chunksCount}`);
+this.logger.info('Recovered ' + (newlyRecovered.length) + ' new chunks, total: ' + (this.recoveredChunks.size) + '/' + (this.fileMetadata.chunksCount));
 }
 }
 }
@@ -1707,9 +1705,7 @@ updateMissingChunksUI() {
 const missingCount = this.missingChunks.size;
 const totalCount = this.fileMetadata.chunksCount;
 const recoveredCount = totalCount - missingCount;
-document.getElementById('missingChunks').innerHTML = `
-<div>Recovered chunks: ${recoveredCount}/${totalCount} (${Math.round(recoveredCount / totalCount * 100)}%)</div><div>Missing chunks: ${missingCount}</div>
-`;
+document.getElementById('missingChunks').innerHTML = '\n <div>Recovered chunks: ' + (recoveredCount) + '/' + (totalCount) + ' (' + (Math.round(recoveredCount / totalCount * 100)) + '%)</div>\n <div>Missing chunks: ' + (missingCount) + '</div>\n ';
 if (missingCount === 0 && recoveredCount === totalCount) {
 this.logger.info("All chunks recovered, finalizing file...");
 }
@@ -1719,9 +1715,7 @@ this.logger.info("File recovery complete!");
 this.recoveredFileData = fileData;
 document.getElementById('downloadContainer').style.display = 'block';
 const fileInfo = document.getElementById('fileInfo').innerHTML;
-document.getElementById('fileInfo').innerHTML = fileInfo + `
-<div style="margin-top: 10px; color: var(--success-color);"><strong>File Successfully Recovered!</strong></div>
-`;
+document.getElementById('fileInfo').innerHTML = fileInfo + '\n <div style="margin-top: 10px; color: var(--success-color);">\n <strong>File Successfully Recovered!</strong>\n </div>\n ';
 this.downloadFile();
 }
 downloadFile() {
@@ -1741,10 +1735,10 @@ setTimeout(() => {
 document.body.removeChild(a);
 URL.revokeObjectURL(url);
 }, 100);
-this.logger.info(`File "${this.fileMetadata.fileName}" downloaded (${this.formatFileSize(this.recoveredFileData.byteLength)})`);
+this.logger.info('File "' + (this.fileMetadata.fileName) + '" downloaded (' + (this.formatFileSize(this.recoveredFileData.byteLength)) + ')');
 } catch (error) {
-this.logger.error(`Error downloading file: ${error.message}`);
-this.ui.showErrorMessage(`Error downloading file: ${error.message}`);
+this.logger.error('Error downloading file: ' + (error.message));
+this.ui.showErrorMessage('Error downloading file: ' + (error.message));
 }
 }
 saveSettings() {
@@ -1763,13 +1757,13 @@ cameraResolution: ['auto', 'hd', 'fullhd', 'low'].includes(cameraResolution) ? c
 if (this.cameraProcessor) {
 this.cameraProcessor.frameInterval = this.settings.frameInterval;
 }
-this.logger.info(`Settings updated: ${JSON.stringify(this.settings)}`);
+this.logger.info('Settings updated: ' + (JSON.stringify(this.settings)));
 this.ui.hideSettingsModal();
 }
 formatFileSize(bytes) {
-if (bytes < 1024) return `${bytes} bytes`;
-if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
-return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+if (bytes < 1024) return (bytes) + ' bytes';
+if (bytes < 1024 * 1024) return ((bytes / 1024).toFixed(2)) + ' KB';
+return ((bytes / (1024 * 1024)).toFixed(2)) + ' MB';
 }
 }
 document.addEventListener('DOMContentLoaded', () => {
