@@ -443,6 +443,7 @@ qrDetectionConfidence: 0.5
 this.discoveryMode = false;
 this.discoveredFiles = new Map();
 this.currentActiveFile = null;
+this.downloadedFiles = new Set();
 this.qrCodesDetected = 0;
 this.packetsProcessed = 0;
 this.recoveredFileData = null;
@@ -480,6 +481,8 @@ this.missingChunks = new Set();
 this.qrCodesDetected = 0;
 this.packetsProcessed = 0;
 this.recoveredFileData = null;
+this.downloadedFiles = new Set();
+this.discoveredFiles = new Map();
 this.ui.resetChunkGrid();
 this.ui.updateFileInfo("No file detected yet");
 document.getElementById('missingChunks').textContent = "Waiting for metadata...";
@@ -914,7 +917,26 @@ fileInfo.completed = true;
 fileInfo.recoveredData = fileData;
 fileInfo.recoveredAt = performance.now();
 this.logger.info(`💾 DISCOVERY: Stored completed file: ${fileName} (${fileData.byteLength} bytes)`);
+if (!this.downloadedFiles.has(fileName)) {
+console.log(`📥 Auto-downloading completed file during discovery: ${fileName}`);
+this.downloadCompletedFile(fileName);
+console.log(`🔍 DISCOVERY: File ${fileName} downloaded but continuing discovery to find all files in video`);
+} else {
+console.log(`⏭️ ENTERPRISE: File ${fileName} already downloaded during discovery - skipping duplicate`);
 }
+}
+const totalChunks = this.fileMetadata.chunksCount;
+const actualRecoveredChunks = this.fountainDecoder ? this.fountainDecoder.recoveredChunkCount : this.recoveredChunks.size;
+console.log(`🔍 ENTERPRISE UI FIX: Using fountain decoder count ${actualRecoveredChunks} instead of stale main decoder count ${this.recoveredChunks.size}`);
+document.getElementById('missingChunks').innerHTML = `
+<div>Recovered chunks: ${actualRecoveredChunks}/${totalChunks} (100%)</div><div>Missing chunks: 0</div><div style="color: #16a34a; font-weight: bold;">✅ FILE COMPLETE - DOWNLOADED</div>
+`;
+this.ui.updateFileInfo(`✅ File ${fileName} FULLY COMPLETE (${actualRecoveredChunks}/${totalChunks} chunks)! Downloaded and continuing discovery...`);
+const completionInfo = {
+fileName: fileName,
+totalChunks: totalChunks,
+recoveredChunks: actualRecoveredChunks
+};
 this.logger.info(`🔄 DISCOVERY: Resetting state after ${fileName} completion - ready for next file`);
 this.fountainDecoder = new EnhancedFountainDecoder();
 this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
@@ -923,8 +945,10 @@ this.fileMetadata = null;
 this.recoveredChunks = new Map();
 this.missingChunks = new Set();
 this.currentActiveFile = null;
+setTimeout(() => {
 this.ui.resetChunkGrid();
-this.ui.updateFileInfo(`✅ File ${fileName} completed during discovery! Scanning for more files...`);
+this.ui.updateFileInfo(`🔍 Discovery continuing after ${completionInfo.fileName} (${completionInfo.recoveredChunks}/${completionInfo.totalChunks}) - scanning for more files...`);
+}, 2000);
 this.updateDiscoveredFilesUI();
 return;
 }
@@ -936,9 +960,14 @@ console.error('Error during stopProcessing in handleFileComplete:', error);
 this.isProcessing = false;
 }
 }
-if (!this.discoveryMode) {
-this.downloadFile();
+const fileName = this.fileMetadata.fileName;
+if (this.downloadedFiles.has(fileName)) {
+console.log(`⏭️ ENTERPRISE: File ${fileName} already downloaded - skipping duplicate download`);
+this.logger.info(`File ${fileName} recovery complete (already downloaded)`);
+return;
 }
+console.log(`💾 File ${fileName} complete - triggering automatic download`);
+this.downloadFile();
 }
 downloadFile() {
 if (!this.recoveredFileData || !this.fileMetadata) {
@@ -957,8 +986,17 @@ setTimeout(() => {
 document.body.removeChild(a);
 URL.revokeObjectURL(url);
 }, 100);
-this.logger.info(`File "${this.fileMetadata.fileName}" downloaded (${this.formatFileSize(this.recoveredFileData.byteLength)})`);
+this.downloadedFiles.add(this.fileMetadata.fileName);
+this.logger.info(`💾 ENTERPRISE: Auto-downloaded "${this.fileMetadata.fileName}" (${this.formatFileSize(this.recoveredFileData.byteLength)})`);
+console.log(`✅ ENTERPRISE SUCCESS: File download completed automatically for user convenience`);
+console.log(`📋 ENTERPRISE: Added "${this.fileMetadata.fileName}" to downloaded files list (${this.downloadedFiles.size} total)`);
+if (!this.discoveryMode) {
+this.checkAndStopIfAllFilesDownloaded();
+} else {
+console.log(`🔍 DISCOVERY: File downloaded but discovery mode active - continuing to scan entire video`);
+}
 } catch (error) {
+console.error(`❌ ENTERPRISE ERROR: Auto-download failed for ${this.fileMetadata.fileName}:`, error.message);
 this.logger.error(`Error downloading file: ${error.message}`);
 this.ui.showErrorMessage(`Error downloading file: ${error.message}`);
 }
@@ -1209,9 +1247,33 @@ setTimeout(() => {
 document.body.removeChild(a);
 URL.revokeObjectURL(url);
 }, 100);
-this.logger.info(`📥 Downloaded completed file: ${filename} (${this.formatFileSize(fileInfo.recoveredData.byteLength)})`);
+this.downloadedFiles.add(filename);
+this.logger.info(`📥 ENTERPRISE: Auto-downloaded discovered file: ${filename} (${this.formatFileSize(fileInfo.recoveredData.byteLength)})`);
+console.log(`✅ ENTERPRISE SUCCESS: Discovered file "${filename}" automatically downloaded`);
+console.log(`📋 ENTERPRISE: Added "${filename}" to downloaded files list (${this.downloadedFiles.size} total)`);
 } catch (error) {
+console.error(`❌ ENTERPRISE ERROR: Auto-download failed for discovered file ${filename}:`, error.message);
 this.logger.error(`Error downloading file ${filename}: ${error.message}`);
+}
+}
+checkAndStopIfAllFilesDownloaded() {
+if (this.discoveredFiles.size === 0) return;
+const discoveredFileNames = Array.from(this.discoveredFiles.keys());
+const downloadedFileNames = Array.from(this.downloadedFiles);
+const currentLoop = this.videoProcessor ? (this.videoProcessor.loopCount || 1) : 1;
+const allDiscoveredFilesDownloaded = discoveredFileNames.every(filename =>
+downloadedFileNames.includes(filename)
+);
+console.log(`📊 ENTERPRISE SCALE CHECK: ${downloadedFileNames.length}/${discoveredFileNames.length} files downloaded, loop ${currentLoop}`);
+if (allDiscoveredFilesDownloaded) {
+if (currentLoop === 1) {
+console.log(`📊 ENTERPRISE: All ${discoveredFileNames.length} files downloaded in discovery loop - will validate at loop 2`);
+} else {
+console.log(`✅ ENTERPRISE: All ${discoveredFileNames.length} files confirmed downloaded in loop ${currentLoop}`);
+}
+} else {
+const remainingFiles = discoveredFileNames.filter(name => !downloadedFileNames.includes(name));
+console.log(`🔄 ENTERPRISE: ${remainingFiles.length} files still needed: ${remainingFiles.join(', ')}`);
 }
 }
 formatFileSize(bytes) {

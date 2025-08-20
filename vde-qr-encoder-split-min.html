@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>QR File Transfer - Optimized Encoder</title><script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script><style>*{margin:0;padding:0;box-sizing:border-box}
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>QR File Transfer - Encoder with Auto-Split</title><script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script><style>*{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,-apple-system,sans-serif;line-height:1.5;background:#f5f5f5;color:#333;max-width:1200px;margin:0 auto;padding:20px}
 h1{margin:20px 0;color:#2563eb}
 .container{display:flex;flex-wrap:wrap;gap:20px}
@@ -226,6 +226,11 @@ Systematic phase: Recommend 1-2 for highest reliability
 Fountain Max Degree <span class="value-display" id="fountainDegreeValue">3</span><span class="tooltip" data-tooltip="Maximum degree for fountain coding phase (redundancy). Higher values create more complex combinations but better error recovery.">?</span></div><input type="range" id="fountainDegreeSlider" min="2" max="20" step="1" value="3"><div class="slider-labels"><span>Simple (2)</span><span>Complex (20)</span></div><div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
 Fountain phase: Higher degrees improve recovery but need more processing
 </div></div><div class="control-group"><div class="control-label">
+Auto-Split Threshold <span class="value-display" id="splitThresholdValue">100KB</span><span class="tooltip" data-tooltip="Files larger than this size will be automatically split into manageable parts for QR transmission.">?</span></div><input type="range" id="splitThresholdSlider" min="50" max="500" step="10" value="100"><div class="slider-labels"><span>50KB</span><span>500KB</span></div><div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+Large files split automatically for better QR transmission reliability
+</div></div><div class="control-group"><label class="control-switch"><input type="checkbox" id="enableAutoSplitCheckbox" checked><span class="switch-label">Enable Auto-Split for Large Files</span><span class="tooltip" data-tooltip="Automatically splits large files into smaller parts for more reliable QR transmission.">?</span></label><div style="font-size: 12px; color: #6b7280; margin-top: 5px; margin-left: 24px;">
+Recommended for files >100KB to improve transmission success rate
+</div></div><div class="control-group"><div class="control-label">
 Countdown Before Start <span class="value-display" id="countdownValue">10s</span><span class="tooltip" data-tooltip="Time to prepare before QR codes start displaying.">?</span></div><input type="range" id="countdownSlider" min="0" max="30" value="10"><div class="slider-labels"><span>None</span><span>30s</span></div></div><div class="control-group"><label class="control-switch"><input type="checkbox" id="fullscreenCheckbox" checked><span class="switch-label">Start in Fullscreen Mode (Recommended)</span></label></div><div class="control-group"><label class="control-switch"><input type="checkbox" id="showGuidesCheckbox"><span class="switch-label">Show Scanner Alignment Guides</span></label></div><div class="control-group"><label class="control-switch"><input type="checkbox" id="enableTransitionsCheckbox" checked><span class="switch-label">Enable Smooth Transitions</span><span class="tooltip" data-tooltip="Enables subtle transitions between QR codes to improve scanning reliability.">?</span></label><div style="font-size: 12px; color: #6b7280; margin-top: 5px; margin-left: 24px;">
 Always on for best results; disable only for older devices
 </div></div><div class="control-group"><label class="control-switch"><input type="checkbox" id="highDensityCheckbox"><span class="switch-label">High Density Mode</span><span class="tooltip" data-tooltip="Increases QR code data capacity but requires enhanced scanner capabilities.">?</span></label><div style="font-size: 12px; color: #6b7280; margin-top: 5px; margin-left: 24px;">
@@ -243,12 +248,15 @@ const redundancySlider = document.getElementById('redundancySlider');
 const countdownSlider = document.getElementById('countdownSlider');
 const systematicChunksSlider = document.getElementById('systematicChunksSlider');
 const fountainDegreeSlider = document.getElementById('fountainDegreeSlider');
+const splitThresholdSlider = document.getElementById('splitThresholdSlider');
+const enableAutoSplitCheckbox = document.getElementById('enableAutoSplitCheckbox');
 const speedValue = document.getElementById('speedValue');
 const sizeValue = document.getElementById('sizeValue');
 const chunkValue = document.getElementById('chunkValue');
 const redundancyValue = document.getElementById('redundancyValue');
 const systematicChunksValue = document.getElementById('systematicChunksValue');
 const fountainDegreeValue = document.getElementById('fountainDegreeValue');
+const splitThresholdValue = document.getElementById('splitThresholdValue');
 const countdownValue = document.getElementById('countdownValue');
 const errorCorrectionSelect = document.getElementById('errorCorrectionSelect');
 const fullscreenCheckbox = document.getElementById('fullscreenCheckbox');
@@ -334,6 +342,10 @@ systematicChunksValue.textContent = systematicChunks;
 fountainDegreeSlider.addEventListener('input', () => {
 const fountainDegree = fountainDegreeSlider.value;
 fountainDegreeValue.textContent = fountainDegree;
+});
+splitThresholdSlider.addEventListener('input', () => {
+const threshold = splitThresholdSlider.value;
+splitThresholdValue.textContent = `${threshold}KB`;
 });
 showGuidesCheckbox.addEventListener('change', () => {
 if (showGuidesCheckbox.checked) {
@@ -520,6 +532,44 @@ fileList.forEach(f => f.selected = false);
 updateFileListDisplay();
 updateFileLabel();
 });
+async function splitFileIntoParts(file, maxPartSize) {
+return new Promise((resolve, reject) => {
+const fileReader = new FileReader();
+fileReader.onload = () => {
+try {
+const arrayBuffer = fileReader.result;
+const fileData = new Uint8Array(arrayBuffer);
+const parts = [];
+const totalParts = Math.ceil(fileData.length / maxPartSize);
+console.log(`✂️ ENTERPRISE: Splitting ${file.name} (${fileData.length} bytes) into ${totalParts} parts of ~${formatFileSize(maxPartSize)} each`);
+for (let i = 0; i < totalParts; i++) {
+const start = i * maxPartSize;
+const end = Math.min(start + maxPartSize, fileData.length);
+const partData = fileData.slice(start, end);
+const fileExtension = file.name.split('.').pop();
+const baseName = file.name.replace(`.${fileExtension}`, '');
+const partName = `${baseName}.part${i + 1}-${totalParts}.${fileExtension}`;
+const partBlob = new Blob([partData], { type: file.type });
+const partFile = new File([partBlob], partName, { type: file.type });
+parts.push(partFile);
+console.log(`📦 Created part ${i + 1}/${totalParts}: ${partName} (${formatFileSize(partData.length)})`);
+}
+resolve(parts);
+} catch (error) {
+reject(error);
+}
+};
+fileReader.onerror = reject;
+fileReader.readAsArrayBuffer(file);
+});
+}
+function formatFileSize(bytes) {
+if (bytes === 0) return '0 Bytes';
+const k = 1024;
+const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+const i = Math.floor(Math.log(bytes) / Math.log(k));
+return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
 async function processBatchFiles(selectedFiles, autoStart = false) {
 currentProcessingIndex = 0;
 console.log(`📁 Starting COMBINED batch processing of ${selectedFiles.length} files...`);
@@ -530,12 +580,29 @@ for (let i = 0; i < selectedFiles.length; i++) {
 const fileItem = selectedFiles[i];
 currentProcessingIndex = i;
 try {
-console.log(`📄 Generating QR codes for file ${i + 1}/${selectedFiles.length}: ${fileItem.name}`);
+console.log(`📄 Processing file ${i + 1}/${selectedFiles.length}: ${fileItem.name} (${fileItem.size} bytes)`);
 updateFileStatus(fileItem.id, 'inprogress');
+const shouldSplit = enableAutoSplitCheckbox.checked &&
+fileItem.size > (parseInt(splitThresholdSlider.value) * 1024);
+if (shouldSplit) {
+console.log(`✂️ ENTERPRISE: File ${fileItem.name} (${formatFileSize(fileItem.size)}) exceeds ${splitThresholdSlider.value}KB threshold - auto-splitting`);
+const splitParts = await splitFileIntoParts(fileItem.file, parseInt(splitThresholdSlider.value) * 1024);
+for (let partIndex = 0; partIndex < splitParts.length; partIndex++) {
+const partFile = splitParts[partIndex];
+console.log(`📦 Processing part ${partIndex + 1}/${splitParts.length}: ${partFile.name}`);
+const partPackets = await generateQRCodesForFileOnly(partFile);
+combinedPackets.push(...partPackets);
+totalCombinedPackets += partPackets.length;
+console.log(`📦 Added ${partPackets.length} packets for ${partFile.name} (total: ${totalCombinedPackets})`);
+}
+console.log(`✅ ENTERPRISE: Completed auto-split processing for ${fileItem.name} → ${splitParts.length} parts`);
+} else {
+console.log(`📄 File ${fileItem.name} (${formatFileSize(fileItem.size)}) under ${splitThresholdSlider.value}KB threshold - processing as single file`);
 const filePackets = await generateQRCodesForFileOnly(fileItem.file);
 combinedPackets.push(...filePackets);
 totalCombinedPackets += filePackets.length;
 console.log(`📦 Added ${filePackets.length} packets for ${fileItem.name} (total: ${totalCombinedPackets})`);
+}
 updateFileStatus(fileItem.id, 'sent');
 fileItem.selected = false;
 updateFileListDisplay();

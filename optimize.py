@@ -85,7 +85,10 @@ def main():
     files_to_optimize = [
         ('camera-qr-decoder.html', 'camera-qr-decoder-min.html'),
         ('vdf-qr-decoder.html', 'vdf-qr-decoder-min.html'),
-        ('vde-qr-encoder.html', 'vde-qr-encoder-min.html')
+        ('vde-qr-encoder.html', 'vde-qr-encoder-min.html'),
+        ('vde-qr-encoder-split.html', 'vde-qr-encoder-split-min.html'),
+        ('minimal-qr-decoder.html', 'minimal-qr-decoder-min.html'),
+        ('ultra-minimal-decoder.html', 'ultra-minimal-decoder-min.html')
     ]
     
     print("HTML Optimizer")
