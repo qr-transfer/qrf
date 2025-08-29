@@ -1,9 +1,9 @@
 # Optimization Summary for vde-qr-encoder-split.html
 
 ## Size Reduction
-- Original Size: 145.94 KB
-- Optimized Size: 66.66 KB
-- Bytes Saved: 81181 bytes (54.32%)
+- Original Size: 145.84 KB
+- Optimized Size: 66.63 KB
+- Bytes Saved: 81118 bytes (54.32%)
 
 ## Optimizations Applied
 1. **CSS Minification**

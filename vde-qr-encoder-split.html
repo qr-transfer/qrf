@@ -551,6 +551,10 @@
         <div class="qr-container">
             <img id="fullscreenQR" class="fullscreen-qr" src="" alt="QR Code">
             <div id="fsCountdownDisplay" class="countdown-display"></div>
+            <!-- Start button in center of screen -->
+            <button id="fullscreenStartBtn" style="position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); padding: 20px 40px; font-size: 28px; background: #16a34a; color: white; border: none; border-radius: 16px; cursor: pointer; z-index: 1001; display: none; box-shadow: 0 8px 32px rgba(0,0,0,0.5);">
+                ▶️ START QR SEQUENCE
+            </button>
         </div>
         <div class="fullscreen-counter" id="fullscreenCounter">Frame: 0 / 0</div>
         <div class="fullscreen-progress progress-container">
@@ -603,8 +607,6 @@
         const frameType = document.getElementById('frameType');
         const chunkId = document.getElementById('chunkId');
         const currentChunkInfo = document.getElementById('currentChunkInfo');
-        const elapsedTime = document.getElementById('elapsedTime');
-        const transmissionSpeed = document.getElementById('transmissionSpeed');
         const fileName = document.getElementById('fileName');
         const fileSize = document.getElementById('fileSize');
         const chunksCount = document.getElementById('chunksCount');
@@ -617,6 +619,7 @@
         const fullscreenCounter = document.getElementById('fullscreenCounter');
         const fullscreenProgressBar = document.getElementById('fullscreenProgressBar');
         const exitFullscreenBtn = document.getElementById('exitFullscreenBtn');
+        const fullscreenStartBtn = document.getElementById('fullscreenStartBtn');
         const countdownDisplay = document.getElementById('countdownDisplay');
         const fsCountdownDisplay = document.getElementById('fsCountdownDisplay');
         const fastPreset = document.getElementById('fastPreset');
@@ -1341,17 +1344,9 @@
                             console.log(`📊 Updating packet info UI...`);
                             try {
                                 // Update UI elements directly (same as updatePacketInfo)
-                                const frameCounter = document.getElementById('frameCounter');
-                                const fileName = document.getElementById('fileName');
-                                const fileSize = document.getElementById('fileSize');
-                                const chunksCount = document.getElementById('chunksCount');
-                                const packetsCount = document.getElementById('packetsCount');
-                                const redundancyLevel = document.getElementById('redundancyLevel');
-                                const transferTime = document.getElementById('transferTime');
-                                
-                                if (frameCounter) frameCounter.textContent = `Frame: 0 / ${fountainPackets.length}`;
+                                // Update file info in the main file info panel
                                 if (fileName) fileName.textContent = file.name;
-                                if (fileSize) fileSize.textContent = this.formatFileSize ? this.formatFileSize(file.size) : `${file.size} bytes`;
+                                if (fileSize) fileSize.textContent = formatFileSize(file.size);
                                 if (chunksCount) chunksCount.textContent = chunks.length;
                                 if (packetsCount) packetsCount.textContent = fountainPackets.length;
                                 if (redundancyLevel) redundancyLevel.textContent = `${parseInt(redundancySlider.value)}%`;
@@ -1596,7 +1591,7 @@
             totalFrames = fountainPackets.length;
             
             // Update UI
-            frameCounter.textContent = `Frame: 0 / ${totalFrames}`;
+            console.log(`📊 Total frames: ${totalFrames}`);
             fileName.textContent = fileNameText;
             fileSize.textContent = formatFileSize(fileSizeBytes);
             chunksCount.textContent = chunks.length;
@@ -1684,10 +1679,7 @@
                 console.log(`📋 First QR code (metadata) displayed during countdown for camera alignment`);
             }
             
-            // Initialize countdown displays OVER the QR code
-            countdownDisplay.textContent = countdown;
-            countdownDisplay.style.display = 'block';
-            
+            // Initialize countdown displays (only fullscreen countdown exists now)
             fsCountdownDisplay.textContent = countdown;
             fsCountdownDisplay.style.display = isFullscreen ? 'block' : 'none';
             
@@ -1701,7 +1693,6 @@
                 if (countdown <= 0) {
                     // Countdown complete, hide countdown and continue sequence
                     clearInterval(countdownTimer);
-                    countdownDisplay.style.display = 'none';
                     fsCountdownDisplay.style.display = 'none';
                     console.log(`⏰ Countdown finished - keeping first metadata QR for additional 3 seconds`);
                     
@@ -1712,8 +1703,7 @@
                         startPlayingFromCurrentFrame();
                     }, 3000); // Additional 3 seconds for first metadata QR
                 } else {
-                    // Update countdown displays
-                    countdownDisplay.textContent = countdown;
+                    // Update countdown display (only fullscreen exists now)
                     fsCountdownDisplay.textContent = countdown;
                 }
             }, 1000);
@@ -1759,7 +1749,6 @@
             
             // Start timestamp for transmission
             startTime = Date.now();
-            metadataInfo.style.display = 'block';
             
             // Update transmission time periodically
             transmissionTimer = setInterval(updateTransmissionStats, 1000);
@@ -1984,7 +1973,12 @@
                 
                 // Enterprise-grade UI updates with error handling
                 try {
-                    if (frameCounter) frameCounter.textContent = `Frame: ${frameIndex + 1} / ${totalFrames}`;
+                    console.log(`📍 Displaying frame: ${frameIndex + 1} / ${totalFrames}`);
+                    
+                    // Update fullscreen counter
+                    if (forFullscreen || isFullscreen) {
+                        fullscreenCounter.textContent = `Frame: ${frameIndex + 1} / ${totalFrames}`;
+                    }
                     
                     // Enterprise-safe metadata update
                     try {
@@ -1995,7 +1989,6 @@
                     }
                     
                     const progress = ((frameIndex + 1) / totalFrames) * 100;
-                    if (progressBar) progressBar.style.width = `${progress}%`;
                     if (fullscreenProgressBar) fullscreenProgressBar.style.width = `${progress}%`;
                 } catch (uiError) {
                     console.warn(`⚠️ ENTERPRISE WARNING: UI update failed for frame ${frameIndex}:`, uiError.message);
@@ -2063,7 +2056,6 @@
             if (countdownTimer) {
                 clearInterval(countdownTimer);
                 countdownTimer = null;
-                countdownDisplay.style.display = 'none';
                 if (isFullscreen) {
                     fsCountdownDisplay.style.display = 'none';
                 }
@@ -2086,18 +2078,31 @@
             stopBtn.disabled = true;
         }
 
-        // Fullscreen mode - start the actual QR sequence
+        // Fullscreen mode - show fullscreen with start button
         fullscreenBtn.addEventListener('click', () => {
             if (fountainPackets.length === 0) {
                 alert('Please generate QR codes first');
                 return;
             }
             
-            // Enter fullscreen and start the sequence
+            // Enter fullscreen mode and show start button
             isFullscreen = true;
             fullscreenDisplay.style.display = 'flex';
+            fullscreenStartBtn.style.display = 'block';
+            fullscreenCounter.textContent = `Ready: ${fountainPackets.length} QR codes prepared`;
             
-            // Start the QR sequence with countdown if enabled
+            // Show first QR code as preview
+            if (preGeneratedQRs.length > 0) {
+                displayPreGeneratedQR(0, true);
+            }
+        });
+        
+        // Fullscreen start button - actually start the QR sequence
+        fullscreenStartBtn.addEventListener('click', () => {
+            // Hide start button and begin sequence
+            fullscreenStartBtn.style.display = 'none';
+            
+            // Start the QR sequence with countdown if enabled (same as before)
             if (countdownSeconds > 0) {
                 startCountdown();
             } else {
@@ -2127,13 +2132,21 @@
         exitFullscreenBtn.addEventListener('click', () => {
             isFullscreen = false;
             fullscreenDisplay.style.display = 'none';
+            fullscreenStartBtn.style.display = 'none';
             
             // Stop fullscreen display and reset counter
             stopPlaying();
             
             // Reset frame counter so it starts from beginning next time
             currentFrame = 0;
-            console.log('🔄 Fullscreen exited - frame counter reset to 0');
+            
+            // Re-enable fullscreen button if QR codes are available
+            if (fountainPackets.length > 0) {
+                fullscreenBtn.disabled = false;
+                previewBtn.disabled = false;
+            }
+            
+            console.log('🔄 Fullscreen exited - frame counter reset to 0, buttons re-enabled');
         });
 
         // Handle window resize for fullscreen mode
@@ -2152,15 +2165,13 @@
             
             const elapsed = (Date.now() - startTime) / 1000;
             const elapsedFormatted = formatTime(elapsed);
-            elapsedTime.textContent = elapsedFormatted;
-            
-            // Calculate transmission speed
+            // Calculate transmission speed (for console logging)
             const totalBytes = fileSizeBytes;
             const progress = Math.min(currentFrame / totalFrames, 1);
             const bytesTransferred = totalBytes * progress;
             const bytesPerSecond = bytesTransferred / elapsed;
             
-            transmissionSpeed.textContent = `${formatFileSize(bytesPerSecond)}/s`;
+            console.log(`📊 Transmission: ${elapsedFormatted}, Speed: ${formatFileSize(bytesPerSecond)}/s, Progress: ${(progress * 100).toFixed(1)}%`);
         }
         
         // Format time in MM:SS format
@@ -2242,13 +2253,8 @@
                         fullscreenQR.classList.add('qr-image');
                     }
                     
-                    // Ensure countdown is visible when needed
-                    if (countdownDisplay.style.display === 'block') {
-                        fsCountdownDisplay.style.display = 'block';
-                        fsCountdownDisplay.textContent = countdownDisplay.textContent;
-                    } else {
-                        fsCountdownDisplay.style.display = 'none';
-                    }
+                    // Only fullscreen countdown exists now
+                    fsCountdownDisplay.style.display = 'none';
                 }
                 
                 // Always update regular display too
@@ -2286,17 +2292,14 @@
                     }
                 }
                 
-                if (countdownDisplay.style.display === 'block') {
-                    qrDisplay.appendChild(countdownDisplay);
-                }
-                frameCounter.textContent = `Frame: ${frameIndex + 1} / ${totalFrames}`;
+                // No countdown display needed for regular display
+                console.log(`📍 Current frame: ${frameIndex + 1} / ${totalFrames}`);
                 
                 // Update metadata display
                 updateFrameMetadata(frameIndex);
                 
-                // Update progress bar in both normal and fullscreen modes
+                // Update fullscreen progress bar
                 const progress = ((frameIndex + 1) / totalFrames) * 100;
-                progressBar.style.width = `${progress}%`;
                 fullscreenProgressBar.style.width = `${progress}%`;
                 
             } catch (error) {
@@ -2409,7 +2412,6 @@
         // Helper: Update progress bar
         function updateProgress() {
             const progress = ((currentFrame + 1) / totalFrames) * 100;
-            progressBar.style.width = `${progress}%`;
             if (isFullscreen) {
                 fullscreenProgressBar.style.width = `${progress}%`;
             }

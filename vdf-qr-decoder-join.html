@@ -2537,7 +2537,6 @@
         document.getElementById('scanProgressBar').style.width = '0%';
         document.getElementById('scanProgressText').textContent = 'Frames: 0/0 | Time Remaining: --:-- | Loop: 1';
         document.getElementById('downloadContainer').style.display = 'none';
-        document.getElementById('continueBtn').disabled = true;
         this.ui.clearQRHighlight();
         this.ui.hideErrorMessage();
 
@@ -2612,11 +2611,10 @@
           // Enable start button once video is loaded
           videoElement.onloadedmetadata = () => {
             document.getElementById('startScanBtn').disabled = false;
-            // Enable continue button if we have metadata and missing chunks
-            if (this.metadataReceived && this.recoveredChunks.size < this.fileMetadata.chunksCount) {
-              document.getElementById('continueBtn').disabled = false;
-            }
+            // Always enable continue button when video is loaded
+            document.getElementById('continueBtn').disabled = false;
             this.logger.info(`Video duration: ${videoElement.duration.toFixed(2)} seconds`);
+            this.logger.info('Continue button always available - can start processing from any video position');
           };
         } catch (error) {
           this.logger.error(`Error loading video: ${error.message}`);
@@ -2673,7 +2671,6 @@
 
         // Update UI
         document.getElementById('startScanBtn').disabled = true;
-        document.getElementById('continueBtn').disabled = true;
         document.getElementById('stopScanBtn').disabled = false;
         document.getElementById('downloadContainer').style.display = 'none';
         this.ui.resetChunkGrid();
@@ -2747,6 +2744,20 @@
           await this.qrProcessor.initialize();
         }
         
+        // Initialize video processor if it doesn't exist (but preserve video position)
+        if (!this.videoProcessor && this.videoFile) {
+          console.log('🔧 No video processor found, initializing new one...');
+          const videoElement = document.getElementById('videoPreview');
+          const savedPosition = videoElement.currentTime; // Save current position
+          
+          await this.initializeComponents();
+          await this.videoProcessor.initialize(this.videoFile);
+          
+          // Restore the video position after initialization
+          this.videoProcessor.videoElement.currentTime = savedPosition;
+          console.log(`🎯 Restored video position to ${savedPosition.toFixed(2)}s after initialization`);
+        }
+        
         // Re-enable processing and force additional loops
         if (this.videoProcessor && this.videoFile) {
           this.isProcessing = true;
@@ -2758,17 +2769,18 @@
           // Increase frame rate for better detection (faster processing)
           this.videoProcessor.frameInterval = Math.max(this.videoProcessor.frameInterval / 2, 1);
           
-          console.log(`🔄 Manual continue: Starting loop ${this.videoProcessor.loopCount} with ${this.videoProcessor.frameInterval}ms interval`);
+          // Get current position BEFORE any operations
+          const currentPosition = this.videoProcessor.videoElement.currentTime;
+          console.log(`🔄 Manual continue: Starting loop ${this.videoProcessor.loopCount} from position ${currentPosition.toFixed(2)}s with ${this.videoProcessor.frameInterval}ms interval`);
           
           // Update status
           const loopInfo = document.getElementById('loopInfo');
           if (loopInfo) {
-            loopInfo.textContent = `Status: Manual continue - loop ${this.videoProcessor.loopCount} with faster frame rate...`;
+            loopInfo.textContent = `Status: Manual continue - loop ${this.videoProcessor.loopCount} from ${currentPosition.toFixed(1)}s...`;
           }
           
-          // Continue from current video position (don't reset to beginning)
-          const currentPosition = this.videoProcessor.videoElement.currentTime;
-          console.log(`🎯 Continue from current position: ${currentPosition.toFixed(2)}s (not restarting from beginning)`);
+          // Continue from current video position (absolutely no reset)
+          console.log(`🎯 Starting processing from current position: ${currentPosition.toFixed(2)}s`);
           this.videoProcessor.videoElement.play().then(() => {
             console.log(`✅ Manual continue: Video restarted, resuming processing...`);
             
@@ -2791,8 +2803,7 @@
           
           // Update UI
           document.getElementById('startScanBtn').disabled = true;
-          document.getElementById('continueBtn').disabled = true;
-          document.getElementById('stopScanBtn').disabled = false;
+            document.getElementById('stopScanBtn').disabled = false;
         } else {
           this.logger.error("Cannot continue - video processor or file not available");
         }
@@ -2814,7 +2825,6 @@
         
         // Update UI
         document.getElementById('startScanBtn').disabled = true;
-        document.getElementById('continueBtn').disabled = true;
         document.getElementById('stopScanBtn').disabled = false;
         
         try {
@@ -2864,8 +2874,7 @@
           // Update UI
           document.getElementById('startScanBtn').disabled = true;
           document.getElementById('discoverBtn').disabled = true;
-          document.getElementById('continueBtn').disabled = true;
-          document.getElementById('stopScanBtn').disabled = false;
+            document.getElementById('stopScanBtn').disabled = false;
           
           this.ui.updateFileInfo(`Processing file: ${filename}`);
           this.ui.resetChunkGrid();
@@ -2904,13 +2913,9 @@
         document.getElementById('startScanBtn').disabled = false;
         document.getElementById('stopScanBtn').disabled = true;
         
-        // Enable continue button if file isn't complete and we have video/processors
-        if (this.metadataReceived && 
-            this.recoveredChunks.size < this.fileMetadata.chunksCount && 
-            this.videoFile && 
-            this.videoProcessor) {
+        // Keep continue button enabled if video is loaded
+        if (this.videoFile) {
           document.getElementById('continueBtn').disabled = false;
-          this.logger.info("Continue button enabled - you can resume processing");
         }
         
         // Enable discover button if we have video (with null check)
@@ -3676,8 +3681,7 @@
           
           // Update UI
           document.getElementById('startScanBtn').disabled = true;
-          document.getElementById('continueBtn').disabled = true;
-          document.getElementById('stopScanBtn').disabled = false;
+            document.getElementById('stopScanBtn').disabled = false;
           
           this.ui.updateFileInfo(`Repeating range for: ${filename} (${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s)`);
           
