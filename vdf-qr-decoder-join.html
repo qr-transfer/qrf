@@ -490,10 +490,76 @@
       }
     });
     
-    // Warn when tab goes to background (affects QR processing)
+    // Handle focus/blur for pause/resume functionality
+    let wasProcessingBeforeBlur = false;
+    
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        console.warn('⚠️ Tab backgrounded - QR processing may be throttled. Keep tab active for best performance.');
+        // Tab is going to background - pause processing
+        if (window.qrFileDecoder && window.qrFileDecoder.videoProcessor && window.qrFileDecoder.videoProcessor.isProcessing) {
+          console.warn('⚠️ Tab backgrounded - Pausing QR processing to maintain accuracy');
+          wasProcessingBeforeBlur = true;
+          
+          // Pause video processing
+          if (window.qrFileDecoder.videoProcessor.videoElement) {
+            window.qrFileDecoder.videoProcessor.videoElement.pause();
+          }
+          window.qrFileDecoder.videoProcessor.pausedByFocus = true;
+          
+          // Update UI to show paused state
+          if (window.qrFileDecoder.ui) {
+            window.qrFileDecoder.ui.updateFileInfo('⏸️ Processing paused - Tab is in background. Return to tab to resume.');
+          }
+        } else {
+          wasProcessingBeforeBlur = false;
+        }
+      } else {
+        // Tab is coming back to foreground - resume if it was processing
+        if (wasProcessingBeforeBlur && window.qrFileDecoder && window.qrFileDecoder.videoProcessor && window.qrFileDecoder.videoProcessor.pausedByFocus) {
+          console.log('✅ Tab focused - Resuming QR processing');
+          
+          // Resume video processing
+          if (window.qrFileDecoder.videoProcessor.videoElement) {
+            window.qrFileDecoder.videoProcessor.videoElement.play().catch(err => {
+              console.error('Failed to resume video:', err);
+            });
+          }
+          window.qrFileDecoder.videoProcessor.pausedByFocus = false;
+          
+          // Update UI to show resumed state
+          if (window.qrFileDecoder.ui) {
+            window.qrFileDecoder.ui.updateFileInfo('▶️ Processing resumed');
+          }
+          
+          wasProcessingBeforeBlur = false;
+        }
+      }
+    });
+    
+    // Also handle window focus/blur events for better cross-browser compatibility
+    window.addEventListener('blur', () => {
+      if (window.qrFileDecoder && window.qrFileDecoder.videoProcessor && window.qrFileDecoder.videoProcessor.isProcessing) {
+        console.warn('⚠️ Window lost focus - Pausing processing');
+        wasProcessingBeforeBlur = true;
+        
+        if (window.qrFileDecoder.videoProcessor.videoElement) {
+          window.qrFileDecoder.videoProcessor.videoElement.pause();
+        }
+        window.qrFileDecoder.videoProcessor.pausedByFocus = true;
+      }
+    });
+    
+    window.addEventListener('focus', () => {
+      if (wasProcessingBeforeBlur && window.qrFileDecoder && window.qrFileDecoder.videoProcessor && window.qrFileDecoder.videoProcessor.pausedByFocus) {
+        console.log('✅ Window focused - Resuming processing');
+        
+        if (window.qrFileDecoder.videoProcessor.videoElement) {
+          window.qrFileDecoder.videoProcessor.videoElement.play().catch(err => {
+            console.error('Failed to resume video on focus:', err);
+          });
+        }
+        window.qrFileDecoder.videoProcessor.pausedByFocus = false;
+        wasProcessingBeforeBlur = false;
       }
     });
     
@@ -652,6 +718,15 @@
       }
 
       showSettingsModal() {
+        // Populate form with current settings
+        if (window.qrFileDecoder && window.qrFileDecoder.settings) {
+          const settings = window.qrFileDecoder.settings;
+          document.getElementById('workerCount').value = settings.workerCount;
+          document.getElementById('packetWorkerCount').value = settings.packetWorkerCount;
+          document.getElementById('frameInterval').value = settings.frameInterval;
+          document.getElementById('qrDetectionConfidence').value = settings.qrDetectionConfidence;
+        }
+        
         document.getElementById('settingsModal').style.display = 'block';
       }
 
@@ -1199,60 +1274,98 @@
         return true;
       }
 
-      // Process stored coded packets when new chunks are available
+      // Process stored coded packets when new chunks are available - Enhanced with multiple passes
       propagateAndDecode() {
-        let progress = true;
+        const maxPasses = 5; // Maximum number of iterative passes
+        let totalProgress = false;
 
-        while (progress) {
-          progress = false;
+        for (let pass = 1; pass <= maxPasses; pass++) {
+          let passProgress = false;
+          let iterationsThisPass = 0;
+          const maxIterationsPerPass = 100; // Prevent infinite loops
 
-          // Try to decode more chunks using the coded packets
-          for (let i = this.codedPackets.length - 1; i >= 0; i--) {
-            const packet = this.codedPackets[i];
+          console.log(`🔄 Starting decoding pass ${pass}/${maxPasses}, recovered: ${this.recoveredChunkCount}/${this.totalChunks}`);
 
-            // Count missing chunks in this packet
-            const missingChunks = packet.sourceChunks.filter(
-              chunkIndex => !this.sourceChunks[chunkIndex]
-            );
+          // Continue iterating within this pass until no more progress
+          do {
+            passProgress = false;
+            iterationsThisPass++;
 
-            if (missingChunks.length === 0) {
-              // All chunks in this packet are recovered, remove it
-              this.codedPackets.splice(i, 1);
-              continue;
-            }
+            // Try to decode more chunks using the coded packets
+            for (let i = this.codedPackets.length - 1; i >= 0; i--) {
+              const packet = this.codedPackets[i];
 
-            if (missingChunks.length === 1) {
-              // We can recover exactly one chunk
-              const missingChunkIndex = missingChunks[0];
+              // Count missing chunks in this packet
+              const missingChunks = packet.sourceChunks.filter(
+                chunkIndex => !this.sourceChunks[chunkIndex]
+              );
 
-              // Create a copy of the fountain data
-              const resultData = new Uint8Array(packet.fountainData.length);
-              resultData.set(packet.fountainData);
-
-              // XOR with all the chunks we already have
-              for (const chunkIndex of packet.sourceChunks) {
-                if (chunkIndex !== missingChunkIndex && this.sourceChunks[chunkIndex]) {
-                  this.xorData(resultData, this.sourceChunks[chunkIndex]);
-                }
+              if (missingChunks.length === 0) {
+                // All chunks in this packet are recovered, remove it
+                this.codedPackets.splice(i, 1);
+                continue;
               }
 
-              // Store the recovered chunk
-              this.storeSourceChunk(missingChunkIndex, resultData);
-              this.newlyRecoveredChunks.push(missingChunkIndex);
-              this.packetStats.usefulPackets++;
+              if (missingChunks.length === 1) {
+                // We can recover exactly one chunk
+                const missingChunkIndex = missingChunks[0];
 
-              // Remove this packet as it's been used
-              this.codedPackets.splice(i, 1);
+                // Create a copy of the fountain data
+                const resultData = new Uint8Array(packet.fountainData.length);
+                resultData.set(packet.fountainData);
 
-              progress = true;
+                // XOR with all the chunks we already have
+                for (const chunkIndex of packet.sourceChunks) {
+                  if (chunkIndex !== missingChunkIndex && this.sourceChunks[chunkIndex]) {
+                    this.xorData(resultData, this.sourceChunks[chunkIndex]);
+                  }
+                }
+
+                // Store the recovered chunk
+                this.storeSourceChunk(missingChunkIndex, resultData);
+                this.newlyRecoveredChunks.push(missingChunkIndex);
+                this.packetStats.usefulPackets++;
+
+                // Remove this packet as it's been used
+                this.codedPackets.splice(i, 1);
+
+                passProgress = true;
+                totalProgress = true;
+                
+                console.log(`✅ Pass ${pass}: Recovered chunk ${missingChunkIndex}, now ${this.recoveredChunkCount}/${this.totalChunks}`);
+              }
             }
+
+            // Safety check to prevent infinite loops
+            if (iterationsThisPass >= maxIterationsPerPass) {
+              console.warn(`⚠️ Pass ${pass}: Hit iteration limit (${maxIterationsPerPass}), moving to next pass`);
+              break;
+            }
+
+          } while (passProgress && this.recoveredChunkCount < this.totalChunks);
+
+          console.log(`📊 Pass ${pass} completed: ${iterationsThisPass} iterations, progress: ${passProgress}`);
+
+          // If we recovered all chunks, stop
+          if (this.recoveredChunkCount === this.totalChunks) {
+            console.log(`🎉 All chunks recovered in pass ${pass}!`);
+            break;
+          }
+
+          // If no progress in this pass, try one more pass (maybe packets can help each other)
+          if (!passProgress && pass < maxPasses) {
+            console.log(`⚠️ No progress in pass ${pass}, continuing to pass ${pass + 1}`);
           }
         }
 
         // Check if all chunks are recovered
         if (this.recoveredChunkCount === this.totalChunks) {
-          console.log("All chunks recovered! Finalizing file...");
+          console.log("🎯 All chunks recovered! Finalizing file...");
           this.finalizeFile();
+        } else {
+          const remainingPackets = this.codedPackets.length;
+          const recoveryRate = ((this.recoveredChunkCount / this.totalChunks) * 100).toFixed(1);
+          console.log(`📈 Decoding complete: ${this.recoveredChunkCount}/${this.totalChunks} chunks (${recoveryRate}%), ${remainingPackets} packets remaining`);
         }
         
       }
@@ -2410,12 +2523,8 @@
         this.recoveredChunks = new Map();
         this.missingChunks = new Set();
         this.wakeLock = null;
-        this.settings = {
-          workerCount: 4,
-          packetWorkerCount: 2,
-          frameInterval: 20,
-          qrDetectionConfidence: 0.5
-        };
+        // Load settings from localStorage or use defaults
+        this.settings = this.loadSettings();
 
         // File discovery state
         this.discoveryMode = false;
@@ -2527,6 +2636,23 @@
         document.querySelector('.modal .close').addEventListener('click', this.ui.hideSettingsModal.bind(this.ui));
 
         document.getElementById('resetBtn').addEventListener('click', this.resetContents.bind(this));
+        
+        // Advanced settings real-time updates
+        document.getElementById('frameInterval').addEventListener('input', (e) => {
+          this.updateSingleSetting('frameInterval', parseInt(e.target.value));
+        });
+        
+        document.getElementById('qrDetectionConfidence').addEventListener('input', (e) => {
+          this.updateSingleSetting('qrDetectionConfidence', parseFloat(e.target.value));
+        });
+        
+        document.getElementById('workerCount').addEventListener('input', (e) => {
+          this.updateSingleSetting('workerCount', parseInt(e.target.value));
+        });
+        
+        document.getElementById('packetWorkerCount').addEventListener('input', (e) => {
+          this.updateSingleSetting('packetWorkerCount', parseInt(e.target.value));
+        });
       }
 
       async handleVideoInput(event) {
@@ -3113,8 +3239,14 @@
         if (this.discoveryMode) {
           console.log(`✅ File ${this.fileMetadata.fileName} COMPLETED during discovery - storing and continuing scan`);
           
-          // Store the completed file data in the discovered files map
+          // CAPTURE ACCURATE DATA RIGHT NOW before any state changes
           const fileName = this.fileMetadata.fileName;
+          const ACCURATE_RECOVERED_COUNT = this.fountainDecoder.recoveredChunkCount;
+          const ACCURATE_TOTAL_COUNT = this.fileMetadata.chunksCount;
+          
+          console.log(`🎯 ENTERPRISE ACCURATE DATA: ${fileName} has ${ACCURATE_RECOVERED_COUNT}/${ACCURATE_TOTAL_COUNT} chunks (captured at completion moment)`);
+          
+          // Store the completed file data in the discovered files map
           if (this.discoveredFiles.has(fileName)) {
             const fileInfo = this.discoveredFiles.get(fileName);
             fileInfo.completed = true;
@@ -3135,11 +3267,11 @@
             }
           }
           
-          // Get ACCURATE completion data from the fountain decoder that just completed
-          const totalChunks = this.fileMetadata.chunksCount;
-          const actualRecoveredChunks = this.fountainDecoder ? this.fountainDecoder.recoveredChunkCount : this.recoveredChunks.size;
+          // Use the ACCURATE data captured at completion moment
+          const totalChunks = ACCURATE_TOTAL_COUNT;
+          const actualRecoveredChunks = ACCURATE_RECOVERED_COUNT;
           
-          console.log(`🔍 ENTERPRISE UI FIX: Using fountain decoder count ${actualRecoveredChunks} instead of stale main decoder count ${this.recoveredChunks.size}`);
+          console.log(`🔍 ENTERPRISE UI FIX: Using captured accurate data: ${actualRecoveredChunks}/${totalChunks}`);
           
           // Manually update the missing chunks UI to show 100% completion with CORRECT count
           document.getElementById('missingChunks').innerHTML = `
@@ -3150,11 +3282,11 @@
           
           this.ui.updateFileInfo(`✅ File ${fileName} FULLY COMPLETE (${actualRecoveredChunks}/${totalChunks} chunks)! Downloaded and continuing discovery...`);
           
-          // Store completion info for UI display (use the CORRECT fountain decoder count)
+          // Store completion info for UI display (use the ACCURATE captured data)
           const completionInfo = {
             fileName: fileName,
             totalChunks: totalChunks,
-            recoveredChunks: actualRecoveredChunks // Use the accurate fountain decoder count
+            recoveredChunks: actualRecoveredChunks // Use the captured accurate count
           };
           
           // Completely reset state for next file discovery
@@ -3179,27 +3311,40 @@
           return; // Don't stop - continue discovery
         }
         
-        // Stop processing if still running (with null checks) - only in normal mode
-        if (this.isProcessing) {
-          try {
-            this.stopProcessing();
-          } catch (error) {
-            console.error('Error during stopProcessing in handleFileComplete:', error);
-            // Manually stop if there's an error
-            this.isProcessing = false;
-          }
-        }
-        // Check if file was already downloaded to prevent duplicates
+        // Save current file name before resetting metadata
         const fileName = this.fileMetadata.fileName;
+        
+        // In normal mode, don't stop processing - continue to look for next file
+        console.log(`✅ File ${fileName} completed in normal mode - resetting decoder to continue processing for next files`);
+        
+        // Check if file was already downloaded to prevent duplicates
         if (this.downloadedFiles.has(fileName)) {
           console.log(`⏭️ ENTERPRISE: File ${fileName} already downloaded - skipping duplicate download`);
           this.logger.info(`File ${fileName} recovery complete (already downloaded)`);
+          
+          // Still need to reset decoder state for next file
+          this.fountainDecoder = new EnhancedFountainDecoder();
+          this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+          this.metadataReceived = false;
+          this.fileMetadata = null;
+          this.recoveredChunks = new Map();
+          this.missingChunks = new Set();
+          this.currentActiveFile = null;
           return;
         }
         
         // Trigger automatic download for new file (enterprise efficiency)
         console.log(`💾 File ${fileName} complete - triggering automatic download`);
         this.downloadFile();
+        
+        // Reset decoder state for next file, but keep video processing running
+        this.fountainDecoder = new EnhancedFountainDecoder();
+        this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+        this.metadataReceived = false;
+        this.fileMetadata = null;
+        this.recoveredChunks = new Map();
+        this.missingChunks = new Set();
+        this.currentActiveFile = null;
       }
 
       downloadFile() {
@@ -3262,7 +3407,102 @@
         };
 
         this.logger.info(`Settings updated: ${JSON.stringify(this.settings)}`);
+        this.saveSettingsToStorage();
         this.ui.hideSettingsModal();
+      }
+
+      // Update a single setting in real-time
+      updateSingleSetting(settingName, value) {
+        // Validate the value based on the setting
+        let validatedValue;
+        
+        switch (settingName) {
+          case 'workerCount':
+            validatedValue = isNaN(value) ? 4 : Math.min(Math.max(value, 1), 16);
+            break;
+          case 'packetWorkerCount':
+            validatedValue = isNaN(value) ? 2 : Math.min(Math.max(value, 1), 8);
+            break;
+          case 'frameInterval':
+            validatedValue = isNaN(value) ? 20 : Math.min(Math.max(value, 0), 1000);
+            break;
+          case 'qrDetectionConfidence':
+            validatedValue = isNaN(value) ? 0.5 : Math.min(Math.max(value, 0), 1);
+            break;
+          default:
+            console.warn(`Unknown setting: ${settingName}`);
+            return;
+        }
+
+        // Update the setting
+        this.settings[settingName] = validatedValue;
+
+        // Apply the setting immediately if applicable
+        if (settingName === 'frameInterval' && this.videoProcessor) {
+          this.videoProcessor.frameInterval = validatedValue;
+          
+          // Update active timer if processing
+          if (this.videoProcessor.isProcessing && this.videoProcessor.processTimer) {
+            clearInterval(this.videoProcessor.processTimer);
+            this.videoProcessor.processTimer = setInterval(() => {
+              this.videoProcessor.processCurrentFrame();
+            }, validatedValue);
+          }
+          
+          console.log(`⚡ Frame interval updated to ${validatedValue}ms`);
+        }
+
+        console.log(`📝 Setting updated: ${settingName} = ${validatedValue}`);
+        
+        // Save to localStorage
+        this.saveSettingsToStorage();
+      }
+
+      // Load settings from localStorage
+      loadSettings() {
+        try {
+          const saved = localStorage.getItem('qrDecoderSettings');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            console.log('📂 Loaded settings from localStorage:', parsed);
+            
+            // Validate and merge with defaults
+            const defaults = {
+              workerCount: 4,
+              packetWorkerCount: 2,
+              frameInterval: 20,
+              qrDetectionConfidence: 0.5
+            };
+
+            return {
+              workerCount: typeof parsed.workerCount === 'number' ? Math.min(Math.max(parsed.workerCount, 1), 16) : defaults.workerCount,
+              packetWorkerCount: typeof parsed.packetWorkerCount === 'number' ? Math.min(Math.max(parsed.packetWorkerCount, 1), 8) : defaults.packetWorkerCount,
+              frameInterval: typeof parsed.frameInterval === 'number' ? Math.min(Math.max(parsed.frameInterval, 0), 1000) : defaults.frameInterval,
+              qrDetectionConfidence: typeof parsed.qrDetectionConfidence === 'number' ? Math.min(Math.max(parsed.qrDetectionConfidence, 0), 1) : defaults.qrDetectionConfidence
+            };
+          }
+        } catch (error) {
+          console.warn('Failed to load settings from localStorage:', error);
+        }
+
+        // Return defaults if no saved settings or error
+        console.log('📂 Using default settings');
+        return {
+          workerCount: 4,
+          packetWorkerCount: 2,
+          frameInterval: 20,
+          qrDetectionConfidence: 0.5
+        };
+      }
+
+      // Save settings to localStorage
+      saveSettingsToStorage() {
+        try {
+          localStorage.setItem('qrDecoderSettings', JSON.stringify(this.settings));
+          console.log('💾 Settings saved to localStorage');
+        } catch (error) {
+          console.warn('Failed to save settings to localStorage:', error);
+        }
       }
 
       // Switch to processing a different file during discovery

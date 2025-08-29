@@ -1,9 +1,9 @@
-# Optimization Summary for vde-qr-encoder-split.html
+# Optimization Summary for ultra-minimal-decoder.html
 
 ## Size Reduction
-- Original Size: 139.62 KB
-- Optimized Size: 63.49 KB
-- Bytes Saved: 77954 bytes (54.52%)
+- Original Size: 8.09 KB
+- Optimized Size: 6.54 KB
+- Bytes Saved: 1581 bytes (19.09%)
 
 ## Optimizations Applied
 1. **CSS Minification**

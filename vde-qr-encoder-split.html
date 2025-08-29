@@ -334,10 +334,10 @@
 
             <div class="control-group">
                 <div class="control-label">
-                    Chunk Size <span class="value-display" id="chunkValue">450 chars</span>
+                    Chunk Size <span class="value-display" id="chunkValue">250 chars</span>
                     <span class="tooltip" data-tooltip="Size of each data chunk. Larger chunks transfer faster but may be harder to scan.">?</span>
                 </div>
-                <input type="range" id="chunkSlider" min="100" max="1000" step="50" value="450">
+                <input type="range" id="chunkSlider" min="100" max="1000" step="50" value="250">
                 <div class="slider-labels">
                     <span>Smaller chunks</span>
                     <span>Larger chunks</span>
@@ -394,10 +394,10 @@
             
             <div class="control-group">
                 <div class="control-label">
-                    Fountain Max Degree <span class="value-display" id="fountainDegreeValue">3</span>
+                    Fountain Max Degree <span class="value-display" id="fountainDegreeValue">5</span>
                     <span class="tooltip" data-tooltip="Maximum degree for fountain coding phase (redundancy). Higher values create more complex combinations but better error recovery.">?</span>
                 </div>
-                <input type="range" id="fountainDegreeSlider" min="2" max="20" step="1" value="3">
+                <input type="range" id="fountainDegreeSlider" min="2" max="20" step="1" value="5">
                 <div class="slider-labels">
                     <span>Simple (2)</span>
                     <span>Complex (20)</span>
@@ -488,8 +488,8 @@
                     <button id="stopBtn" disabled style="flex: 1; background: #dc2626;">Stop</button>
                 </div>
                 <div style="display: flex; gap: 10px; margin-top: 5px;">
-                    <button id="startBtn" disabled style="flex: 1;">Start Display</button>
-                    <button id="fullscreenBtn" disabled style="flex: 1; background: #4b5563;">Fullscreen</button>
+                    <button id="fullscreenBtn" disabled style="flex: 1; background: #4b5563;">Start Fullscreen Display</button>
+                    <button id="previewBtn" disabled style="flex: 1; background: #6b7280;">Preview Fullscreen</button>
                 </div>
             </div>
 
@@ -498,21 +498,8 @@
             </div>
         </div>
 
+        <!-- File Information Panel -->
         <div class="panel">
-            <div class="display-container">
-                <div id="frameCounter" style="margin-bottom: 10px; font-weight: bold;">Frame: 0 / 0</div>
-                <div id="qrDisplay" style="width: 800px; height: 800px; display: flex; align-items: center; justify-content: center;">
-                    <div class="alignment-guide" style="width: 90%; height: 90%; top: 5%; left: 5%;"></div>
-                    <div class="alignment-guide" style="width: 70%; height: 70%; top: 15%; left: 15%;"></div>
-                    <div class="guide-label" style="top: 2%; left: 50%; transform: translateX(-50%);">Keep QR code within this area</div>
-                    <div style="color: #6b7280;">QR code will appear here</div>
-                    <div id="countdownDisplay" class="countdown-display"></div>
-                </div>
-                <div class="progress-container">
-                    <div class="progress-bar" id="progressBar"></div>
-                </div>
-            </div>
-            
             <div id="fileInfo" class="file-info" style="display: none;">
                 <h3 style="margin-bottom: 10px;">File Information</h3>
                 <div class="info-row">
@@ -546,23 +533,6 @@
                 <div class="info-row high-density-indicator" style="display: none;">
                     <div class="info-label" style="color: #b91c1c;">High Density Mode:</div>
                     <div style="color: #b91c1c; font-weight: bold;">Active</div>
-                </div>
-            </div>
-            
-            <div id="metadataInfo" class="metadata-info" style="display: none;">
-                <h3 style="margin-bottom: 10px;">Transmission Details</h3>
-                <div id="qrCodeInfo" style="margin-bottom: 10px;">
-                    <div style="font-weight: bold; color: #1e40af;">Current Frame Type:</div>
-                    <div id="frameType">-</div>
-                </div>
-                <div id="currentChunkInfo" style="margin-bottom: 10px; display: none;">
-                    <div style="font-weight: bold; color: #1e40af;">Current Chunk:</div>
-                    <div id="chunkId">-</div>
-                </div>
-                <div id="transmissionStats" style="margin-top: 10px;">
-                    <div style="font-weight: bold; color: #1e40af;">Transmission Stats:</div>
-                    <div>Elapsed Time: <span id="elapsedTime">0s</span></div>
-                    <div>Avg Speed: <span id="transmissionSpeed">-</span></div>
                 </div>
             </div>
         </div>
@@ -614,14 +584,10 @@
         const highDensityCheckbox = document.getElementById('highDensityCheckbox');
         const generateAndStartBtn = document.getElementById('generateAndStartBtn');
         const generateBtn = document.getElementById('generateBtn');
-        const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
         const fullscreenBtn = document.getElementById('fullscreenBtn');
-        const qrDisplay = document.getElementById('qrDisplay');
-        const progressBar = document.getElementById('progressBar');
-        const frameCounter = document.getElementById('frameCounter');
+        const previewBtn = document.getElementById('previewBtn');
         const fileInfo = document.getElementById('fileInfo');
-        const metadataInfo = document.getElementById('metadataInfo');
         const frameType = document.getElementById('frameType');
         const chunkId = document.getElementById('chunkId');
         const currentChunkInfo = document.getElementById('currentChunkInfo');
@@ -665,56 +631,138 @@
         let wakeLock = null;
         let debugMode = false; // Control debug logging
 
+        // =============================================
+        // Settings Persistence Functions
+        // =============================================
+        
+        // Load settings from localStorage
+        function loadEncoderSettings() {
+            try {
+                const saved = localStorage.getItem('qrEncoderSettings');
+                if (saved) {
+                    const settings = JSON.parse(saved);
+                    console.log('📂 Loaded encoder settings from localStorage:', settings);
+                    
+                    // Apply loaded settings to UI elements
+                    if (settings.speed !== undefined) speedSlider.value = settings.speed;
+                    if (settings.size !== undefined) sizeSlider.value = settings.size;
+                    if (settings.chunkSize !== undefined) chunkSlider.value = settings.chunkSize;
+                    if (settings.redundancy !== undefined) redundancySlider.value = settings.redundancy;
+                    if (settings.countdown !== undefined) countdownSlider.value = settings.countdown;
+                    if (settings.systematicChunks !== undefined) systematicChunksSlider.value = settings.systematicChunks;
+                    if (settings.fountainDegree !== undefined) fountainDegreeSlider.value = settings.fountainDegree;
+                    if (settings.splitThreshold !== undefined) splitThresholdSlider.value = settings.splitThreshold;
+                    if (settings.errorCorrection !== undefined) errorCorrectionSelect.value = settings.errorCorrection;
+                    if (settings.fullscreen !== undefined) fullscreenCheckbox.checked = settings.fullscreen;
+                    if (settings.showGuides !== undefined) showGuidesCheckbox.checked = settings.showGuides;
+                    if (settings.enableTransitions !== undefined) enableTransitionsCheckbox.checked = settings.enableTransitions;
+                    if (settings.highDensity !== undefined) highDensityCheckbox.checked = settings.highDensity;
+                    if (settings.enableAutoSplit !== undefined) enableAutoSplitCheckbox.checked = settings.enableAutoSplit;
+                    
+                    // Update display values
+                    speedValue.textContent = `${speedSlider.value} FPS`;
+                    sizeValue.textContent = `${sizeSlider.value}px`;
+                    chunkValue.textContent = `${chunkSlider.value} chars`;
+                    redundancyValue.textContent = `${redundancySlider.value}%`;
+                    systematicChunksValue.textContent = systematicChunksSlider.value;
+                    fountainDegreeValue.textContent = fountainDegreeSlider.value;
+                    splitThresholdValue.textContent = `${splitThresholdSlider.value}KB`;
+                    countdownValue.textContent = countdownSlider.value > 0 ? `${countdownSlider.value}s` : 'None';
+                    
+                    // Update global variables
+                    qrSize = parseInt(sizeSlider.value);
+                    countdownSeconds = parseInt(countdownSlider.value);
+                    
+                    return true;
+                }
+            } catch (error) {
+                console.warn('Failed to load encoder settings from localStorage:', error);
+            }
+            return false;
+        }
+
+        // Save settings to localStorage
+        function saveEncoderSettings() {
+            try {
+                const settings = {
+                    speed: speedSlider.value,
+                    size: sizeSlider.value,
+                    chunkSize: chunkSlider.value,
+                    redundancy: redundancySlider.value,
+                    countdown: countdownSlider.value,
+                    systematicChunks: systematicChunksSlider.value,
+                    fountainDegree: fountainDegreeSlider.value,
+                    splitThreshold: splitThresholdSlider.value,
+                    errorCorrection: errorCorrectionSelect.value,
+                    fullscreen: fullscreenCheckbox.checked,
+                    showGuides: showGuidesCheckbox.checked,
+                    enableTransitions: enableTransitionsCheckbox.checked,
+                    highDensity: highDensityCheckbox.checked,
+                    enableAutoSplit: enableAutoSplitCheckbox.checked
+                };
+                
+                localStorage.setItem('qrEncoderSettings', JSON.stringify(settings));
+                console.log('💾 Encoder settings saved to localStorage');
+            } catch (error) {
+                console.warn('Failed to save encoder settings to localStorage:', error);
+            }
+        }
+
+        // Load settings on page load
+        loadEncoderSettings();
+
         // Update UI based on slider values
         speedSlider.addEventListener('input', () => {
             const fps = speedSlider.value;
             speedValue.textContent = `${fps} FPS`;
+            saveEncoderSettings();
         });
 
         sizeSlider.addEventListener('input', () => {
             qrSize = parseInt(sizeSlider.value);
             sizeValue.textContent = `${qrSize}px`;
-            qrDisplay.style.width = `${qrSize}px`;
-            qrDisplay.style.height = `${qrSize}px`;
+            saveEncoderSettings();
         });
 
         chunkSlider.addEventListener('input', () => {
             const size = chunkSlider.value;
             chunkValue.textContent = `${size} chars`;
+            saveEncoderSettings();
         });
 
         redundancySlider.addEventListener('input', () => {
             const redundancy = redundancySlider.value;
             redundancyValue.textContent = `${redundancy}%`;
+            saveEncoderSettings();
         });
         
         countdownSlider.addEventListener('input', () => {
             countdownSeconds = parseInt(countdownSlider.value);
             countdownValue.textContent = countdownSeconds > 0 ? `${countdownSeconds}s` : 'None';
+            saveEncoderSettings();
         });
         
         systematicChunksSlider.addEventListener('input', () => {
             const systematicChunks = systematicChunksSlider.value;
             systematicChunksValue.textContent = systematicChunks;
+            saveEncoderSettings();
         });
         
         fountainDegreeSlider.addEventListener('input', () => {
             const fountainDegree = fountainDegreeSlider.value;
             fountainDegreeValue.textContent = fountainDegree;
+            saveEncoderSettings();
         });
         
         splitThresholdSlider.addEventListener('input', () => {
             const threshold = splitThresholdSlider.value;
             splitThresholdValue.textContent = `${threshold}KB`;
+            saveEncoderSettings();
         });
 
-        // Show alignment guides
+        // Show alignment guides - only affects fullscreen display now
         showGuidesCheckbox.addEventListener('change', () => {
-            if (showGuidesCheckbox.checked) {
-                qrDisplay.classList.add('show-guides');
-            } else {
-                qrDisplay.classList.remove('show-guides');
-            }
+            saveEncoderSettings();
         });
         
         // Toggle high-density mode
@@ -734,6 +782,24 @@
             if (chunks && chunks.length > 0) {
                 generateBtn.disabled = false;
             }
+            saveEncoderSettings();
+        });
+
+        // Add event listeners for other checkboxes and selects
+        enableTransitionsCheckbox.addEventListener('change', () => {
+            saveEncoderSettings();
+        });
+
+        enableAutoSplitCheckbox.addEventListener('change', () => {
+            saveEncoderSettings();
+        });
+
+        fullscreenCheckbox.addEventListener('change', () => {
+            saveEncoderSettings();
+        });
+
+        errorCorrectionSelect.addEventListener('change', () => {
+            saveEncoderSettings();
         });
 
         // Preset button handlers
@@ -772,15 +838,13 @@
                 case 'reliable':
                     reliablePreset.classList.add('active');
                     speedSlider.value = 6;
-                    chunkSlider.value = 450;
+                    chunkSlider.value = 250;
                     redundancySlider.value = 100;
                     systematicChunksSlider.value = 2;
-                    fountainDegreeSlider.value = 3;
+                    fountainDegreeSlider.value = 5;
                     errorCorrectionSelect.value = 'H';
                     sizeSlider.value = 800;
                     qrSize = 800;
-                    qrDisplay.style.width = `${qrSize}px`;
-                    qrDisplay.style.height = `${qrSize}px`;
                     sizeValue.textContent = `${qrSize}px`;
                     enableTransitionsCheckbox.checked = true;
                     break;
@@ -795,8 +859,6 @@
                     errorCorrectionSelect.value = 'H';
                     sizeSlider.value = 600;
                     qrSize = 600;
-                    qrDisplay.style.width = `${qrSize}px`;
-                    qrDisplay.style.height = `${qrSize}px`;
                     sizeValue.textContent = `${qrSize}px`;
                     enableTransitionsCheckbox.checked = true;
                     break;
@@ -808,6 +870,9 @@
             redundancyValue.textContent = `${redundancySlider.value}%`;
             systematicChunksValue.textContent = systematicChunksSlider.value;
             fountainDegreeValue.textContent = fountainDegreeSlider.value;
+            
+            // Save the preset settings to localStorage
+            saveEncoderSettings();
         }
 
         // File batch management
@@ -844,9 +909,9 @@
                     displayInterval = null;
                 }
                 isPlaying = false;
-                startBtn.disabled = true;
                 stopBtn.disabled = true;
                 fullscreenBtn.disabled = true;
+                previewBtn.disabled = true;
 
                 // Apply optimal settings for the file
                 applyOptimalSettings();
@@ -1124,8 +1189,8 @@
                 console.log(`✅ Combined batch transmission complete!`);
             } else {
                 // Enable manual display for combined sequence
-                startBtn.disabled = false;
                 fullscreenBtn.disabled = false;
+                previewBtn.disabled = false;
                 console.log(`💡 Click "Start Display" or "Fullscreen" to show combined QR sequence for all files`);
             }
         }
@@ -1418,8 +1483,8 @@
             
             try {
                 await processBatchFiles(selectedFiles, false);
-                startBtn.disabled = false;
                 fullscreenBtn.disabled = false;
+                previewBtn.disabled = false;
             } catch (error) {
                 alert('Error generating QR codes: ' + error.message);
             } finally {
@@ -1563,16 +1628,22 @@
             return true;
         }
 
-        // Start display
-        startBtn.addEventListener('click', () => {
-            if (fountainPackets.length === 0) return;
-            
-            if (countdownSeconds > 0) {
-                startCountdown();
-            } else {
-                startPlaying();
-            }
+        // Preview fullscreen with placeholder
+        previewBtn.addEventListener('click', () => {
+            enterFullscreenPreviewMode();
         });
+        
+        // Preview fullscreen mode for camera adjustment
+        function enterFullscreenPreviewMode() {
+            isFullscreen = true;
+            fullscreenDisplay.style.display = 'flex';
+            
+            // Show placeholder QR with alignment guides
+            fullscreenQR.src = "data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f0f0f0' stroke='%23999' stroke-width='2'/%3e%3ctext x='50' y='35' text-anchor='middle' font-size='8' fill='%23666'%3eQR Code%3c/text%3e%3ctext x='50' y='50' text-anchor='middle' font-size='8' fill='%23666'%3ePreview%3c/text%3e%3ctext x='50' y='65' text-anchor='middle' font-size='8' fill='%23666'%3eAlign Camera%3c/text%3e%3c/svg%3e";
+            fullscreenCounter.textContent = `Preview Mode - Align your camera`;
+            
+            console.log('📷 Entered fullscreen preview mode for camera alignment');
+        }
         
         // Start countdown with first QR code visible for camera alignment
         async function startCountdown() {
@@ -1593,13 +1664,8 @@
             fsCountdownDisplay.textContent = countdown;
             fsCountdownDisplay.style.display = isFullscreen ? 'block' : 'none';
             
-            // Add countdown display to QR display so it's visible over the QR code
-            if (qrDisplay.querySelector('.countdown-display') === null) {
-                qrDisplay.appendChild(countdownDisplay);
-            }
-            
             // Disable buttons during countdown
-            startBtn.disabled = true;
+            fullscreenBtn.disabled = true;
             
             // Start countdown timer
             countdownTimer = setInterval(() => {
@@ -1658,7 +1724,6 @@
             console.log(`📊 Fountain packets array length: ${fountainPackets.length}`);
             
             isPlaying = true;
-            startBtn.disabled = true;
             stopBtn.disabled = false;
             currentFrame = 0;
             
@@ -1730,6 +1795,23 @@
             
             for (let i = 0; i < fountainPackets.length; i++) {
                 const packet = fountainPackets[i];
+                
+                // Add delay every 10 QR codes to prevent browser unresponsiveness
+                if (i > 0 && i % 10 === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 50)); // 50ms delay
+                    
+                    // Update progress for user feedback
+                    const progress = (i / fountainPackets.length * 100).toFixed(1);
+                    console.log(`🔄 QR Generation Progress: ${i}/${fountainPackets.length} (${progress}%)`);
+                    
+                    // Update button text to show progress
+                    if (generateBtn.textContent.includes('Generate')) {
+                        generateBtn.textContent = `Generating... ${progress}%`;
+                    }
+                    if (generateAndStartBtn.textContent.includes('Generate')) {
+                        generateAndStartBtn.textContent = `Generating... ${progress}%`;
+                    }
+                }
                 
                 try {
                     // Enterprise validation of packet structure
@@ -1907,7 +1989,6 @@
         function startPlayingFromCurrentFrame() {
             console.log(`🎬 Starting QR sequence from frame ${currentFrame}`);
             isPlaying = true;
-            startBtn.disabled = true;
             stopBtn.disabled = false;
             
             // Continue with the sequence scheduling
@@ -1976,7 +2057,6 @@
             releaseWakeLock();
             
             isPlaying = false;
-            startBtn.disabled = false;
             stopBtn.disabled = true;
         }
 
@@ -2015,8 +2095,12 @@
             isFullscreen = false;
             fullscreenDisplay.style.display = 'none';
             
-            // Stop fullscreen display
+            // Stop fullscreen display and reset counter
             stopPlaying();
+            
+            // Reset frame counter so it starts from beginning next time
+            currentFrame = 0;
+            console.log('🔄 Fullscreen exited - frame counter reset to 0');
         });
 
         // Handle window resize for fullscreen mode

@@ -378,7 +378,8 @@
     <h1>QR Code File Decoder</h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
-      <button id="startScanBtn" disabled>Start Scan</button>
+      <button id="startScanBtn" disabled>Start Scan & Discover</button>
+      <button id="continueBtn" disabled style="background-color: #10b981;">Continue</button>
       <button id="stopScanBtn" disabled>Stop Scan</button>
       <button id="resetBtn">Reset Contents</button>
       <button id="settingsBtn">Advanced Settings</button>
@@ -391,7 +392,10 @@
     <canvas id="overlayCanvas"></canvas>
     <div class="progress-container">
       <div class="progress-bar" id="scanProgressBar"></div>
-      <div class="progress-text" id="scanProgressText">Frames: 0/0 | Time Remaining: --:--</div>
+      <div class="progress-text" id="scanProgressText">Frames: 0/0 | Time Remaining: --:-- | Loop: 1</div>
+      <div class="loop-info" id="loopInfo" style="font-size: 12px; margin-top: 5px; color: #666;">
+        Status: Processing video...
+      </div>
     </div>
   </div>
 
@@ -414,6 +418,17 @@
       <button id="downloadBtn">Download Recovered File</button>
     </div>
   </div>
+  
+  <!-- 5. Discovered Files -->
+  <div id="discoveredFilesContainer" class="file-info-container" style="display: none;">
+    <h2>Discovered Files in Video</h2>
+    <div id="discoveredFilesList">
+      <!-- File selection buttons will appear here -->
+    </div>
+    <div style="margin-top: 10px; font-size: 12px; color: #666;">
+      Click a file button to start decoding from that file's position in the video
+    </div>
+  </div>
 
   <!-- 5. Debug log window -->
   <div class="debug-container">
@@ -425,6 +440,7 @@
       <button class="log-filter" data-level="warn">Warnings</button>
       <button class="log-filter" data-level="error">Errors</button>
       <button id="clearLogBtn">Clear Log</button>
+      <button id="copyLogBtn">Copy Debug Log</button>
     </div>
     <div class="log-window" id="logWindow"></div>
   </div>
@@ -474,10 +490,76 @@
       }
     });
     
-    // Warn when tab goes to background (affects QR processing)
+    // Handle focus/blur for pause/resume functionality
+    let wasProcessingBeforeBlur = false;
+    
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        console.warn('⚠️ Tab backgrounded - QR processing may be throttled. Keep tab active for best performance.');
+        // Tab is going to background - pause processing
+        if (window.qrFileDecoder && window.qrFileDecoder.videoProcessor && window.qrFileDecoder.videoProcessor.isProcessing) {
+          console.warn('⚠️ Tab backgrounded - Pausing QR processing to maintain accuracy');
+          wasProcessingBeforeBlur = true;
+          
+          // Pause video processing
+          if (window.qrFileDecoder.videoProcessor.videoElement) {
+            window.qrFileDecoder.videoProcessor.videoElement.pause();
+          }
+          window.qrFileDecoder.videoProcessor.pausedByFocus = true;
+          
+          // Update UI to show paused state
+          if (window.qrFileDecoder.ui) {
+            window.qrFileDecoder.ui.updateFileInfo('⏸️ Processing paused - Tab is in background. Return to tab to resume.');
+          }
+        } else {
+          wasProcessingBeforeBlur = false;
+        }
+      } else {
+        // Tab is coming back to foreground - resume if it was processing
+        if (wasProcessingBeforeBlur && window.qrFileDecoder && window.qrFileDecoder.videoProcessor && window.qrFileDecoder.videoProcessor.pausedByFocus) {
+          console.log('✅ Tab focused - Resuming QR processing');
+          
+          // Resume video processing
+          if (window.qrFileDecoder.videoProcessor.videoElement) {
+            window.qrFileDecoder.videoProcessor.videoElement.play().catch(err => {
+              console.error('Failed to resume video:', err);
+            });
+          }
+          window.qrFileDecoder.videoProcessor.pausedByFocus = false;
+          
+          // Update UI to show resumed state
+          if (window.qrFileDecoder.ui) {
+            window.qrFileDecoder.ui.updateFileInfo('▶️ Processing resumed');
+          }
+          
+          wasProcessingBeforeBlur = false;
+        }
+      }
+    });
+    
+    // Also handle window focus/blur events for better cross-browser compatibility
+    window.addEventListener('blur', () => {
+      if (window.qrFileDecoder && window.qrFileDecoder.videoProcessor && window.qrFileDecoder.videoProcessor.isProcessing) {
+        console.warn('⚠️ Window lost focus - Pausing processing');
+        wasProcessingBeforeBlur = true;
+        
+        if (window.qrFileDecoder.videoProcessor.videoElement) {
+          window.qrFileDecoder.videoProcessor.videoElement.pause();
+        }
+        window.qrFileDecoder.videoProcessor.pausedByFocus = true;
+      }
+    });
+    
+    window.addEventListener('focus', () => {
+      if (wasProcessingBeforeBlur && window.qrFileDecoder && window.qrFileDecoder.videoProcessor && window.qrFileDecoder.videoProcessor.pausedByFocus) {
+        console.log('✅ Window focused - Resuming processing');
+        
+        if (window.qrFileDecoder.videoProcessor.videoElement) {
+          window.qrFileDecoder.videoProcessor.videoElement.play().catch(err => {
+            console.error('Failed to resume video on focus:', err);
+          });
+        }
+        window.qrFileDecoder.videoProcessor.pausedByFocus = false;
+        wasProcessingBeforeBlur = false;
       }
     });
     
@@ -609,7 +691,8 @@
         const remainingSeconds = Math.floor(remainingTime % 60);
         const timeString = `${remainingMinutes}:${remainingSeconds.toString().padStart(2, '0')}`;
 
-        progressText.textContent = `Frames: ${currentFrame}/${totalFrames} | Time Remaining: ${timeString}`;
+        const currentLoop = window.qrFileDecoder?.videoProcessor?.loopCount || 1;
+        progressText.textContent = `Frames: ${currentFrame}/${totalFrames} | Time Remaining: ${timeString} | Loop: ${currentLoop}`;
       }
 
       updateFileInfo(htmlContent) {
@@ -635,6 +718,15 @@
       }
 
       showSettingsModal() {
+        // Populate form with current settings
+        if (window.qrFileDecoder && window.qrFileDecoder.settings) {
+          const settings = window.qrFileDecoder.settings;
+          document.getElementById('workerCount').value = settings.workerCount;
+          document.getElementById('packetWorkerCount').value = settings.packetWorkerCount;
+          document.getElementById('frameInterval').value = settings.frameInterval;
+          document.getElementById('qrDetectionConfidence').value = settings.qrDetectionConfidence;
+        }
+        
         document.getElementById('settingsModal').style.display = 'block';
       }
 
@@ -1182,60 +1274,98 @@
         return true;
       }
 
-      // Process stored coded packets when new chunks are available
+      // Process stored coded packets when new chunks are available - Enhanced with multiple passes
       propagateAndDecode() {
-        let progress = true;
+        const maxPasses = 5; // Maximum number of iterative passes
+        let totalProgress = false;
 
-        while (progress) {
-          progress = false;
+        for (let pass = 1; pass <= maxPasses; pass++) {
+          let passProgress = false;
+          let iterationsThisPass = 0;
+          const maxIterationsPerPass = 100; // Prevent infinite loops
 
-          // Try to decode more chunks using the coded packets
-          for (let i = this.codedPackets.length - 1; i >= 0; i--) {
-            const packet = this.codedPackets[i];
+          console.log(`🔄 Starting decoding pass ${pass}/${maxPasses}, recovered: ${this.recoveredChunkCount}/${this.totalChunks}`);
 
-            // Count missing chunks in this packet
-            const missingChunks = packet.sourceChunks.filter(
-              chunkIndex => !this.sourceChunks[chunkIndex]
-            );
+          // Continue iterating within this pass until no more progress
+          do {
+            passProgress = false;
+            iterationsThisPass++;
 
-            if (missingChunks.length === 0) {
-              // All chunks in this packet are recovered, remove it
-              this.codedPackets.splice(i, 1);
-              continue;
-            }
+            // Try to decode more chunks using the coded packets
+            for (let i = this.codedPackets.length - 1; i >= 0; i--) {
+              const packet = this.codedPackets[i];
 
-            if (missingChunks.length === 1) {
-              // We can recover exactly one chunk
-              const missingChunkIndex = missingChunks[0];
+              // Count missing chunks in this packet
+              const missingChunks = packet.sourceChunks.filter(
+                chunkIndex => !this.sourceChunks[chunkIndex]
+              );
 
-              // Create a copy of the fountain data
-              const resultData = new Uint8Array(packet.fountainData.length);
-              resultData.set(packet.fountainData);
-
-              // XOR with all the chunks we already have
-              for (const chunkIndex of packet.sourceChunks) {
-                if (chunkIndex !== missingChunkIndex && this.sourceChunks[chunkIndex]) {
-                  this.xorData(resultData, this.sourceChunks[chunkIndex]);
-                }
+              if (missingChunks.length === 0) {
+                // All chunks in this packet are recovered, remove it
+                this.codedPackets.splice(i, 1);
+                continue;
               }
 
-              // Store the recovered chunk
-              this.storeSourceChunk(missingChunkIndex, resultData);
-              this.newlyRecoveredChunks.push(missingChunkIndex);
-              this.packetStats.usefulPackets++;
+              if (missingChunks.length === 1) {
+                // We can recover exactly one chunk
+                const missingChunkIndex = missingChunks[0];
 
-              // Remove this packet as it's been used
-              this.codedPackets.splice(i, 1);
+                // Create a copy of the fountain data
+                const resultData = new Uint8Array(packet.fountainData.length);
+                resultData.set(packet.fountainData);
 
-              progress = true;
+                // XOR with all the chunks we already have
+                for (const chunkIndex of packet.sourceChunks) {
+                  if (chunkIndex !== missingChunkIndex && this.sourceChunks[chunkIndex]) {
+                    this.xorData(resultData, this.sourceChunks[chunkIndex]);
+                  }
+                }
+
+                // Store the recovered chunk
+                this.storeSourceChunk(missingChunkIndex, resultData);
+                this.newlyRecoveredChunks.push(missingChunkIndex);
+                this.packetStats.usefulPackets++;
+
+                // Remove this packet as it's been used
+                this.codedPackets.splice(i, 1);
+
+                passProgress = true;
+                totalProgress = true;
+                
+                console.log(`✅ Pass ${pass}: Recovered chunk ${missingChunkIndex}, now ${this.recoveredChunkCount}/${this.totalChunks}`);
+              }
             }
+
+            // Safety check to prevent infinite loops
+            if (iterationsThisPass >= maxIterationsPerPass) {
+              console.warn(`⚠️ Pass ${pass}: Hit iteration limit (${maxIterationsPerPass}), moving to next pass`);
+              break;
+            }
+
+          } while (passProgress && this.recoveredChunkCount < this.totalChunks);
+
+          console.log(`📊 Pass ${pass} completed: ${iterationsThisPass} iterations, progress: ${passProgress}`);
+
+          // If we recovered all chunks, stop
+          if (this.recoveredChunkCount === this.totalChunks) {
+            console.log(`🎉 All chunks recovered in pass ${pass}!`);
+            break;
+          }
+
+          // If no progress in this pass, try one more pass (maybe packets can help each other)
+          if (!passProgress && pass < maxPasses) {
+            console.log(`⚠️ No progress in pass ${pass}, continuing to pass ${pass + 1}`);
           }
         }
 
         // Check if all chunks are recovered
         if (this.recoveredChunkCount === this.totalChunks) {
-          console.log("All chunks recovered! Finalizing file...");
+          console.log("🎯 All chunks recovered! Finalizing file...");
           this.finalizeFile();
+        } else {
+          const remainingPackets = this.codedPackets.length;
+          const recoveryRate = ((this.recoveredChunkCount / this.totalChunks) * 100).toFixed(1);
+          console.log(`📈 Decoding complete: ${this.recoveredChunkCount}/${this.totalChunks} chunks (${recoveryRate}%), ${remainingPackets} packets remaining`);
         }
         
       }
@@ -1469,9 +1599,27 @@
             }
           }
 
-          // Notify completion
-          if (this.completeCallback) {
-            this.completeCallback(fileData);
+          // Enterprise debugging: Analyze chunk completion status
+          console.log(`🔍 ENTERPRISE CHUNK ANALYSIS:`);
+          console.log(`  Total chunks expected: ${this.totalChunks}`);
+          console.log(`  Chunks recovered: ${this.recoveredChunkCount}`);
+          console.log(`  Missing chunks: ${this.totalChunks - this.recoveredChunkCount}`);
+          console.log(`  Source chunks available: ${Object.keys(this.sourceChunks).length}`);
+          console.log(`  File size from metadata: ${this.metaData.fileSize} bytes`);
+          
+          // Check if we have enough chunks for file reconstruction
+          const hasEnoughChunks = this.recoveredChunkCount >= this.totalChunks;
+          
+          if (hasEnoughChunks) {
+            console.log(`✅ ENTERPRISE: File truly complete - all ${this.totalChunks} chunks recovered`);
+            if (this.completeCallback) {
+              this.completeCallback(fileData);
+            }
+          } else {
+            console.warn(`⚠️ ENTERPRISE: File reconstruction attempted but missing ${this.totalChunks - this.recoveredChunkCount} chunks`);
+            console.log(`📊 ENTERPRISE: Only ${this.recoveredChunkCount}/${this.totalChunks} chunks available - file incomplete`);
+            console.log(`🔄 ENTERPRISE: Will continue processing to find missing chunks in subsequent loops`);
+            // Don't call completion callback - file is not actually complete
           }
         } catch (error) {
           console.error("Error finalizing file:", error);
@@ -1688,6 +1836,16 @@
             this.videoElement.onloadedmetadata = () => resolve();
           });
 
+          // Add event listener for when video ends
+          this.videoElement.addEventListener('ended', () => {
+            console.log('🎬 Video ended event fired');
+            console.log(`🔄 Processing status: ${this.isProcessing}, Loop count: ${this.loopCount || 0}`);
+            if (this.isProcessing) {
+              // Prevent multiple end events
+              setTimeout(() => this.handleVideoEnd(), 100);
+            }
+          });
+
           // Get video metadata
           this.totalFrames = Math.ceil(this.videoElement.duration * 30); // Estimate 30 fps
 
@@ -1711,6 +1869,7 @@
 
         this.isProcessing = true;
         this.startTime = performance.now();
+        this.loopCount = 1; // Initialize loop counter
 
         // Start playing the video
         this.videoElement.currentTime = 0;
@@ -1738,8 +1897,13 @@
           // Request next frame if still processing
           if (this.isProcessing && !this.videoElement.paused && !this.videoElement.ended) {
             this.videoElement.requestVideoFrameCallback(processFrame);
-          } else {
-            this.completed();
+          } else if (this.isProcessing && this.videoElement.ended) {
+            // Video ended but processing continues - restart for another loop
+            console.log('🔄 Frame callback detected video end');
+            this.handleVideoEnd();
+          } else if (!this.isProcessing) {
+            console.log('🔄 Frame callback stopping - processing disabled');
+            return; // Don't call completed here - let the event handler manage it
           }
         };
 
@@ -1750,8 +1914,26 @@
         if (!this.isProcessing) return;
 
         // Check if video is playing
-        if (this.videoElement.paused || this.videoElement.ended) {
-          this.completed();
+        if (this.videoElement.paused) {
+          console.log('🔄 Video paused - stopping processing');
+          this.isProcessing = false;
+          return;
+        }
+        
+        // Handle video end in loop mode
+        if (this.videoElement.ended) {
+          console.log('🔄 ProcessCurrentFrame detected video end');
+          this.handleVideoEnd();
+          return;
+        }
+        
+        // Handle range mode - stop at specified end time
+        if (this.rangeMode && this.endTime && this.videoElement.currentTime >= this.endTime) {
+          console.log(`🔄 Range mode: reached end time ${this.endTime.toFixed(2)}s, stopping range`);
+          this.rangeMode = false;
+          this.endTime = null;
+          this.videoElement.pause();
+          this.isProcessing = false;
           return;
         }
 
@@ -1840,9 +2022,215 @@
         this.completed();
       }
 
+      handleVideoEnd() {
+        console.log(`🔄 Video ended - checking if should loop. Current loop: ${this.loopCount || 0}`);
+        
+        // Update loop info UI
+        const loopInfo = document.getElementById('loopInfo');
+        if (loopInfo) {
+          loopInfo.textContent = `Status: Video ended, checking if should continue...`;
+        }
+        
+        // Check if we should continue looping for better completion
+        if (this.shouldContinueLooping()) {
+          this.loopCount = (this.loopCount || 0) + 1;
+          console.log(`🔄 Video ended, restarting loop ${this.loopCount} with higher frame rate for better detection`);
+          
+          // Update loop info UI
+          if (loopInfo) {
+            loopInfo.textContent = `Status: Starting loop ${this.loopCount} with faster frame rate...`;
+          }
+          
+          // Store original interval on first loop
+          if (!this.originalFrameInterval) {
+            this.originalFrameInterval = this.frameInterval;
+          }
+          
+          // Decrease interval for subsequent loops to get more frames
+          if (this.loopCount > 1) {
+            this.frameInterval = Math.max(this.frameInterval / 2, 1); // Min 1ms interval
+            console.log(`⚡ Increased frame rate: interval now ${this.frameInterval}ms (was ${this.frameInterval * 2}ms)`);
+          }
+          
+          // Restart video from beginning
+          console.log(`🎬 Restarting video from beginning...`);
+          this.videoElement.currentTime = 0;
+          
+          // Directly restart video and continue processing
+          this.videoElement.play().then(() => {
+            console.log(`✅ Video restarted, resuming processing with ${this.frameInterval}ms interval...`);
+            
+            // Continue processing with new frame rate
+            if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+              this.processWithVideoFrameCallback();
+            } else {
+              // Update interval timer
+              if (this.processTimer) {
+                clearInterval(this.processTimer);
+              }
+              this.processTimer = setInterval(() => {
+                this.processCurrentFrame();
+              }, this.frameInterval);
+            }
+          }).catch(err => {
+            console.error('Failed to restart video:', err);
+            this.completed();
+          });
+          
+        } else {
+          // Determine intelligent stopping reason
+          let reason = 'max loops reached';
+          if (this.isFileComplete && this.isFileComplete()) {
+            reason = 'file complete';
+          } else if (window.qrFileDecoder?.discoveredFiles.size > 0) {
+            const downloadedCount = Array.from(window.qrFileDecoder.discoveredFiles.keys())
+              .filter(filename => window.qrFileDecoder.downloadedFiles.has(filename)).length;
+            const totalDiscovered = window.qrFileDecoder.discoveredFiles.size;
+            
+            if (downloadedCount === totalDiscovered && downloadedCount > 0) {
+              reason = `all ${downloadedCount} discovered files downloaded`;
+            }
+          }
+          
+          console.log(`⏹️ ENTERPRISE: Stopping after ${this.loopCount || 1} loops (${reason})`);
+          
+          // Update loop info UI
+          const loopInfo = document.getElementById('loopInfo');
+          if (loopInfo) {
+            loopInfo.textContent = `Status: Finished - ${reason} after ${this.loopCount || 1} loops`;
+          }
+          
+          this.completed();
+        }
+      }
+      
+      shouldContinueLooping() {
+        // Don't loop in discovery mode - just scan once
+        if (this.discoveryMode) {
+          console.log(`🔍 Discovery mode - no looping, scan once only`);
+          return false;
+        }
+        
+        const maxLoops = 5; // Maximum number of loops
+        const currentLoop = this.loopCount || 0;
+        
+        console.log(`🔍 shouldContinueLooping check: currentLoop=${currentLoop}, maxLoops=${maxLoops}`);
+        
+        // Don't loop if we've already reached max loops
+        if (currentLoop >= maxLoops) {
+          console.log(`⏹️ Max loops reached (${currentLoop}/${maxLoops})`);
+          return false;
+        }
+        
+        // Check if file is complete
+        if (this.isFileComplete && this.isFileComplete()) {
+          console.log(`✅ File complete - stopping loops`);
+          return false;
+        }
+        
+        // Enterprise smart completion: Check if all discovered files are downloaded
+        if (window.qrFileDecoder && window.qrFileDecoder.discoveredFiles.size > 0) {
+          const discoveredFileNames = Array.from(window.qrFileDecoder.discoveredFiles.keys());
+          const downloadedFileNames = Array.from(window.qrFileDecoder.downloadedFiles);
+          
+          // Check if all discovered files have been downloaded
+          const allDiscoveredFilesDownloaded = discoveredFileNames.every(filename => 
+            downloadedFileNames.includes(filename)
+          );
+          
+          if (allDiscoveredFilesDownloaded && currentLoop >= 2) {
+            console.log(`🎯 ENTERPRISE SMART STOP: All ${discoveredFileNames.length} discovered files downloaded`);
+            console.log(`📁 Downloaded files: ${downloadedFileNames.join(', ')}`);
+            console.log(`⏹️ Stopping video processing - mission accomplished after ${currentLoop} loops`);
+            
+            // Enterprise enhancement: Stop video playback immediately
+            if (this.videoElement) {
+              this.videoElement.pause();
+              console.log(`⏸️ ENTERPRISE: Video playback stopped - all files downloaded`);
+            }
+            
+            return false; // Stop looping - all files are downloaded
+          }
+        }
+        
+        // Enterprise smart completion detection
+        if (window.qrFileDecoder) {
+          // Check if all discovered files are already downloaded (enterprise efficiency)
+          if (window.qrFileDecoder.discoveredFiles.size > 0) {
+            let allDiscoveredFilesDownloaded = true;
+            let downloadedCount = 0;
+            let totalDiscovered = window.qrFileDecoder.discoveredFiles.size;
+            
+            for (const [filename, fileInfo] of window.qrFileDecoder.discoveredFiles.entries()) {
+              if (window.qrFileDecoder.downloadedFiles.has(filename)) {
+                downloadedCount++;
+              } else {
+                allDiscoveredFilesDownloaded = false;
+              }
+            }
+            
+            console.log(`📊 ENTERPRISE: Download status: ${downloadedCount}/${totalDiscovered} discovered files downloaded`);
+            
+            // If all discovered files are downloaded, stop efficiently
+            if (allDiscoveredFilesDownloaded && downloadedCount > 0) {
+              console.log(`✅ ENTERPRISE EFFICIENCY: All ${downloadedCount} discovered files downloaded - stopping loops early`);
+              return false; // Stop looping - mission accomplished!
+            }
+            
+            // If discovery phase complete but files still need processing, check normal completion
+            if (!window.qrFileDecoder.discoveryMode && window.qrFileDecoder.fountainDecoder) {
+              const progress = window.qrFileDecoder.fountainDecoder.getRecoveryProgress();
+              console.log(`📊 Recovery progress: ${progress.recovered}/${progress.total} chunks (${progress.percentage}%)`);
+              
+              // Continue if we don't have all chunks yet AND haven't hit max loops
+              if (progress.recovered < progress.total && currentLoop < maxLoops) {
+                console.log(`🔄 Continuing loop ${currentLoop + 1} - missing ${progress.total - progress.recovered} chunks`);
+                return true;
+              }
+            }
+          } else {
+            // No discovered files yet - continue processing to find files
+            console.log(`🔍 No files discovered yet - continuing to scan`);
+            return currentLoop < maxLoops;
+          }
+        }
+        
+        // Continue looping if we haven't hit the max and file isn't complete
+        const shouldContinue = currentLoop < maxLoops;
+        console.log(`🔄 Should continue: ${shouldContinue}`);
+        return shouldContinue;
+      }
+
       completed() {
         this.isProcessing = false;
+        console.log(`Video processing completed after ${this.loopCount || 1} loops`);
+        
+        // Special handling for discovery mode - first loop completion
+        if (this.discoveryMode) {
+          console.log(`🔍 Discovery loop 1 completed - found ${window.qrFileDecoder?.discoveredFiles?.size || 0} files`);
+          console.log(`🔄 Turning OFF discovery mode, switching to normal processing for remaining loops`);
+          
+          // Turn off discovery mode after first loop
+          this.discoveryMode = false;
+          
+          if (window.qrFileDecoder) {
+            window.qrFileDecoder.discoveryMode = false;
+            window.qrFileDecoder.handleDiscoveryComplete();
+            
+            // Always continue with normal looping after discovery
+            // The shouldContinueLooping logic will determine if we should stop based on:
+            // 1. Max loops reached (5 total) OR
+            // 2. All discovered files are complete
+            console.log(`🔄 Discovery complete - continuing with normal looping for better recovery`);
+            return; // Let normal looping continue
+          }
+        }
+        
         // Clear any resources
+        if (this.processTimer) {
+          clearInterval(this.processTimer);
+          this.processTimer = null;
+        }
       }
     }
 
@@ -2135,12 +2523,14 @@
         this.recoveredChunks = new Map();
         this.missingChunks = new Set();
         this.wakeLock = null;
-        this.settings = {
-          workerCount: 4,
-          packetWorkerCount: 2,
-          frameInterval: 20,
-          qrDetectionConfidence: 0.5
-        };
+        // Load settings from localStorage or use defaults
+        this.settings = this.loadSettings();
+
+        // File discovery state
+        this.discoveryMode = false;
+        this.discoveredFiles = new Map(); // Map of filename -> {metadata, firstSeenAt, lastSeenAt}
+        this.currentActiveFile = null;
+        this.downloadedFiles = new Set(); // Track already downloaded files to prevent duplicates
 
         // Debug counters
         this.qrCodesDetected = 0;
@@ -2172,10 +2562,21 @@
         }
       }
 
-      // 4.2 Method to add to the QRFileDecoder class
+      // Complete reset - clears everything and destroys processors
       resetContents() {
         if (this.isProcessing) {
           this.stopProcessing();
+        }
+
+        // Completely clean up processors (for full reset)
+        if (this.qrProcessor) {
+          this.qrProcessor.dispose();
+          this.qrProcessor = null;
+        }
+        
+        if (this.videoProcessor) {
+          this.videoProcessor.stopProcessing();
+          this.videoProcessor = null;
         }
 
         // Reset all application state
@@ -2186,21 +2587,25 @@
         this.qrCodesDetected = 0;
         this.packetsProcessed = 0;
         this.recoveredFileData = null;
+        this.downloadedFiles = new Set(); // Clear downloaded files list
+        this.discoveredFiles = new Map(); // Clear discovered files
 
         // Reset UI elements
         this.ui.resetChunkGrid();
         this.ui.updateFileInfo("No file detected yet");
         document.getElementById('missingChunks').textContent = "Waiting for metadata...";
         document.getElementById('scanProgressBar').style.width = '0%';
-        document.getElementById('scanProgressText').textContent = 'Frames: 0/0 | Time Remaining: --:--';
+        document.getElementById('scanProgressText').textContent = 'Frames: 0/0 | Time Remaining: --:-- | Loop: 1';
         document.getElementById('downloadContainer').style.display = 'none';
+        document.getElementById('continueBtn').disabled = true;
         this.ui.clearQRHighlight();
         this.ui.hideErrorMessage();
 
         // Keep the video input and file if the user wants to try scanning again
         document.getElementById('startScanBtn').disabled = this.videoFile ? false : true;
+        document.getElementById('discoverBtn').disabled = this.videoFile ? false : true;
 
-        this.logger.info("Contents reset, ready for new scan");
+        this.logger.info("Contents completely reset, ready for new scan");
       }
 
 
@@ -2209,12 +2614,14 @@
         document.getElementById('videoInput').addEventListener('change', this.handleVideoInput.bind(this));
 
         // Button clicks
-        document.getElementById('startScanBtn').addEventListener('click', this.startProcessing.bind(this));
+        document.getElementById('startScanBtn').addEventListener('click', this.startScanAndDiscover.bind(this));
+        document.getElementById('continueBtn').addEventListener('click', this.continueProcessing.bind(this));
         document.getElementById('stopScanBtn').addEventListener('click', this.stopProcessing.bind(this));
         document.getElementById('downloadBtn').addEventListener('click', this.downloadFile.bind(this));
         document.getElementById('settingsBtn').addEventListener('click', this.ui.showSettingsModal.bind(this.ui));
         document.getElementById('saveSettingsBtn').addEventListener('click', this.saveSettings.bind(this));
         document.getElementById('clearLogBtn').addEventListener('click', this.logger.clear.bind(this.logger));
+        document.getElementById('copyLogBtn').addEventListener('click', this.copyDebugLog.bind(this));
 
 
         // Log filters
@@ -2229,6 +2636,23 @@
         document.querySelector('.modal .close').addEventListener('click', this.ui.hideSettingsModal.bind(this.ui));
 
         document.getElementById('resetBtn').addEventListener('click', this.resetContents.bind(this));
+        
+        // Advanced settings real-time updates
+        document.getElementById('frameInterval').addEventListener('input', (e) => {
+          this.updateSingleSetting('frameInterval', parseInt(e.target.value));
+        });
+        
+        document.getElementById('qrDetectionConfidence').addEventListener('input', (e) => {
+          this.updateSingleSetting('qrDetectionConfidence', parseFloat(e.target.value));
+        });
+        
+        document.getElementById('workerCount').addEventListener('input', (e) => {
+          this.updateSingleSetting('workerCount', parseInt(e.target.value));
+        });
+        
+        document.getElementById('packetWorkerCount').addEventListener('input', (e) => {
+          this.updateSingleSetting('packetWorkerCount', parseInt(e.target.value));
+        });
       }
 
       async handleVideoInput(event) {
@@ -2248,6 +2672,10 @@
           // Enable start button once video is loaded
           videoElement.onloadedmetadata = () => {
             document.getElementById('startScanBtn').disabled = false;
+            // Enable continue button if we have metadata and missing chunks
+            if (this.metadataReceived && this.recoveredChunks.size < this.fileMetadata.chunksCount) {
+              document.getElementById('continueBtn').disabled = false;
+            }
             this.logger.info(`Video duration: ${videoElement.duration.toFixed(2)} seconds`);
           };
         } catch (error) {
@@ -2305,6 +2733,7 @@
 
         // Update UI
         document.getElementById('startScanBtn').disabled = true;
+        document.getElementById('continueBtn').disabled = true;
         document.getElementById('stopScanBtn').disabled = false;
         document.getElementById('downloadContainer').style.display = 'none';
         this.ui.resetChunkGrid();
@@ -2353,25 +2782,179 @@
           errorCallback: (error) => this.logger.error(`Video processing error: ${error.message}`),
           frameInterval: this.settings.frameInterval
         });
+        
+        // Set completion check callback for looping logic
+        this.videoProcessor.isFileComplete = () => {
+          return this.metadataReceived && 
+                 this.fileMetadata && 
+                 this.recoveredChunks.size >= this.fileMetadata.chunksCount;
+        };
+      }
+
+      async continueProcessing() {
+        if (this.isProcessing) return;
+        
+        this.logger.info("Continuing video processing with additional loops...");
+        
+        // Check if we need to reinitialize QR processor (in case it was disposed)
+        if (!this.qrProcessor) {
+          this.logger.info("Reinitializing QR processor for continue...");
+          this.qrProcessor = new EnhancedQRProcessor({
+            onQrDetected: this.handleQRCodeResult.bind(this),
+            onError: (error) => this.logger.error(`QR processing error: ${error.message}`),
+            detectionConfidence: this.settings.qrDetectionConfidence
+          });
+          await this.qrProcessor.initialize();
+        }
+        
+        // Re-enable processing and force additional loops
+        if (this.videoProcessor && this.videoFile) {
+          this.isProcessing = true;
+          
+          // Continue from where we left off, increment loop count
+          this.videoProcessor.loopCount = (this.videoProcessor.loopCount || 1) + 1;
+          this.videoProcessor.isProcessing = true;
+          
+          // Increase frame rate for better detection (faster processing)
+          this.videoProcessor.frameInterval = Math.max(this.videoProcessor.frameInterval / 2, 1);
+          
+          console.log(`🔄 Manual continue: Starting loop ${this.videoProcessor.loopCount} with ${this.videoProcessor.frameInterval}ms interval`);
+          
+          // Update status
+          const loopInfo = document.getElementById('loopInfo');
+          if (loopInfo) {
+            loopInfo.textContent = `Status: Manual continue - loop ${this.videoProcessor.loopCount} with faster frame rate...`;
+          }
+          
+          // Restart video from beginning with full frame processing
+          this.videoProcessor.videoElement.currentTime = 0;
+          this.videoProcessor.videoElement.play().then(() => {
+            console.log(`✅ Manual continue: Video restarted, resuming processing...`);
+            
+            // Start frame processing again
+            if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+              this.videoProcessor.processWithVideoFrameCallback();
+            } else {
+              // Update interval timer
+              if (this.videoProcessor.processTimer) {
+                clearInterval(this.videoProcessor.processTimer);
+              }
+              this.videoProcessor.processTimer = setInterval(() => {
+                this.videoProcessor.processCurrentFrame();
+              }, this.videoProcessor.frameInterval);
+            }
+          }).catch(err => {
+            console.error('Failed to continue video processing:', err);
+            this.isProcessing = false;
+          });
+          
+          // Update UI
+          document.getElementById('startScanBtn').disabled = true;
+          document.getElementById('continueBtn').disabled = true;
+          document.getElementById('stopScanBtn').disabled = false;
+        } else {
+          this.logger.error("Cannot continue - video processor or file not available");
+        }
+      }
+
+      // Start scan with automatic discovery (first loop is always discovery)
+      async startScanAndDiscover() {
+        if (this.isProcessing) return;
+        
+        this.logger.info("Starting scan with automatic file discovery...");
+        this.discoveryMode = true; // First loop is discovery mode
+        this.discoveredFiles.clear();
+        this.isProcessing = true; // Enable processing state
+        
+        // Clear any existing UI
+        this.ui.resetChunkGrid();
+        this.ui.updateFileInfo("Scanning video and discovering files...");
+        document.getElementById('discoveredFilesContainer').style.display = 'none';
+        
+        // Update UI
+        document.getElementById('startScanBtn').disabled = true;
+        document.getElementById('continueBtn').disabled = true;
+        document.getElementById('stopScanBtn').disabled = false;
+        
+        try {
+          // Initialize components
+          await this.initializeComponents();
+          
+          // Start processing - first loop will be discovery AND chunk capture
+          await this.videoProcessor.initialize(this.videoFile);
+          this.videoProcessor.discoveryMode = true; // Enable discovery tracking
+          this.videoProcessor.startProcessing();
+          
+          this.logger.info("First loop started - discovering files and capturing chunks simultaneously");
+        } catch (error) {
+          this.logger.error(`Failed to start processing: ${error.message}`);
+          this.ui.showErrorMessage(`Failed to start processing: ${error.message}`);
+          this.stopProcessing();
+        }
+      }
+
+      // Start processing a specific discovered file
+      startFileProcessing(filename, startTime) {
+        if (this.isProcessing) return;
+        
+        this.logger.info(`Starting focused processing for file: ${filename} at ${startTime.toFixed(2)}s`);
+        
+        // Set the active file and reset state for this file
+        this.currentActiveFile = filename;
+        this.metadataReceived = false;
+        this.fileMetadata = null;
+        this.recoveredChunks = new Map();
+        this.missingChunks = new Set();
+        
+        // Reset fountain decoder
+        if (this.fountainDecoder) {
+          this.fountainDecoder = new EnhancedFountainDecoder();
+          this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+        }
+        
+        // Set video to start time and begin normal processing
+        if (this.videoProcessor) {
+          this.videoProcessor.videoElement.currentTime = startTime;
+          this.videoProcessor.discoveryMode = false; // Disable discovery mode
+          this.isProcessing = true;
+          this.videoProcessor.isProcessing = true;
+          this.videoProcessor.loopCount = 1;
+          
+          // Update UI
+          document.getElementById('startScanBtn').disabled = true;
+          document.getElementById('discoverBtn').disabled = true;
+          document.getElementById('continueBtn').disabled = true;
+          document.getElementById('stopScanBtn').disabled = false;
+          
+          this.ui.updateFileInfo(`Processing file: ${filename}`);
+          this.ui.resetChunkGrid();
+          
+          // Start processing from the specified time
+          this.videoProcessor.videoElement.play();
+        }
       }
 
       stopProcessing() {
         if (!this.isProcessing) return;
 
+        console.log(`🛑 Stop button pressed - halting all processing`);
         this.isProcessing = false;
+        this.discoveryMode = false; // Also stop discovery mode
 
         // Release wake lock when stopping
         this.releaseWakeLock();
 
-        // Stop video processing
+        // Stop video processing (but don't destroy it)
         if (this.videoProcessor) {
           this.videoProcessor.stopProcessing();
+          this.videoProcessor.discoveryMode = false;
+          this.videoProcessor.rangeMode = false;
         }
 
-        // Clean up QR processor
-        if (this.qrProcessor) {
-          this.qrProcessor.dispose();
-        }
+        // DON'T dispose QR processor - keep it for continue functionality
+        // if (this.qrProcessor) {
+        //   this.qrProcessor.dispose();
+        // }
 
         // Clear QR highlight
         this.ui.clearQRHighlight();
@@ -2379,7 +2962,25 @@
         // Update UI
         document.getElementById('startScanBtn').disabled = false;
         document.getElementById('stopScanBtn').disabled = true;
-        this.logger.info("Processing stopped");
+        
+        // Enable continue button if file isn't complete and we have video/processors
+        if (this.metadataReceived && 
+            this.recoveredChunks.size < this.fileMetadata.chunksCount && 
+            this.videoFile && 
+            this.videoProcessor) {
+          document.getElementById('continueBtn').disabled = false;
+          this.logger.info("Continue button enabled - you can resume processing");
+        }
+        
+        // Enable discover button if we have video (with null check)
+        if (this.videoFile) {
+          const discoverBtn = document.getElementById('discoverBtn');
+          if (discoverBtn) {
+            discoverBtn.disabled = false;
+          }
+        }
+        
+        this.logger.info("All processing stopped - use Continue to resume or Start Scan & Discover to restart");
 
         // Show stats
         this.logger.info(`Processing summary: Detected ${this.qrCodesDetected} QR codes, processed ${this.packetsProcessed} packets`);
@@ -2459,13 +3060,55 @@
         const { packetType, packetData } = result;
 
         if (packetType === 'metadata') {
-          this.handleMetadataPacket(packetData);
+          // Pass current video time for discovery mode
+          const currentTime = this.videoProcessor ? this.videoProcessor.videoElement.currentTime : 0;
+          this.handleMetadataPacket(packetData, currentTime);
         } else if (packetType === 'data') {
           this.handleDataPacket(packetData);
         }
       }
 
-      handleMetadataPacket(metadata) {
+      handleMetadataPacket(metadata, currentTime = 0) {
+        const fileName = metadata.fileName;
+        
+        // In discovery mode, handle file tracking and processing separately
+        if (this.discoveryMode) {
+          console.log(`🔍 DISCOVERY: Processing metadata for ${fileName} at ${currentTime.toFixed(2)}s`);
+          
+          if (!this.discoveredFiles.has(fileName)) {
+            // Completely new file discovered
+            this.discoveredFiles.set(fileName, {
+              metadata: metadata,
+              firstSeenAt: currentTime,
+              lastSeenAt: currentTime
+            });
+            this.logger.info(`📁 DISCOVERY: NEW file found: ${fileName} at ${currentTime.toFixed(2)}s`);
+            
+            // Switch to processing this new file
+            this.switchToFile(metadata, fileName);
+          } else {
+            // Existing file - update timing and check if we need to switch to it
+            const fileInfo = this.discoveredFiles.get(fileName);
+            fileInfo.lastSeenAt = currentTime;
+            this.logger.debug(`📁 DISCOVERY: Existing file ${fileName} seen again at ${currentTime.toFixed(2)}s`);
+            
+            // Check if we need to switch to this file
+            if (!this.currentActiveFile || this.currentActiveFile !== fileName) {
+              this.logger.info(`🔄 DISCOVERY: Switching from ${this.currentActiveFile || 'none'} to ${fileName}`);
+              this.switchToFile(metadata, fileName);
+            } else {
+              // Same file we're already processing - treat as duplicate
+              this.logger.debug(`📁 DISCOVERY: Duplicate metadata for current file ${fileName}`);
+              return;
+            }
+          }
+          
+          // Update discovered files UI
+          this.updateDiscoveredFilesUI();
+          return; // In discovery mode, don't run normal processing logic
+        }
+        
+        // Normal processing mode (not discovery)
         // Check if we already have metadata and if it matches
         if (this.metadataReceived) {
           // Compare key properties to see if this is the same file
@@ -2493,6 +3136,17 @@
           <div><strong>Chunks:</strong> ${metadata.chunksCount}</div>
           <div><strong>Protocol Version:</strong> ${metadata.protocolVersion}</div>
         `);
+        
+        // Show checksums if available
+        if (metadata.fileChecksum || metadata.metaChecksum) {
+          const fileChecksumElement = document.getElementById('fileChecksum');
+          const metaChecksumElement = document.getElementById('metaChecksum');
+          const checksumInfoElement = document.getElementById('checksumInfo');
+          
+          if (fileChecksumElement) fileChecksumElement.textContent = metadata.fileChecksum || '-';
+          if (metaChecksumElement) metaChecksumElement.textContent = metadata.metaChecksum || '-';
+          if (checksumInfoElement) checksumInfoElement.style.display = 'block';
+        }
 
         // Initialize fountain decoder with metadata
         this.fountainDecoder.initialize(metadata);
@@ -2512,6 +3166,11 @@
         if (!this.metadataReceived) {
           this.logger.warn("Received data packet before metadata, ignoring");
           return;
+        }
+
+        // In discovery mode, add extra logging
+        if (this.discoveryMode) {
+          this.logger.debug(`📦 DISCOVERY: Processing data packet for ${this.currentActiveFile || 'unknown file'}`);
         }
 
         // Always blink source chunks to show detection, even for duplicates
@@ -2576,12 +3235,116 @@
           </div>
         `;
 
-        // Stop processing if still running
-        if (this.isProcessing) {
-          this.stopProcessing();
+        // DON'T stop processing during discovery mode - need to scan entire video
+        if (this.discoveryMode) {
+          console.log(`✅ File ${this.fileMetadata.fileName} COMPLETED during discovery - storing and continuing scan`);
+          
+          // CAPTURE ACCURATE DATA RIGHT NOW before any state changes
+          const fileName = this.fileMetadata.fileName;
+          const ACCURATE_RECOVERED_COUNT = this.fountainDecoder.recoveredChunkCount;
+          const ACCURATE_TOTAL_COUNT = this.fileMetadata.chunksCount;
+          
+          console.log(`🎯 ENTERPRISE ACCURATE DATA: ${fileName} has ${ACCURATE_RECOVERED_COUNT}/${ACCURATE_TOTAL_COUNT} chunks (captured at completion moment)`);
+          
+          // Store the completed file data in the discovered files map
+          if (this.discoveredFiles.has(fileName)) {
+            const fileInfo = this.discoveredFiles.get(fileName);
+            fileInfo.completed = true;
+            fileInfo.recoveredData = fileData;
+            fileInfo.recoveredAt = performance.now();
+            this.logger.info(`💾 DISCOVERY: Stored completed file: ${fileName} (${fileData.byteLength} bytes)`);
+            
+            // Check if file was already downloaded during discovery
+            if (!this.downloadedFiles.has(fileName)) {
+              // Auto-download completed file during discovery (enterprise efficiency)
+              console.log(`📥 Auto-downloading completed file during discovery: ${fileName}`);
+              this.downloadCompletedFile(fileName);
+              
+              // DON'T check for completion during discovery - must finish entire video first
+              console.log(`🔍 DISCOVERY: File ${fileName} downloaded but continuing discovery to find all files in video`);
+            } else {
+              console.log(`⏭️ ENTERPRISE: File ${fileName} already downloaded during discovery - skipping duplicate`);
+            }
+          }
+          
+          // Use the ACCURATE data captured at completion moment
+          const totalChunks = ACCURATE_TOTAL_COUNT;
+          const actualRecoveredChunks = ACCURATE_RECOVERED_COUNT;
+          
+          console.log(`🔍 ENTERPRISE UI FIX: Using captured accurate data: ${actualRecoveredChunks}/${totalChunks}`);
+          
+          // Manually update the missing chunks UI to show 100% completion with CORRECT count
+          document.getElementById('missingChunks').innerHTML = `
+            <div>Recovered chunks: ${actualRecoveredChunks}/${totalChunks} (100%)</div>
+            <div>Missing chunks: 0</div>
+            <div style="color: #16a34a; font-weight: bold;">✅ FILE COMPLETE - DOWNLOADED</div>
+          `;
+          
+          this.ui.updateFileInfo(`✅ File ${fileName} FULLY COMPLETE (${actualRecoveredChunks}/${totalChunks} chunks)! Downloaded and continuing discovery...`);
+          
+          // Store completion info for UI display (use the ACCURATE captured data)
+          const completionInfo = {
+            fileName: fileName,
+            totalChunks: totalChunks,
+            recoveredChunks: actualRecoveredChunks // Use the captured accurate count
+          };
+          
+          // Completely reset state for next file discovery
+          this.logger.info(`🔄 DISCOVERY: Resetting state after ${fileName} completion - ready for next file`);
+          this.fountainDecoder = new EnhancedFountainDecoder();
+          this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+          this.metadataReceived = false;
+          this.fileMetadata = null;
+          this.recoveredChunks = new Map();
+          this.missingChunks = new Set();
+          this.currentActiveFile = null; // IMPORTANT: Clear active file so next metadata triggers switch
+          
+          // Clear the chunk grid for next file (after showing completion briefly)
+          setTimeout(() => {
+            this.ui.resetChunkGrid();
+            this.ui.updateFileInfo(`🔍 Discovery continuing after ${completionInfo.fileName} (${completionInfo.recoveredChunks}/${completionInfo.totalChunks}) - scanning for more files...`);
+          }, 2000); // Show completion status for 2 seconds
+          
+          // Update the discovered files UI to show completion
+          this.updateDiscoveredFilesUI();
+          
+          return; // Don't stop - continue discovery
         }
-        // Automatically trigger the download
+        
+        // Save current file name before resetting metadata
+        const fileName = this.fileMetadata.fileName;
+        
+        // In normal mode, don't stop processing - continue to look for next file
+        console.log(`✅ File ${fileName} completed in normal mode - resetting decoder to continue processing for next files`);
+        
+        // Check if file was already downloaded to prevent duplicates
+        if (this.downloadedFiles.has(fileName)) {
+          console.log(`⏭️ ENTERPRISE: File ${fileName} already downloaded - skipping duplicate download`);
+          this.logger.info(`File ${fileName} recovery complete (already downloaded)`);
+          
+          // Still need to reset decoder state for next file
+          this.fountainDecoder = new EnhancedFountainDecoder();
+          this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+          this.metadataReceived = false;
+          this.fileMetadata = null;
+          this.recoveredChunks = new Map();
+          this.missingChunks = new Set();
+          this.currentActiveFile = null;
+          return;
+        }
+        
+        // Trigger automatic download for new file (enterprise efficiency)
+        console.log(`💾 File ${fileName} complete - triggering automatic download`);
         this.downloadFile();
+        
+        // Reset decoder state for next file, but keep video processing running
+        this.fountainDecoder = new EnhancedFountainDecoder();
+        this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+        this.metadataReceived = false;
+        this.fileMetadata = null;
+        this.recoveredChunks = new Map();
+        this.missingChunks = new Set();
+        this.currentActiveFile = null;
       }
 
       downloadFile() {
@@ -2608,8 +3371,21 @@
             URL.revokeObjectURL(url);
           }, 100);
 
-          this.logger.info(`File "${this.fileMetadata.fileName}" downloaded (${this.formatFileSize(this.recoveredFileData.byteLength)})`);
+          // Mark file as downloaded to prevent duplicates
+          this.downloadedFiles.add(this.fileMetadata.fileName);
+          
+          this.logger.info(`💾 ENTERPRISE: Auto-downloaded "${this.fileMetadata.fileName}" (${this.formatFileSize(this.recoveredFileData.byteLength)})`);
+          console.log(`✅ ENTERPRISE SUCCESS: File download completed automatically for user convenience`);
+          console.log(`📋 ENTERPRISE: Added "${this.fileMetadata.fileName}" to downloaded files list (${this.downloadedFiles.size} total)`);
+          
+          // Only check completion if NOT in discovery mode (let discovery complete first)
+          if (!this.discoveryMode) {
+            this.checkAndStopIfAllFilesDownloaded();
+          } else {
+            console.log(`🔍 DISCOVERY: File downloaded but discovery mode active - continuing to scan entire video`);
+          }
         } catch (error) {
+          console.error(`❌ ENTERPRISE ERROR: Auto-download failed for ${this.fileMetadata.fileName}:`, error.message);
           this.logger.error(`Error downloading file: ${error.message}`);
           this.ui.showErrorMessage(`Error downloading file: ${error.message}`);
         }
@@ -2631,7 +3407,518 @@
         };
 
         this.logger.info(`Settings updated: ${JSON.stringify(this.settings)}`);
+        this.saveSettingsToStorage();
         this.ui.hideSettingsModal();
+      }
+
+      // Update a single setting in real-time
+      updateSingleSetting(settingName, value) {
+        // Validate the value based on the setting
+        let validatedValue;
+        
+        switch (settingName) {
+          case 'workerCount':
+            validatedValue = isNaN(value) ? 4 : Math.min(Math.max(value, 1), 16);
+            break;
+          case 'packetWorkerCount':
+            validatedValue = isNaN(value) ? 2 : Math.min(Math.max(value, 1), 8);
+            break;
+          case 'frameInterval':
+            validatedValue = isNaN(value) ? 20 : Math.min(Math.max(value, 0), 1000);
+            break;
+          case 'qrDetectionConfidence':
+            validatedValue = isNaN(value) ? 0.5 : Math.min(Math.max(value, 0), 1);
+            break;
+          default:
+            console.warn(`Unknown setting: ${settingName}`);
+            return;
+        }
+
+        // Update the setting
+        this.settings[settingName] = validatedValue;
+
+        // Apply the setting immediately if applicable
+        if (settingName === 'frameInterval' && this.videoProcessor) {
+          this.videoProcessor.frameInterval = validatedValue;
+          
+          // Update active timer if processing
+          if (this.videoProcessor.isProcessing && this.videoProcessor.processTimer) {
+            clearInterval(this.videoProcessor.processTimer);
+            this.videoProcessor.processTimer = setInterval(() => {
+              this.videoProcessor.processCurrentFrame();
+            }, validatedValue);
+          }
+          
+          console.log(`⚡ Frame interval updated to ${validatedValue}ms`);
+        }
+
+        console.log(`📝 Setting updated: ${settingName} = ${validatedValue}`);
+        
+        // Save to localStorage
+        this.saveSettingsToStorage();
+      }
+
+      // Load settings from localStorage
+      loadSettings() {
+        try {
+          const saved = localStorage.getItem('qrDecoderSettings');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            console.log('📂 Loaded settings from localStorage:', parsed);
+            
+            // Validate and merge with defaults
+            const defaults = {
+              workerCount: 4,
+              packetWorkerCount: 2,
+              frameInterval: 20,
+              qrDetectionConfidence: 0.5
+            };
+
+            return {
+              workerCount: typeof parsed.workerCount === 'number' ? Math.min(Math.max(parsed.workerCount, 1), 16) : defaults.workerCount,
+              packetWorkerCount: typeof parsed.packetWorkerCount === 'number' ? Math.min(Math.max(parsed.packetWorkerCount, 1), 8) : defaults.packetWorkerCount,
+              frameInterval: typeof parsed.frameInterval === 'number' ? Math.min(Math.max(parsed.frameInterval, 0), 1000) : defaults.frameInterval,
+              qrDetectionConfidence: typeof parsed.qrDetectionConfidence === 'number' ? Math.min(Math.max(parsed.qrDetectionConfidence, 0), 1) : defaults.qrDetectionConfidence
+            };
+          }
+        } catch (error) {
+          console.warn('Failed to load settings from localStorage:', error);
+        }
+
+        // Return defaults if no saved settings or error
+        console.log('📂 Using default settings');
+        return {
+          workerCount: 4,
+          packetWorkerCount: 2,
+          frameInterval: 20,
+          qrDetectionConfidence: 0.5
+        };
+      }
+
+      // Save settings to localStorage
+      saveSettingsToStorage() {
+        try {
+          localStorage.setItem('qrDecoderSettings', JSON.stringify(this.settings));
+          console.log('💾 Settings saved to localStorage');
+        } catch (error) {
+          console.warn('Failed to save settings to localStorage:', error);
+        }
+      }
+
+      // Switch to processing a different file during discovery
+      switchToFile(metadata, fileName) {
+        this.logger.info(`🔄 DISCOVERY: Switching to process file: ${fileName}`);
+        
+        // Set current active file
+        this.currentActiveFile = fileName;
+        
+        // Reset fountain decoder for the new file
+        this.fountainDecoder = new EnhancedFountainDecoder();
+        this.fountainDecoder.initialize(metadata);
+        this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+        
+        // Reset file-specific state for new file
+        this.metadataReceived = true;
+        this.fileMetadata = metadata;
+        this.recoveredChunks = new Map();
+        this.missingChunks = new Set();
+        
+        // Reset UI for the new file
+        this.ui.initializeChunkGrid(metadata.chunksCount);
+        this.ui.updateFileInfo(`
+          <div><strong>DISCOVERY - Current File:</strong> ${metadata.fileName}</div>
+          <div><strong>File Type:</strong> ${metadata.fileType}</div>
+          <div><strong>File Size:</strong> ${this.formatFileSize(metadata.fileSize)}</div>
+          <div><strong>Chunks:</strong> ${metadata.chunksCount}</div>
+          <div><strong>Time:</strong> ${this.videoProcessor ? this.videoProcessor.videoElement.currentTime.toFixed(1) : '?'}s</div>
+        `);
+        
+        // Initialize missing chunks set for the new file
+        for (let i = 0; i < metadata.chunksCount; i++) {
+          this.missingChunks.add(i);
+        }
+        
+        this.updateMissingChunksUI();
+        
+        this.logger.info(`🎯 DISCOVERY: Now actively processing ${fileName} - ready for data packets`);
+      }
+
+      // Reset UI and decoder state for a new file during discovery
+      resetForNewFile(metadata, fileName) {
+        this.logger.info(`🔄 Resetting UI and decoder for new file: ${fileName}`);
+        
+        // Set current active file
+        this.currentActiveFile = fileName;
+        
+        // Reset fountain decoder for the new file
+        this.fountainDecoder = new EnhancedFountainDecoder();
+        this.fountainDecoder.initialize(metadata);
+        this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+        
+        // Reset file-specific state
+        this.metadataReceived = true;
+        this.fileMetadata = metadata;
+        this.recoveredChunks = new Map();
+        this.missingChunks = new Set();
+        
+        // Reset UI for the new file
+        this.ui.initializeChunkGrid(metadata.chunksCount);
+        this.ui.updateFileInfo(`
+          <div><strong>Current File:</strong> ${metadata.fileName}</div>
+          <div><strong>File Type:</strong> ${metadata.fileType}</div>
+          <div><strong>File Size:</strong> ${this.formatFileSize(metadata.fileSize)}</div>
+          <div><strong>Chunks:</strong> ${metadata.chunksCount}</div>
+          <div><strong>Discovery Mode:</strong> Active</div>
+        `);
+        
+        // Initialize missing chunks set for the new file
+        for (let i = 0; i < metadata.chunksCount; i++) {
+          this.missingChunks.add(i);
+        }
+        
+        this.updateMissingChunksUI();
+        
+        this.logger.info(`🎯 Ready to process ${fileName} during discovery scan`);
+      }
+
+      // Copy debug log to clipboard
+      copyDebugLog() {
+        try {
+          // Get all log entries
+          const logWindow = document.getElementById('logWindow');
+          const logEntries = logWindow.querySelectorAll('.log-entry');
+          
+          let logText = '=== QR File Decoder Debug Log ===\n';
+          logText += `Generated: ${new Date().toISOString()}\n`;
+          logText += `Video: ${this.videoFile ? this.videoFile.name : 'None'}\n`;
+          logText += `Discovered Files: ${this.discoveredFiles.size}\n`;
+          logText += '=====================================\n\n';
+          
+          logEntries.forEach(entry => {
+            logText += entry.textContent + '\n';
+          });
+          
+          // Copy to clipboard
+          navigator.clipboard.writeText(logText).then(() => {
+            this.logger.info('Debug log copied to clipboard');
+            
+            // Show temporary success message
+            const copyBtn = document.getElementById('copyLogBtn');
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = 'Copied!';
+            copyBtn.style.backgroundColor = '#10b981';
+            
+            setTimeout(() => {
+              copyBtn.textContent = originalText;
+              copyBtn.style.backgroundColor = '';
+            }, 2000);
+          }).catch(err => {
+            this.logger.error('Failed to copy log to clipboard: ' + err.message);
+          });
+        } catch (error) {
+          this.logger.error('Error copying debug log: ' + error.message);
+        }
+      }
+
+      // Handle discovery mode completion
+      handleDiscoveryComplete() {
+        this.logger.info(`🎯 Discovery complete! Found ${this.discoveredFiles.size} files in video`);
+        
+        // Update discovered files UI
+        this.updateDiscoveredFilesUI();
+        
+        if (this.discoveredFiles.size === 1) {
+          // Single file - update UI but continue processing
+          const [filename, fileInfo] = Array.from(this.discoveredFiles.entries())[0];
+          this.ui.updateFileInfo(`Found 1 file: ${filename}. Continuing to process with loops...`);
+          // Don't stop processing - let it continue with loops
+        } else if (this.discoveredFiles.size > 1) {
+          // Multiple files - check if any are incomplete and auto-repeat their ranges
+          this.checkAndAutoRepeatIncompleteFiles();
+        } else {
+          // No files found - continue normal processing
+          this.ui.updateFileInfo("No file metadata found yet. Continuing scan...");
+        }
+      }
+
+      // Update the discovered files UI with clickable buttons
+      updateDiscoveredFilesUI() {
+        const container = document.getElementById('discoveredFilesContainer');
+        const filesList = document.getElementById('discoveredFilesList');
+        
+        if (this.discoveredFiles.size === 0) {
+          container.style.display = 'none';
+          return;
+        }
+        
+        container.style.display = 'block';
+        filesList.innerHTML = '';
+        
+        // Create buttons for each discovered file
+        Array.from(this.discoveredFiles.entries()).forEach(([filename, fileInfo], index) => {
+          const fileButton = document.createElement('div');
+          fileButton.style.cssText = 'margin-bottom: 10px; padding: 10px; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb;';
+          
+          const fileSize = this.formatFileSize(fileInfo.metadata.fileSize);
+          const timeRange = `${fileInfo.firstSeenAt.toFixed(1)}s - ${fileInfo.lastSeenAt.toFixed(1)}s`;
+          const isCompleted = fileInfo.completed || false;
+          const statusBadge = isCompleted ? 
+            '<span style="background: #dcfce7; color: #16a34a; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold;">COMPLETED</span>' : 
+            '<span style="background: #fef3c7; color: #d97706; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold;">NEEDS PROCESSING</span>';
+          
+          fileButton.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-weight: bold; color: #1f2937;">${filename}</span>
+                  ${statusBadge}
+                </div>
+                <div style="font-size: 12px; color: #6b7280;">
+                  Size: ${fileSize} | Chunks: ${fileInfo.metadata.chunksCount} | Time: ${timeRange}
+                </div>
+              </div>
+              <div style="display: flex; gap: 5px;">
+                <button onclick="window.qrFileDecoder.startFileProcessing('${filename}', ${fileInfo.firstSeenAt})" 
+                        style="padding: 6px 12px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                  Decode Full
+                </button>
+                <button onclick="window.qrFileDecoder.repeatFileRange('${filename}', ${fileInfo.firstSeenAt}, ${fileInfo.lastSeenAt})" 
+                        style="padding: 6px 12px; background: #f59e0b; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                  Repeat Range
+                </button>
+                ${isCompleted ? `<button onclick="window.qrFileDecoder.downloadCompletedFile('${filename}')" 
+                        style="padding: 6px 12px; background: #16a34a; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                  Download
+                </button>` : ''}
+              </div>
+            </div>
+          `;
+          
+          filesList.appendChild(fileButton);
+        });
+      }
+
+      // Repeat processing for a specific file's time range
+      repeatFileRange(filename, startTime, endTime) {
+        if (this.isProcessing) return;
+        
+        this.logger.info(`Repeating range for ${filename}: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s`);
+        
+        // Set the active file and reset state for this file
+        this.currentActiveFile = filename;
+        this.discoveryMode = false;
+        
+        // Get existing file metadata if available
+        const fileInfo = this.discoveredFiles.get(filename);
+        if (fileInfo && fileInfo.metadata) {
+          this.fileMetadata = fileInfo.metadata;
+          this.metadataReceived = true;
+          
+          // Initialize fountain decoder with existing metadata
+          this.fountainDecoder = new EnhancedFountainDecoder();
+          this.fountainDecoder.initialize(fileInfo.metadata);
+          this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+          
+          // Initialize chunk grid
+          this.ui.initializeChunkGrid(fileInfo.metadata.chunksCount);
+        }
+        
+        // Set video processor for range processing
+        if (this.videoProcessor) {
+          this.videoProcessor.videoElement.currentTime = startTime;
+          this.videoProcessor.discoveryMode = false;
+          this.videoProcessor.rangeMode = true;
+          this.videoProcessor.endTime = endTime;
+          this.isProcessing = true;
+          this.videoProcessor.isProcessing = true;
+          this.videoProcessor.loopCount = 1;
+          
+          // Update UI
+          document.getElementById('startScanBtn').disabled = true;
+          document.getElementById('continueBtn').disabled = true;
+          document.getElementById('stopScanBtn').disabled = false;
+          
+          this.ui.updateFileInfo(`Repeating range for: ${filename} (${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s)`);
+          
+          // Start processing from the specified time
+          this.videoProcessor.videoElement.play();
+        }
+      }
+
+      // Check and automatically repeat ranges for incomplete files
+      async checkAndAutoRepeatIncompleteFiles() {
+        this.isProcessing = false;
+        this.ui.updateFileInfo(`Discovery complete - found ${this.discoveredFiles.size} files. Checking completion status...`);
+        
+        // Show file selection UI first
+        this.updateDiscoveredFilesUI();
+        
+        // Check each file's completion status by attempting to track chunks
+        const incompleteFiles = [];
+        
+        for (const [filename, fileInfo] of this.discoveredFiles.entries()) {
+          // For now, assume all files might be incomplete after first discovery pass
+          // In a real implementation, we could track chunk recovery during discovery
+          incompleteFiles.push({filename, fileInfo});
+        }
+        
+        if (incompleteFiles.length > 0) {
+          this.logger.info(`🔄 Found ${incompleteFiles.length} files that may need additional processing`);
+          this.logger.info(`🎯 Starting automatic range repeats (5 loops each) for better completion...`);
+          
+          // Process each incomplete file with 5 range loops
+          for (const {filename, fileInfo} of incompleteFiles) {
+            await this.autoRepeatFileRange(filename, fileInfo.firstSeenAt, fileInfo.lastSeenAt, 5);
+          }
+          
+          this.logger.info(`✅ Automatic range processing complete for all files`);
+        }
+        
+        // Re-enable buttons for manual file selection
+        document.getElementById('startScanBtn').disabled = false;
+        document.getElementById('stopScanBtn').disabled = true;
+        
+        this.ui.updateFileInfo(`All files processed. Select a file above to decode or retry specific ranges.`);
+      }
+
+      // Automatically repeat a file's range multiple times
+      async autoRepeatFileRange(filename, startTime, endTime, maxLoops = 5) {
+        this.logger.info(`🔄 Auto-repeating ${filename} range ${maxLoops} times: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s`);
+        
+        for (let loop = 1; loop <= maxLoops; loop++) {
+          this.logger.info(`📹 Auto-repeat loop ${loop}/${maxLoops} for ${filename}`);
+          
+          // Set up for this file
+          this.currentActiveFile = filename;
+          this.discoveryMode = false;
+          
+          const fileInfo = this.discoveredFiles.get(filename);
+          if (fileInfo && fileInfo.metadata) {
+            this.fileMetadata = fileInfo.metadata;
+            this.metadataReceived = true;
+            
+            // Initialize fountain decoder for this file
+            this.fountainDecoder = new EnhancedFountainDecoder();
+            this.fountainDecoder.initialize(fileInfo.metadata);
+            this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+            
+            // Initialize chunk grid
+            this.ui.initializeChunkGrid(fileInfo.metadata.chunksCount);
+          }
+          
+          // Process this range
+          await this.processVideoRange(startTime, endTime, loop);
+          
+          // Short pause between loops
+          if (loop < maxLoops) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+      }
+
+      // Process a specific video range
+      async processVideoRange(startTime, endTime, loopNumber) {
+        return new Promise((resolve) => {
+          if (this.videoProcessor) {
+            this.videoProcessor.videoElement.currentTime = startTime;
+            this.videoProcessor.discoveryMode = false;
+            this.videoProcessor.rangeMode = true;
+            this.videoProcessor.endTime = endTime;
+            this.videoProcessor.loopCount = loopNumber;
+            
+            // Update UI
+            this.ui.updateFileInfo(`Auto-processing ${this.currentActiveFile} - Loop ${loopNumber} (${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s)`);
+            
+            // Start processing and wait for completion
+            this.videoProcessor.isProcessing = true;
+            this.videoProcessor.videoElement.play();
+            
+            // Monitor for completion
+            const checkCompletion = setInterval(() => {
+              if (!this.videoProcessor.isProcessing || this.videoProcessor.videoElement.paused) {
+                clearInterval(checkCompletion);
+                resolve();
+              }
+            }, 500);
+          } else {
+            resolve();
+          }
+        });
+      }
+
+      // Download a specific completed file
+      downloadCompletedFile(filename) {
+        const fileInfo = this.discoveredFiles.get(filename);
+        if (!fileInfo || !fileInfo.completed || !fileInfo.recoveredData) {
+          this.logger.warn(`File ${filename} is not available for download`);
+          return;
+        }
+
+        try {
+          // Create blob from stored recovered data
+          const blob = new Blob([fileInfo.recoveredData], { 
+            type: fileInfo.metadata.fileType || 'application/octet-stream' 
+          });
+
+          // Create download link
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+
+          // Clean up
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }, 100);
+
+          // Mark discovered file as downloaded to prevent duplicates
+          this.downloadedFiles.add(filename);
+          
+          this.logger.info(`📥 ENTERPRISE: Auto-downloaded discovered file: ${filename} (${this.formatFileSize(fileInfo.recoveredData.byteLength)})`);
+          console.log(`✅ ENTERPRISE SUCCESS: Discovered file "${filename}" automatically downloaded`);
+          console.log(`📋 ENTERPRISE: Added "${filename}" to downloaded files list (${this.downloadedFiles.size} total)`);
+          
+          // DON'T check completion during discovery - let discovery finish first
+        } catch (error) {
+          console.error(`❌ ENTERPRISE ERROR: Auto-download failed for discovered file ${filename}:`, error.message);
+          this.logger.error(`Error downloading file ${filename}: ${error.message}`);
+        }
+      }
+
+      // Enterprise scalable completion: Smart stopping logic for 1-20+ files
+      checkAndStopIfAllFilesDownloaded() {
+        if (this.discoveredFiles.size === 0) return; // No discovered files yet
+        
+        const discoveredFileNames = Array.from(this.discoveredFiles.keys());
+        const downloadedFileNames = Array.from(this.downloadedFiles);
+        const currentLoop = this.videoProcessor ? (this.videoProcessor.loopCount || 1) : 1;
+        
+        // Check completion status
+        const allDiscoveredFilesDownloaded = discoveredFileNames.every(filename => 
+          downloadedFileNames.includes(filename)
+        );
+        
+        console.log(`📊 ENTERPRISE SCALE CHECK: ${downloadedFileNames.length}/${discoveredFileNames.length} files downloaded, loop ${currentLoop}`);
+        
+        // Scalable logic: Only stop at natural checkpoints for 1-20+ files
+        // - Never stop during loop 1 (discovery must complete)
+        // - Only check at loop boundaries (not after every download)
+        // - For many files, allow multiple loops for thorough processing
+        
+        if (allDiscoveredFilesDownloaded) {
+          if (currentLoop === 1) {
+            console.log(`📊 ENTERPRISE: All ${discoveredFileNames.length} files downloaded in discovery loop - will validate at loop 2`);
+          } else {
+            // Files downloaded and we're past discovery - this is checked at loop boundaries in shouldContinueLooping
+            console.log(`✅ ENTERPRISE: All ${discoveredFileNames.length} files confirmed downloaded in loop ${currentLoop}`);
+          }
+        } else {
+          const remainingFiles = discoveredFileNames.filter(name => !downloadedFileNames.includes(name));
+          console.log(`🔄 ENTERPRISE: ${remainingFiles.length} files still needed: ${remainingFiles.join(', ')}`);
+        }
       }
 
       formatFileSize(bytes) {
