@@ -2766,8 +2766,9 @@
             loopInfo.textContent = `Status: Manual continue - loop ${this.videoProcessor.loopCount} with faster frame rate...`;
           }
           
-          // Restart video from beginning with full frame processing
-          this.videoProcessor.videoElement.currentTime = 0;
+          // Continue from current video position (don't reset to beginning)
+          const currentPosition = this.videoProcessor.videoElement.currentTime;
+          console.log(`🎯 Continue from current position: ${currentPosition.toFixed(2)}s (not restarting from beginning)`);
           this.videoProcessor.videoElement.play().then(() => {
             console.log(`✅ Manual continue: Video restarted, resuming processing...`);
             

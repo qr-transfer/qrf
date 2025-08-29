@@ -9,7 +9,7 @@
         *{margin:0;padding:0;box-sizing:border-box}
         body{font-family:system-ui,-apple-system,sans-serif;line-height:1.5;background:#f5f5f5;color:#333;max-width:1200px;margin:0 auto;padding:20px}
         h1{margin:20px 0;color:#2563eb}
-        .container{display:flex;flex-wrap:wrap;gap:20px}
+        .container{max-width:800px;margin:0 auto}
         .panel{background:#fff;padding:20px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.1);flex:1;min-width:300px}
         .control-panel{display:flex;flex-direction:column;gap:15px}
         .control-group{display:flex;flex-direction:column;gap:8px}
@@ -502,13 +502,7 @@
                 </div>
             </div>
 
-            <div class="handshake-notice">
-                <strong>Handshake Mode</strong>: The first frame contains special setup data that helps the decoder optimize for your specific transfer. Make sure to scan this frame.
-            </div>
-        </div>
-
-        <!-- File Information Panel -->
-        <div class="panel">
+            <!-- File Information (moved below controls) -->
             <div id="fileInfo" class="file-info" style="display: none;">
                 <h3 style="margin-bottom: 10px;">File Information</h3>
                 <div class="info-row">
@@ -544,7 +538,12 @@
                     <div style="color: #b91c1c; font-weight: bold;">Active</div>
                 </div>
             </div>
+
+            <div class="handshake-notice">
+                <strong>Handshake Mode</strong>: The first frame contains special setup data that helps the decoder optimize for your specific transfer. Make sure to scan this frame.
+            </div>
         </div>
+
     </div>
 
     <!-- Fullscreen mode container (hidden initially) -->
@@ -1185,7 +1184,10 @@
                 console.log(`🎬 Auto-starting combined QR display for all files...`);
                 
                 if (fullscreenCheckbox.checked) {
-                    enterFullscreenMode();
+                    // Enter fullscreen and start the animated sequence (same as manual button)
+                    isFullscreen = true;
+                    fullscreenDisplay.style.display = 'flex';
+                    
                     if (countdownSeconds > 0) {
                         await startCountdownAndWait();
                     } else {
