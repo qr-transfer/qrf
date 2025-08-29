@@ -491,6 +491,15 @@
                     <button id="fullscreenBtn" disabled style="flex: 1; background: #4b5563;">Start Fullscreen Display</button>
                     <button id="previewBtn" disabled style="flex: 1; background: #6b7280;">Preview Fullscreen</button>
                 </div>
+                
+                <!-- QR Generation Progress -->
+                <div id="generationProgress" style="display: none; margin-top: 15px;">
+                    <div style="font-weight: bold; margin-bottom: 5px;" id="progressLabel">Generating QR Codes...</div>
+                    <div class="progress-container">
+                        <div class="progress-bar" id="generationProgressBar"></div>
+                    </div>
+                    <div style="font-size: 12px; color: #6b7280; margin-top: 5px;" id="progressDetails">Initializing...</div>
+                </div>
             </div>
 
             <div class="handshake-notice">
@@ -588,6 +597,10 @@
         const fullscreenBtn = document.getElementById('fullscreenBtn');
         const previewBtn = document.getElementById('previewBtn');
         const fileInfo = document.getElementById('fileInfo');
+        const generationProgress = document.getElementById('generationProgress');
+        const progressLabel = document.getElementById('progressLabel');
+        const generationProgressBar = document.getElementById('generationProgressBar');
+        const progressDetails = document.getElementById('progressDetails');
         const frameType = document.getElementById('frameType');
         const chunkId = document.getElementById('chunkId');
         const currentChunkInfo = document.getElementById('currentChunkInfo');
@@ -1458,14 +1471,20 @@
             }
             
             generateAndStartBtn.disabled = true;
-            generateAndStartBtn.textContent = 'Processing Batch...';
+            
+            // Show progress bar
+            generationProgress.style.display = 'block';
+            progressLabel.textContent = 'Generating QR Codes for Batch...';
+            generationProgressBar.style.width = '0%';
+            progressDetails.textContent = 'Initializing batch processing...';
             
             try {
                 await processBatchFiles(selectedFiles, true);
             } catch (error) {
                 alert('Error during batch processing: ' + error.message);
             } finally {
-                generateAndStartBtn.textContent = 'Generate & Start Display';
+                // Hide progress bar
+                generationProgress.style.display = 'none';
                 generateAndStartBtn.disabled = false;
             }
         });
@@ -1479,7 +1498,12 @@
             }
             
             generateBtn.disabled = true;
-            generateBtn.textContent = 'Generating Batch...';
+            
+            // Show progress bar
+            generationProgress.style.display = 'block';
+            progressLabel.textContent = 'Generating QR Codes...';
+            generationProgressBar.style.width = '0%';
+            progressDetails.textContent = 'Preparing files for encoding...';
             
             try {
                 await processBatchFiles(selectedFiles, false);
@@ -1488,7 +1512,8 @@
             } catch (error) {
                 alert('Error generating QR codes: ' + error.message);
             } finally {
-                generateBtn.textContent = 'Generate QR Codes';
+                // Hide progress bar
+                generationProgress.style.display = 'none';
                 generateBtn.disabled = false;
             }
         });
@@ -1800,17 +1825,12 @@
                 if (i > 0 && i % 10 === 0) {
                     await new Promise(resolve => setTimeout(resolve, 50)); // 50ms delay
                     
-                    // Update progress for user feedback
-                    const progress = (i / fountainPackets.length * 100).toFixed(1);
-                    console.log(`🔄 QR Generation Progress: ${i}/${fountainPackets.length} (${progress}%)`);
+                    // Update progress bar
+                    const progress = (i / fountainPackets.length * 100);
+                    generationProgressBar.style.width = `${progress}%`;
+                    progressDetails.textContent = `Processing frame ${i}/${fountainPackets.length} (${progress.toFixed(1)}%)`;
                     
-                    // Update button text to show progress
-                    if (generateBtn.textContent.includes('Generate')) {
-                        generateBtn.textContent = `Generating... ${progress}%`;
-                    }
-                    if (generateAndStartBtn.textContent.includes('Generate')) {
-                        generateAndStartBtn.textContent = `Generating... ${progress}%`;
-                    }
+                    console.log(`🔄 QR Generation Progress: ${i}/${fountainPackets.length} (${progress.toFixed(1)}%)`);
                 }
                 
                 try {
@@ -1901,6 +1921,10 @@
                     }
                 }
             }
+            
+            // Final progress update
+            generationProgressBar.style.width = '100%';
+            progressDetails.textContent = `Generation complete! ${fountainPackets.length} QR codes ready`;
             
             const duration = performance.now() - startTime;
             console.log(`✅ ENTERPRISE: Pre-generation complete in ${duration.toFixed(0)}ms`);
@@ -2060,11 +2084,18 @@
             stopBtn.disabled = true;
         }
 
-        // Fullscreen mode
+        // Fullscreen mode - start the actual QR sequence
         fullscreenBtn.addEventListener('click', () => {
-            enterFullscreenMode();
+            if (fountainPackets.length === 0) {
+                alert('Please generate QR codes first');
+                return;
+            }
             
-            // Start display in fullscreen mode (with countdown if enabled)
+            // Enter fullscreen and start the sequence
+            isFullscreen = true;
+            fullscreenDisplay.style.display = 'flex';
+            
+            // Start the QR sequence with countdown if enabled
             if (countdownSeconds > 0) {
                 startCountdown();
             } else {

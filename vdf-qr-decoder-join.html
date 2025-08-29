@@ -386,6 +386,20 @@
     </div>
   </header>
 
+  <!-- File information (moved below controls) -->
+  <div class="file-info-container">
+    <h2>File Information</h2>
+    <div id="fileInfo">No file detected yet</div>
+    <div id="checksumInfo" style="display: none; margin-top: 10px; font-size: 14px; color: #6b7280;">
+      <div>File Checksum: <span id="fileChecksum">-</span></div>
+      <div>Meta Checksum: <span id="metaChecksum">-</span></div>
+    </div>
+    <div id="missingChunks">Waiting for metadata...</div>
+    <div id="downloadContainer" style="display: none;">
+      <button id="downloadBtn">Download Recovered File</button>
+    </div>
+  </div>
+
   <!-- 2. Video playback and overlay -->
   <div class="video-container">
     <video id="videoPreview" controls></video>
@@ -405,19 +419,6 @@
     <div class="chunks-grid" id="chunksGrid"></div>
   </div>
 
-  <!-- 4. File information -->
-  <div class="file-info-container">
-    <h2>File Information</h2>
-    <div id="fileInfo">No file detected yet</div>
-    <div id="checksumInfo" style="display: none; margin-top: 10px; font-size: 14px; color: #6b7280;">
-      <div>File Checksum: <span id="fileChecksum">-</span></div>
-      <div>Meta Checksum: <span id="metaChecksum">-</span></div>
-    </div>
-    <div id="missingChunks">Waiting for metadata...</div>
-    <div id="downloadContainer" style="display: none;">
-      <button id="downloadBtn">Download Recovered File</button>
-    </div>
-  </div>
   
   <!-- 5. Discovered Files -->
   <div id="discoveredFilesContainer" class="file-info-container" style="display: none;">
@@ -490,76 +491,10 @@
       }
     });
     
-    // Handle focus/blur for pause/resume functionality
-    let wasProcessingBeforeBlur = false;
-    
+    // Warn when tab goes to background (affects QR processing performance)
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        // Tab is going to background - pause processing
-        if (window.qrFileDecoder && window.qrFileDecoder.videoProcessor && window.qrFileDecoder.videoProcessor.isProcessing) {
-          console.warn('⚠️ Tab backgrounded - Pausing QR processing to maintain accuracy');
-          wasProcessingBeforeBlur = true;
-          
-          // Pause video processing
-          if (window.qrFileDecoder.videoProcessor.videoElement) {
-            window.qrFileDecoder.videoProcessor.videoElement.pause();
-          }
-          window.qrFileDecoder.videoProcessor.pausedByFocus = true;
-          
-          // Update UI to show paused state
-          if (window.qrFileDecoder.ui) {
-            window.qrFileDecoder.ui.updateFileInfo('⏸️ Processing paused - Tab is in background. Return to tab to resume.');
-          }
-        } else {
-          wasProcessingBeforeBlur = false;
-        }
-      } else {
-        // Tab is coming back to foreground - resume if it was processing
-        if (wasProcessingBeforeBlur && window.qrFileDecoder && window.qrFileDecoder.videoProcessor && window.qrFileDecoder.videoProcessor.pausedByFocus) {
-          console.log('✅ Tab focused - Resuming QR processing');
-          
-          // Resume video processing
-          if (window.qrFileDecoder.videoProcessor.videoElement) {
-            window.qrFileDecoder.videoProcessor.videoElement.play().catch(err => {
-              console.error('Failed to resume video:', err);
-            });
-          }
-          window.qrFileDecoder.videoProcessor.pausedByFocus = false;
-          
-          // Update UI to show resumed state
-          if (window.qrFileDecoder.ui) {
-            window.qrFileDecoder.ui.updateFileInfo('▶️ Processing resumed');
-          }
-          
-          wasProcessingBeforeBlur = false;
-        }
-      }
-    });
-    
-    // Also handle window focus/blur events for better cross-browser compatibility
-    window.addEventListener('blur', () => {
-      if (window.qrFileDecoder && window.qrFileDecoder.videoProcessor && window.qrFileDecoder.videoProcessor.isProcessing) {
-        console.warn('⚠️ Window lost focus - Pausing processing');
-        wasProcessingBeforeBlur = true;
-        
-        if (window.qrFileDecoder.videoProcessor.videoElement) {
-          window.qrFileDecoder.videoProcessor.videoElement.pause();
-        }
-        window.qrFileDecoder.videoProcessor.pausedByFocus = true;
-      }
-    });
-    
-    window.addEventListener('focus', () => {
-      if (wasProcessingBeforeBlur && window.qrFileDecoder && window.qrFileDecoder.videoProcessor && window.qrFileDecoder.videoProcessor.pausedByFocus) {
-        console.log('✅ Window focused - Resuming processing');
-        
-        if (window.qrFileDecoder.videoProcessor.videoElement) {
-          window.qrFileDecoder.videoProcessor.videoElement.play().catch(err => {
-            console.error('Failed to resume video on focus:', err);
-          });
-        }
-        window.qrFileDecoder.videoProcessor.pausedByFocus = false;
-        wasProcessingBeforeBlur = false;
+        console.warn('⚠️ Tab backgrounded - QR processing may be throttled by browser. Keep tab active for best performance.');
       }
     });
     
@@ -1471,11 +1406,16 @@
         console.log(`Packet stats: ${JSON.stringify(this.packetStats)}`);
 
         try {
-          // First, verify we have all chunks
+          // First, verify we have all chunks and update the UI grid for any final chunks
           for (let i = 0; i < this.totalChunks; i++) {
             if (!this.sourceChunks[i]) {
               console.error(`Missing chunk ${i} during file reconstruction, cannot finalize`);
               return;
+            } else {
+              // Ensure the chunk is visually marked as received (fix for final chunks not showing)
+              if (window.qrFileDecoder && window.qrFileDecoder.ui) {
+                window.qrFileDecoder.ui.markChunkAsRecovered(i);
+              }
             }
           }
 
