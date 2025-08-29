@@ -1,9 +1,9 @@
-# Optimization Summary for camera-qr-decoder.html
+# Optimization Summary for vde-qr-encoder-split.html
 
 ## Size Reduction
-- Original Size: 82.48 KB
-- Optimized Size: 445.02 KB
-- Bytes Saved: -371245 bytes (-439.56%)
+- Original Size: 139.62 KB
+- Optimized Size: 63.49 KB
+- Bytes Saved: 77954 bytes (54.52%)
 
 ## Optimizations Applied
 1. **CSS Minification**
@@ -14,7 +14,7 @@
    - Shortened variable names
    - Eliminated unused code
    - Removed comments and whitespace
-      - Incorporated external scripts into the final file
+   
 
 3. **HTML Minification**
    - Compressed whitespace
