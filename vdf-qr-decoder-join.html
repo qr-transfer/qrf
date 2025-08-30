@@ -1514,19 +1514,23 @@
           console.log(`Final file size: ${fileData.length} bytes`);
 
           // Verify file integrity with checksum
+          let checksumPassed = true;
           if (this.metaData.fileChecksum) {
             const calculatedChecksum = this.calculateFileChecksum(fileData);
             const expectedChecksum = this.metaData.fileChecksum;
             
             if (calculatedChecksum === expectedChecksum) {
               console.log(`✅ File integrity verified: checksum ${calculatedChecksum}`);
+              checksumPassed = true;
             } else {
               console.error(`❌ File integrity check FAILED!`);
               console.error(`Expected: ${expectedChecksum}, Got: ${calculatedChecksum}`);
-              console.error(`File may be corrupted - check chunk order and data integrity`);
+              console.error(`File may be corrupted - REJECTING download and continuing processing`);
+              checksumPassed = false;
             }
           } else {
-            console.warn(`⚠️  No file checksum available for verification`);
+            console.warn(`⚠️  No file checksum available for verification - allowing download`);
+            checksumPassed = true;
           }
 
           // Verify JPEG structure for JPEG files
@@ -1547,14 +1551,35 @@
           console.log(`  Source chunks available: ${Object.keys(this.sourceChunks).length}`);
           console.log(`  File size from metadata: ${this.metaData.fileSize} bytes`);
           
-          // Check if we have enough chunks for file reconstruction
+          // Check if we have enough chunks for file reconstruction AND checksum passes
           const hasEnoughChunks = this.recoveredChunkCount >= this.totalChunks;
           
-          if (hasEnoughChunks) {
-            console.log(`✅ ENTERPRISE: File truly complete - all ${this.totalChunks} chunks recovered`);
+          if (hasEnoughChunks && checksumPassed) {
+            console.log(`✅ ENTERPRISE: File truly complete and verified - all ${this.totalChunks} chunks recovered with valid checksum`);
             if (this.completeCallback) {
               this.completeCallback(fileData);
             }
+          } else if (hasEnoughChunks && !checksumPassed) {
+            console.error(`🚫 ENTERPRISE: File complete but CHECKSUM FAILED - saving as .failed and continuing processing`);
+            console.error(`🔄 ENTERPRISE: Will continue processing to get a clean copy of the file`);
+            
+            // Save corrupted file with .failed extension for analysis
+            if (this.completeCallback) {
+              console.log(`💾 Saving corrupted file as ${this.metaData.fileName}.failed for debugging`);
+              
+              // Create modified metadata for failed file
+              const failedMetadata = {...this.metaData};
+              failedMetadata.fileName = failedMetadata.fileName + '.failed';
+              failedMetadata.corrupted = true;
+              failedMetadata.expectedChecksum = this.metaData.fileChecksum;
+              failedMetadata.actualChecksum = this.calculateFileChecksum(fileData);
+              
+              // Save with failed extension but don't mark as complete
+              this.completeCallback(fileData, failedMetadata);
+            }
+            
+            // Reset decoder state to try again - don't mark as complete
+            this.fileCompleted = false;
           } else {
             console.warn(`⚠️ ENTERPRISE: File reconstruction attempted but missing ${this.totalChunks - this.recoveredChunkCount} chunks`);
             console.log(`📊 ENTERPRISE: Only ${this.recoveredChunkCount}/${this.totalChunks} chunks available - file incomplete`);
@@ -3161,7 +3186,7 @@
         }
       }
 
-      handleFileComplete(fileData) {
+      handleFileComplete(fileData, customMetadata = null) {
         this.logger.info("File recovery complete!");
 
         // Release wake lock since file is complete
@@ -3169,17 +3194,27 @@
 
         // Store the recovered file data
         this.recoveredFileData = fileData;
+        
+        // Store custom metadata if provided (for failed files)
+        if (customMetadata) {
+          this.customFileMetadata = customMetadata;
+        }
 
         // Show download button
         document.getElementById('downloadContainer').style.display = 'block';
 
-        // Update file info with success message
+        // Update file info with success/failure message
         const fileInfo = document.getElementById('fileInfo').innerHTML;
-        document.getElementById('fileInfo').innerHTML = fileInfo + `
-          <div style="margin-top: 10px; color: var(--success-color);">
+        const statusMessage = customMetadata && customMetadata.corrupted ? 
+          `<div style="margin-top: 10px; color: var(--error-color);">
+            <strong>⚠️ File Corrupted - Saved as .failed for analysis</strong><br>
+            <small>Expected: ${customMetadata.expectedChecksum}, Got: ${customMetadata.actualChecksum}</small>
+          </div>` :
+          `<div style="margin-top: 10px; color: var(--success-color);">
             <strong>File Successfully Recovered!</strong>
-          </div>
-        `;
+          </div>`;
+        
+        document.getElementById('fileInfo').innerHTML = fileInfo + statusMessage;
 
         // DON'T stop processing during discovery mode - need to scan entire video
         if (this.discoveryMode) {
@@ -3300,14 +3335,17 @@
         }
 
         try {
+          // Use custom metadata if available (for failed files)
+          const metadata = this.customFileMetadata || this.fileMetadata;
+          
           // Create blob from recovered data
-          const blob = new Blob([this.recoveredFileData], { type: this.fileMetadata.fileType || 'application/octet-stream' });
+          const blob = new Blob([this.recoveredFileData], { type: metadata.fileType || 'application/octet-stream' });
 
           // Create download link
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = this.fileMetadata.fileName;
+          a.download = metadata.fileName;
           document.body.appendChild(a);
           a.click();
 
