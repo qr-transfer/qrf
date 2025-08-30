@@ -68,7 +68,9 @@ fileSize:fileSize,
 chunksCount:total,
 totalPackets:totalPackets,
 chunkSize:parseInt(p[10]),
-redundancy:parseInt(p[11])
+redundancy:parseInt(p[11]),
+metaChecksum:p[13]||'',
+fileChecksum:p[14]||''
 };
 
 chunks={};sourceChunks={};codedPackets=[];got=0;fileData=null;
@@ -137,9 +139,27 @@ result.set(chunkBytes.slice(0,copyLen),offset);
 offset+=copyLen;
 }
 }
+
+// Verify file integrity with enhanced FNV-1a checksum
+let checksumPassed=true;
+if(metadata.fileChecksum){
+const calculatedChecksum=calculateFNV1aChecksum(result);
+if(calculatedChecksum===metadata.fileChecksum){
+console.log(`✅ File integrity verified: ${calculatedChecksum}`);
+checksumPassed=true;
+}else{
+console.error(`❌ Checksum FAILED! Expected: ${metadata.fileChecksum}, Got: ${calculatedChecksum}`);
+checksumPassed=false;
+}
+}
+
+if(checksumPassed){
 fileData=result;
 document.getElementById('down').style.display='block';
-msg(`🎉 File complete! ${got}/${total} chunks recovered`,'success');
+msg(`🎉 File complete and verified! ${got}/${total} chunks`,'success');
+}else{
+msg(`🚫 File complete but CORRUPTED - checksum failed`,'error');
+}
 }
 
 updateStats();
@@ -266,6 +286,15 @@ function fmt(bytes){
 if(bytes<1024)return bytes+' B';
 if(bytes<1048576)return Math.round(bytes/1024)+' KB';
 return Math.round(bytes/1048576)+' MB';
+}
+
+function calculateFNV1aChecksum(binaryData){
+let hash=2166136261; // FNV-1a offset basis
+for(let i=0;i<binaryData.length;i++){
+hash^=binaryData[i];
+hash=Math.imul(hash,16777619); // FNV-1a prime
+}
+return(hash>>>0).toString(36).substring(0,8);
 }
 </script>
 </body></html>

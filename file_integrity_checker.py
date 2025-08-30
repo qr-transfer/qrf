@@ -19,22 +19,43 @@ from datetime import datetime
 import zlib
 
 
-def calculate_qr_checksum(file_data):
-    """Calculate the same enhanced FNV-1a checksum used by QR encoder/decoder"""
+def calculate_qr_checksum_old(file_data):
+    """Calculate OLD QR checksum (for compatibility with older Windows files)"""
+    hash_val = 0
+    for byte in file_data:
+        hash_val = ((hash_val << 5) - hash_val) + byte
+        hash_val = hash_val & 0xFFFFFFFF  # Keep as 32-bit
+    
+    # Convert to base36 same as JavaScript (old method)
+    result = ""
+    num = abs(hash_val)  # Use abs() like old algorithm
+    chars = "0123456789abcdefghijklmnopqrstuvwxyz"
+    while num > 0:
+        result = chars[num % 36] + result
+        num //= 36
+    return result[:8] if result else "0"
+
+
+def calculate_qr_checksum_fnv1a(file_data):
+    """Calculate Enhanced FNV-1a checksum (current HTML encoder/decoder algorithm)"""
     hash_val = 2166136261  # FNV-1a offset basis
     for byte in file_data:
         hash_val ^= byte
         hash_val = (hash_val * 16777619) & 0xFFFFFFFF  # FNV-1a prime, keep 32-bit
     
     # Convert to base36 same as JavaScript
-    import string
-    chars = string.digits + string.ascii_lowercase
     result = ""
-    num = hash_val
+    num = hash_val  # No abs() in FNV-1a
+    chars = "0123456789abcdefghijklmnopqrstuvwxyz"
     while num > 0:
         result = chars[num % 36] + result
         num //= 36
-    return result[:8].ljust(8, '0')  # Ensure 8 chars
+    return result[:8] if result else "0"
+
+
+def calculate_qr_checksum(file_data):
+    """Default to FNV-1a (current algorithm)"""
+    return calculate_qr_checksum_fnv1a(file_data)
 
 
 def calculate_checksums(file_path):
@@ -44,7 +65,9 @@ def calculate_checksums(file_path):
             data = f.read()
         
         checksums = {
-            'qr_checksum': calculate_qr_checksum(data),
+            'qr_checksum_old': calculate_qr_checksum_old(data),
+            'qr_checksum_fnv1a': calculate_qr_checksum_fnv1a(data),
+            'qr_checksum': calculate_qr_checksum_fnv1a(data),  # Default to current
             'md5': hashlib.md5(data).hexdigest(),
             'sha1': hashlib.sha1(data).hexdigest(),
             'sha256': hashlib.sha256(data).hexdigest(),

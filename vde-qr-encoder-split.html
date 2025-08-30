@@ -491,6 +491,10 @@
                     <button id="fullscreenBtn" disabled style="flex: 1; background: #4b5563;">Start Fullscreen Display</button>
                     <button id="previewBtn" disabled style="flex: 1; background: #6b7280;">Preview Fullscreen</button>
                 </div>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                    <button id="generateIntegrityBtn" disabled style="flex: 1; background: #059669;">Generate Integrity Report</button>
+                    <button id="downloadReportBtn" disabled style="flex: 1; background: #0891b2;">Download Report</button>
+                </div>
                 
                 <!-- QR Generation Progress -->
                 <div id="generationProgress" style="display: none; margin-top: 15px;">
@@ -599,6 +603,8 @@
         const stopBtn = document.getElementById('stopBtn');
         const fullscreenBtn = document.getElementById('fullscreenBtn');
         const previewBtn = document.getElementById('previewBtn');
+        const generateIntegrityBtn = document.getElementById('generateIntegrityBtn');
+        const downloadReportBtn = document.getElementById('downloadReportBtn');
         const fileInfo = document.getElementById('fileInfo');
         const generationProgress = document.getElementById('generationProgress');
         const progressLabel = document.getElementById('progressLabel');
@@ -817,6 +823,15 @@
             saveEncoderSettings();
         });
 
+        // Integrity report functionality
+        generateIntegrityBtn.addEventListener('click', () => {
+            generateIntegrityReport();
+        });
+
+        downloadReportBtn.addEventListener('click', () => {
+            downloadIntegrityReport();
+        });
+
         // Preset button handlers
         fastPreset.addEventListener('click', () => {
             applyPreset('fast');
@@ -893,6 +908,7 @@
         // File batch management
         let fileList = [];
         let currentProcessingIndex = 0;
+        let currentIntegrityReport = null;
 
         // File selection handler
         fileInput.addEventListener('change', () => {
@@ -1209,6 +1225,7 @@
                 // Enable manual display for combined sequence
                 fullscreenBtn.disabled = false;
                 previewBtn.disabled = false;
+                generateIntegrityBtn.disabled = false;
                 console.log(`💡 Click "Start Display" or "Fullscreen" to show combined QR sequence for all files`);
             }
         }
@@ -1506,6 +1523,7 @@
                 await processBatchFiles(selectedFiles, false);
                 fullscreenBtn.disabled = false;
                 previewBtn.disabled = false;
+                generateIntegrityBtn.disabled = false;
             } catch (error) {
                 alert('Error generating QR codes: ' + error.message);
             } finally {
@@ -3039,6 +3057,110 @@
                 }
                 return Math.abs(hash).toString(36).substring(0, 6); // Base36 representation, 6 chars
             }
+        }
+
+        // =============================================
+        // Integrity Report Generation Functions
+        // =============================================
+        
+        function generateIntegrityReport() {
+            const selectedFiles = fileList.filter(f => f.selected);
+            if (selectedFiles.length === 0) {
+                alert('Please select files to generate integrity report');
+                return;
+            }
+            
+            console.log(`📊 Generating integrity report for ${selectedFiles.length} files...`);
+            
+            const report = {
+                reportDate: new Date().toISOString(),
+                reportVersion: '3.0',
+                totalFiles: selectedFiles.length,
+                files: {}
+            };
+            
+            // Process each file
+            selectedFiles.forEach((fileItem, index) => {
+                const file = fileItem.file;
+                console.log(`📄 Processing integrity for: ${file.name}`);
+                
+                // Read file and calculate checksums
+                const fileReader = new FileReader();
+                fileReader.onload = async function(event) {
+                    const fileData = new Uint8Array(event.target.result);
+                    
+                    // Calculate multiple checksums
+                    const checksums = {
+                        qr_checksum_fnv1a: calculateFileChecksumFNV1a(fileData),
+                        md5: await calculateMD5(fileData),
+                        size: fileData.length,
+                        fileName: file.name,
+                        fileType: file.type || 'application/octet-stream',
+                        lastModified: file.lastModified
+                    };
+                    
+                    report.files[file.name] = checksums;
+                    
+                    // Check if all files processed
+                    if (Object.keys(report.files).length === selectedFiles.length) {
+                        currentIntegrityReport = report;
+                        downloadReportBtn.disabled = false;
+                        console.log(`✅ Integrity report generated for ${selectedFiles.length} files`);
+                        alert(`Integrity report generated for ${selectedFiles.length} files. Click "Download Report" to save.`);
+                    }
+                };
+                fileReader.readAsArrayBuffer(file);
+            });
+        }
+        
+        function downloadIntegrityReport() {
+            if (!currentIntegrityReport) {
+                alert('No integrity report available. Generate one first.');
+                return;
+            }
+            
+            const reportJSON = JSON.stringify(currentIntegrityReport, null, 2);
+            const blob = new Blob([reportJSON], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `integrity_report_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            console.log('📥 Integrity report downloaded');
+        }
+        
+        // Enhanced FNV-1a checksum (matches encoder algorithm)
+        function calculateFileChecksumFNV1a(binaryData) {
+            let hash = 2166136261; // FNV-1a offset basis
+            for (let i = 0; i < binaryData.length; i++) {
+                hash ^= binaryData[i];
+                hash = Math.imul(hash, 16777619); // FNV-1a prime
+            }
+            return (hash >>> 0).toString(36).substring(0, 8);
+        }
+        
+        // Simple MD5 implementation using Web Crypto API
+        async function calculateMD5(data) {
+            try {
+                const hashBuffer = await crypto.subtle.digest('MD5', data);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            } catch (error) {
+                // Fallback for browsers that don't support MD5
+                console.warn('MD5 not supported, using fallback checksum');
+                return calculateFileChecksumFNV1a(data) + '_md5alt';
+            }
+        }
+        
+        // Update button states when files are processed
+        function updateIntegrityButtonStates() {
+            const selectedFiles = fileList.filter(f => f.selected);
+            generateIntegrityBtn.disabled = selectedFiles.length === 0;
         }
     </script>
 </body>
