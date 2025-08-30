@@ -20,12 +20,21 @@ import zlib
 
 
 def calculate_qr_checksum(file_data):
-    """Calculate the same checksum used by QR encoder/decoder"""
-    hash_val = 0
+    """Calculate the same enhanced FNV-1a checksum used by QR encoder/decoder"""
+    hash_val = 2166136261  # FNV-1a offset basis
     for byte in file_data:
-        hash_val = ((hash_val << 5) - hash_val) + byte
-        hash_val = hash_val & 0xFFFFFFFF  # Keep as 32-bit
-    return format(abs(hash_val), 'x')[:8]  # 8 chars hex
+        hash_val ^= byte
+        hash_val = (hash_val * 16777619) & 0xFFFFFFFF  # FNV-1a prime, keep 32-bit
+    
+    # Convert to base36 same as JavaScript
+    import string
+    chars = string.digits + string.ascii_lowercase
+    result = ""
+    num = hash_val
+    while num > 0:
+        result = chars[num % 36] + result
+        num //= 36
+    return result[:8].ljust(8, '0')  # Ensure 8 chars
 
 
 def calculate_checksums(file_path):

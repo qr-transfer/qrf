@@ -1,9 +1,9 @@
 # Optimization Summary for vdf-qr-decoder-join.html
 
 ## Size Reduction
-- Original Size: 150.57 KB
-- Optimized Size: 75.99 KB
-- Bytes Saved: 76370 bytes (49.53%)
+- Original Size: 150.61 KB
+- Optimized Size: 76.01 KB
+- Bytes Saved: 76393 bytes (49.53%)
 
 ## Optimizations Applied
 1. **CSS Minification**

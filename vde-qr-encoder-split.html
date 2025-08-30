@@ -2997,37 +2997,37 @@
                 return packet;
             }
             
-            // Calculate file checksum for integrity verification
+            // Calculate file checksum for integrity verification - Enhanced FNV-1a algorithm
             calculateFileChecksum(binaryData) {
                 if (!binaryData) {
                     console.warn('calculateFileChecksum: binaryData is null, returning default');
                     return 'nullchk';
                 }
                 
-                let hash = 0;
+                let hash = 2166136261; // FNV-1a offset basis
                 for (let i = 0; i < binaryData.length; i++) {
-                    hash = ((hash << 5) - hash) + binaryData[i];
-                    hash = hash & hash; // Convert to 32bit integer
+                    hash ^= binaryData[i];
+                    hash = Math.imul(hash, 16777619); // FNV-1a prime
                 }
-                return Math.abs(hash).toString(36).substring(0, 8); // 8 chars for file integrity
+                return (hash >>> 0).toString(36).substring(0, 8); // 8 chars for file integrity
             }
             
-            // Calculate file checksum from chunks
+            // Calculate file checksum from chunks - Enhanced FNV-1a algorithm
             calculateFileChecksumFromChunks(chunks) {
                 if (!chunks || chunks.length === 0) {
                     console.warn('calculateFileChecksumFromChunks: chunks is null/empty, returning default');
                     return 'nochunk';
                 }
                 
-                let hash = 0;
+                let hash = 2166136261; // FNV-1a offset basis
                 // Calculate hash across all chunks
                 for (const chunk of chunks) {
                     for (let i = 0; i < chunk.length; i++) {
-                        hash = ((hash << 5) - hash) + chunk[i];
-                        hash = hash & hash; // Convert to 32bit integer
+                        hash ^= chunk[i];
+                        hash = Math.imul(hash, 16777619); // FNV-1a prime
                     }
                 }
-                return Math.abs(hash).toString(36).substring(0, 8);
+                return (hash >>> 0).toString(36).substring(0, 8);
             }
 
             // Simple checksum for data verification
