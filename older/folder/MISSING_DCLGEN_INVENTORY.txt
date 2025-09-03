@@ -1,0 +1,45 @@
+MISSING DCLGEN FILES INVENTORY
+For EXEC SQL INCLUDE statements
+==================================================
+
+STATISTICS:
+  Total EXEC SQL INCLUDE statements: 145
+  Unique DCLGEN tables referenced: 35
+  Missing DCLGEN files: 34
+
+MISSING DCLGEN FILES (by usage):
+----------------------------------------
+SQLCA                (55 files)
+TBCCDCC0             ( 9 files)
+TBCCCFT0             ( 8 files)
+TBCCTFT0             ( 6 files)
+TBCCCJT0             ( 5 files)
+TBCCREP0             ( 5 files)
+TBCCTCP0             ( 4 files)
+TBCCHIC0             ( 4 files)
+TBB0TCG0             ( 4 files)
+TBCCDCT0             ( 3 files)
+TBCCTJT0             ( 3 files)
+TBCCMAX0             ( 3 files)
+TBCCDCL0             ( 3 files)
+TBCCCOT0             ( 3 files)
+TBCCISC0             ( 3 files)
+TBCCCNT0             ( 2 files)
+TBCCLIB0             ( 2 files)
+TBCCTTJ0             ( 2 files)
+TBCCEPJ0             ( 2 files)
+TBCCACJ0             ( 2 files)
+TBCCHCO0             ( 2 files)
+TBCCLIS0             ( 2 files)
+TBCCLEC0             ( 1 files)
+TBB0AGE0             ( 1 files)
+TBCCICO0             ( 1 files)
+TBCCCSD0             ( 1 files)
+TBGEMXS0             ( 1 files)
+TBCCCTF0             ( 1 files)
+TBCCFBC0             ( 1 files)
+TBB0AGM0             ( 1 files)
+TBCCGAC0             ( 1 files)
+TBSUCCT0             ( 1 files)
+TBPBCCI0             ( 1 files)
+TBCCCPP0             ( 1 files)
