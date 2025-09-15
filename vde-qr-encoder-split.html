@@ -3057,9 +3057,11 @@
                 // Add LT-specific parameters
                 const ltParams = `${this.c}:${this.delta}`;
                 
-                // Create compact metadata string  
-                // Format: M:<version>:<filename>:<filetype>:<filesize>:<chunks>:<packets>:<systematicchunks>:<density>:<fps>:<chunksize>:<redund>:<ecl>:<metachecksum>:<filechecksum>:<ltparams>:<fountainmaxdegree>
-                const metadataString = `M:3.0:${encodeURIComponent(fileNameText)}:${encodeURIComponent(fileType)}:${fileSizeBytes}:${this.numChunks}:${this.calculateTotalPackets()}:${systematicChunks}:${highDensityMode}:${fps}:${chunkSize}:${redundancy}:${ecLevel}:${metaChecksum}:${fileChecksum}:${ltParams}:${fountainMaxDegree}`;
+                // Create compact metadata string with incremental encoder version
+                // Format: M:<version>:<filename>:<filetype>:<filesize>:<chunks>:<packets>:<systematicchunks>:<density>:<fps>:<chunksize>:<redund>:<ecl>:<metachecksum>:<filechecksum>:<encoderversion>:<ltparams>:<fountainmaxdegree>
+                const protocolVersion = '3.0'; // Keep existing protocol version
+                const encoderVersion = '4.0'; // New incremental encoder version with fileId support
+                const metadataString = `M:${protocolVersion}:${encodeURIComponent(fileNameText)}:${encodeURIComponent(fileType)}:${fileSizeBytes}:${this.numChunks}:${this.calculateTotalPackets()}:${systematicChunks}:${highDensityMode}:${fps}:${chunkSize}:${redundancy}:${ecLevel}:${metaChecksum}:${fileChecksum}:${encoderVersion}:${ltParams}:${fountainMaxDegree}`;
                 
                 // Debug the metadata being generated
                 console.log(`📋 METADATA DEBUG:`);
