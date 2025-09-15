@@ -3407,11 +3407,13 @@
       handleMetadataPacket(metadata, currentTime = 0) {
         const fileName = metadata.fileName;
         
-        // In discovery mode, handle file tracking and processing separately
+        // Handle file discovery in both discovery mode and continue mode
+        const isNewFileDiscovered = !this.discoveredFiles.has(fileName);
+
         if (this.discoveryMode) {
           console.log(`🔍 DISCOVERY: Processing metadata for ${fileName} at ${currentTime.toFixed(2)}s`);
-          
-          if (!this.discoveredFiles.has(fileName)) {
+
+          if (isNewFileDiscovered) {
             // Completely new file discovered
             this.discoveredFiles.set(fileName, {
               metadata: metadata,
@@ -3430,7 +3432,7 @@
             const fileInfo = this.discoveredFiles.get(fileName);
             fileInfo.lastSeenAt = currentTime;
             this.logger.debug(`📁 DISCOVERY: Existing file ${fileName} seen again at ${currentTime.toFixed(2)}s`);
-            
+
             // Check if we need to switch to this file
             if (!this.currentActiveFile || this.currentActiveFile !== fileName) {
               this.logger.info(`🔄 DISCOVERY: Switching from ${this.currentActiveFile || 'none'} to ${fileName}`);
@@ -3441,10 +3443,29 @@
               return;
             }
           }
-          
+
           // Update discovered files UI
           this.updateDiscoveredFilesUI();
           return; // In discovery mode, don't run normal processing logic
+        } else {
+          // Continue mode: Track discovered files but don't switch processing
+          if (isNewFileDiscovered) {
+            this.discoveredFiles.set(fileName, {
+              metadata: metadata,
+              firstSeenAt: currentTime,
+              lastSeenAt: currentTime
+            });
+            this.logger.info(`📁 CONTINUE MODE: NEW file discovered: ${fileName} at ${currentTime.toFixed(2)}s`);
+
+            // Update UI to show newly discovered file
+            this.updateDiscoveredFilesUI();
+          } else {
+            // Update timing for existing discovered file
+            const fileInfo = this.discoveredFiles.get(fileName);
+            if (fileInfo) {
+              fileInfo.lastSeenAt = currentTime;
+            }
+          }
         }
         
         // Normal processing mode (not discovery)
