@@ -846,7 +846,14 @@
         let fileId, packetId, seed, seedBase, numChunks, chunkCount;
         let isNewFormat = false;
 
-        if (parts.length >= 8 && parts[1].length === 8 && /^[a-fA-F0-9]{8}$/.test(parts[1])) {
+        // Enhanced logging for format detection
+        console.log(`🔍 PACKET FORMAT DETECTION:`);
+        console.log(`  Total parts: ${parts.length}`);
+        console.log(`  parts[1]: "${parts[1]}" (length: ${parts[1] ? parts[1].length : 'undefined'})`);
+        console.log(`  Is hex check: ${parts[1] ? /^[a-fA-F0-9]{8}$/.test(parts[1]) : 'N/A'}`);
+        console.log(`  Packet preview: ${dataString.substring(0, 50)}...`);
+
+        if (parts.length >= 8 && parts[1] && parts[1].length === 8 && /^[a-fA-F0-9]{8}$/.test(parts[1])) {
           // New format with 8-char hex fileId: D:<fileId>:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
           isNewFormat = true;
           fileId = parts[1];
@@ -855,6 +862,7 @@
           seedBase = parseInt(parts[4]);
           numChunks = parseInt(parts[5]);
           chunkCount = parseInt(parts[6]);
+          console.log(`✅ NEW FORMAT DETECTED: fileId=${fileId}, packetId=${packetId}, degree=${chunkCount}`);
         } else if (parts.length >= 7) {
           // Legacy format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
           isNewFormat = false;
@@ -864,7 +872,9 @@
           seedBase = parseInt(parts[3]);
           numChunks = parseInt(parts[4]);
           chunkCount = parseInt(parts[5]);
+          console.log(`🔄 LEGACY FORMAT DETECTED: packetId=${packetId}, degree=${chunkCount} (no fileId)`);
         } else {
+          console.error(`❌ INVALID FORMAT: parts.length=${parts.length}, expected >=7`);
           throw new Error(`Invalid data packet format: ${dataString.substring(0, 30)}...`);
         }
 
@@ -2135,11 +2145,13 @@
           }
 
           // Clean up source chunks that are taking too much memory
-          if (decoder.sourceChunks) {
+          if (decoder.sourceChunks && typeof decoder.sourceChunks === 'object') {
             let totalSize = 0;
-            for (const chunk of decoder.sourceChunks) {
-              if (chunk && chunk.data) {
-                totalSize += chunk.data.length;
+            // sourceChunks is an object, not an array - iterate over values
+            for (const chunkIndex in decoder.sourceChunks) {
+              const chunk = decoder.sourceChunks[chunkIndex];
+              if (chunk && chunk.length) {
+                totalSize += chunk.length; // chunk is Uint8Array, use .length not .data.length
               }
             }
 
