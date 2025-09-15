@@ -2433,15 +2433,16 @@
                     console.log(`📋 ENTERPRISE: Frame ${frameIndex} is metadata packet (${metaSize} bytes)`);
                 } else if (packet.dataString) {
                     // Parse from compact string format with enterprise validation
-                    // Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+                    // Format: D:<fileId>:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
                     if (typeof packet.dataString !== 'string') {
                         throw new Error(`Invalid dataString type for frame ${frameIndex}: ${typeof packet.dataString}`);
                     }
-                    
+
                     const parts = packet.dataString.split(':');
-                if (parts.length >= 6) {
-                    const packetId = parts[1];
-                    const degree = parts[5];
+                if (parts.length >= 7) {
+                    const fileId = parts[1];
+                    const packetId = parts[2];
+                    const degree = parts[6];
                     
                     frameTypeText = `Data Packet (Degree: ${degree})`;
                     if (currentChunkInfo) currentChunkInfo.style.display = 'block';
@@ -2670,9 +2671,12 @@
                 // Format: chunkIndex:base64ChunkData
                 const combinedData = `${chunkIndex}:${chunkBase64}`;
                 
+                // Get 8-char fileId from checksum for packet correlation
+                const fileId = this.fileChecksum ? this.fileChecksum.substring(0, 8) : '00000000';
+
                 // Create the packet using compact string format
-                // Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
-                const dataString = `D:${this.packetCounter}:${seed}:${this.seedBase}:${this.numChunks}:1:${combinedData}`;
+                // Format: D:<fileId>:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+                const dataString = `D:${fileId}:${this.packetCounter}:${seed}:${this.seedBase}:${this.numChunks}:1:${combinedData}`;
                 
                 if (debugMode) {
                     console.log(`🔍 ENCODER DEBUG - Single systematic packet ${this.packetCounter}:`);
@@ -2731,9 +2735,12 @@
                 // Format: index1:base64chunk1|index2:base64chunk2
                 const combinedData = `${firstChunkIndex}:${firstChunkBase64}|${secondChunkIndex}:${secondChunkBase64}`;
                 
+                // Get 8-char fileId from checksum for packet correlation
+                const fileId = this.fileChecksum ? this.fileChecksum.substring(0, 8) : '00000000';
+
                 // Create the packet using compact string format
-                // Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
-                const dataString = `D:${this.packetCounter}:${seed}:${this.seedBase}:${this.numChunks}:2:${combinedData}`;
+                // Format: D:<fileId>:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+                const dataString = `D:${fileId}:${this.packetCounter}:${seed}:${this.seedBase}:${this.numChunks}:2:${combinedData}`;
                 
                 if (debugMode) {
                     console.log(`  First base64: ${firstChunkBase64.length} chars, preview: ${firstChunkBase64.substring(0, 20)}...`);
@@ -2788,10 +2795,13 @@
                 // Convert the XOR data to a base64 string for transmission
                 const base64Data = this.arrayBufferToBase64(fountainData);
                 
+                // Get 8-char fileId from checksum for packet correlation
+                const fileId = this.fileChecksum ? this.fileChecksum.substring(0, 8) : '00000000';
+
                 // Create the packet using enhanced format for fountain coding
-                // Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:1:<sourceIndices>:<xorData>
-                // Note: Field 5 is always 1 for fountain (treated as single record with XOR data)
-                const dataString = `D:${this.packetCounter}:${seed}:${this.seedBase}:${this.numChunks}:1:${indicesStr}:${base64Data}`;
+                // Format: D:<fileId>:<packetId>:<seed>:<seedBase>:<numChunks>:1:<sourceIndices>:<xorData>
+                // Note: Field 6 is always 1 for fountain (treated as single record with XOR data)
+                const dataString = `D:${fileId}:${this.packetCounter}:${seed}:${this.seedBase}:${this.numChunks}:1:${indicesStr}:${base64Data}`;
                 
                 // Create and return the packet object
                 const packet = {
@@ -2832,9 +2842,9 @@
             // Truncate a packet to fit within QR code limits
             truncatePacket(packet, maxSize) {
                 // Parse out the header portion of the packet
-                // Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
-                const parts = packet.dataString.split(":", 6);
-                const header = parts.slice(0, 6).join(":");
+                // Format: D:<fileId>:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+                const parts = packet.dataString.split(":", 7);
+                const header = parts.slice(0, 7).join(":");
                 
                 // Calculate how much space is available for data
                 const headerSize = header.length + 1;  // +1 for the colon separator

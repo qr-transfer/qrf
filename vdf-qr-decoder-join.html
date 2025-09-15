@@ -837,19 +837,36 @@
       }
 
       processDataPacket(dataString, frameIndex) {
-        // Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+        // Legacy Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
         // Enhanced Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<sourceIndices>:<xorData>
+        // New Format: D:<fileId>:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<sourceIndices>:<xorData>
         const parts = dataString.split(':');
 
-        if (parts.length < 7) {
+        // Auto-detect packet format based on length and content
+        let fileId, packetId, seed, seedBase, numChunks, chunkCount;
+        let isNewFormat = false;
+
+        if (parts.length >= 8 && parts[1].length === 8 && /^[a-fA-F0-9]{8}$/.test(parts[1])) {
+          // New format with 8-char hex fileId: D:<fileId>:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+          isNewFormat = true;
+          fileId = parts[1];
+          packetId = parseInt(parts[2]);
+          seed = parseInt(parts[3]);
+          seedBase = parseInt(parts[4]);
+          numChunks = parseInt(parts[5]);
+          chunkCount = parseInt(parts[6]);
+        } else if (parts.length >= 7) {
+          // Legacy format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+          isNewFormat = false;
+          fileId = null;
+          packetId = parseInt(parts[1]);
+          seed = parseInt(parts[2]);
+          seedBase = parseInt(parts[3]);
+          numChunks = parseInt(parts[4]);
+          chunkCount = parseInt(parts[5]);
+        } else {
           throw new Error(`Invalid data packet format: ${dataString.substring(0, 30)}...`);
         }
-
-        const packetId = parseInt(parts[1]);
-        const seed = parseInt(parts[2]);
-        const seedBase = parseInt(parts[3]);
-        const numChunks = parseInt(parts[4]);
-        const chunkCount = parseInt(parts[5]); // This is chunk count, not degree!
 
         // Parse source chunks and data
         let sourceChunks = [];
@@ -857,33 +874,35 @@
         let fountainData = null;
         let format = "standard";
 
-        // CORRECTED: Field 5 is chunkCount, Field 6 format determines packet type
-        
-        if (parts[6] && parts[6].includes(',')) {
-          // FOUNTAIN PACKET: Comma-separated indices in field 6 (always chunkCount=1)
-          const sourceIndices = parts[6].split(',').map(idx => parseInt(idx));
+        // Determine data field offset based on format
+        const dataFieldOffset = isNewFormat ? 7 : 6;
+
+        // Check packet type: Field at dataFieldOffset determines packet type
+        if (parts[dataFieldOffset] && parts[dataFieldOffset].includes(',')) {
+          // FOUNTAIN PACKET: Comma-separated indices in field (always chunkCount=1)
+          const sourceIndices = parts[dataFieldOffset].split(',').map(idx => parseInt(idx));
           const actualDegree = sourceIndices.length; // TRUE degree from comma count
-          console.debug(`Fountain packet ${packetId} with degree=${actualDegree} (XOR of ${sourceIndices.join(',')})`);
-          
+          console.debug(`Fountain packet ${packetId} with degree=${actualDegree} (XOR of ${sourceIndices.join(',')}) ${isNewFormat ? `fileId=${fileId}` : '(legacy)'}`);
+
           format = "enhanced";
           sourceChunks = sourceIndices;
-          
+
           try {
-            // Field 7 contains base64 XOR data
-            fountainData = this.base64ToUint8Array(parts[7]);
+            // Next field contains base64 XOR data
+            fountainData = this.base64ToUint8Array(parts[dataFieldOffset + 1]);
           } catch (e) {
             console.error(`Failed to decode fountain XOR data: ${e.message}`);
             throw e;
           }
-          
+
         } else {
-          // SYSTEMATIC PACKET: Field 5 = chunkCount (1, 2, 3, 4+)
+          // SYSTEMATIC PACKET: chunkCount (1, 2, 3, 4+)
           if (debugMode) {
             console.debug(`Systematic packet ${packetId} with chunkCount=${chunkCount}`);
           }
           
           // Parse chunkCount records separated by pipe |
-          const allDataPart = parts.slice(6).join(':');
+          const allDataPart = parts.slice(dataFieldOffset).join(':');
           const records = allDataPart.split('|');
           
           if (debugMode) {
@@ -930,10 +949,11 @@
           success: true,
           packetType: 'data',
           packetData: {
+            fileId, // 8-char file identifier from checksum (null for legacy packets)
             packetId,
             seed,
             seedBase,
-            chunkCount, // Field 5 is chunk count, not degree
+            chunkCount, // Field is chunk count, not degree
             actualDegree: format === "enhanced" ? sourceChunks.length : chunkCount, // True degree for fountain
             fountainData,
             systematicDataChunks,
@@ -942,7 +962,8 @@
             isSystematic: format !== "enhanced", // Systematic if not enhanced fountain format
             isTruncated,
             originalLength,
-            format  // Include the detected format for debugging
+            format,  // Include the detected format for debugging
+            isNewFormat // Flag indicating packet format version
           },
           frameIndex
         };
@@ -1768,11 +1789,14 @@
         this.canvas = document.createElement('canvas');
         this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
 
-        // Frame processing stats
+        // Frame processing stats with memory management
         this.frameStats = {
           processed: 0,
           qrCodesDetected: 0,
-          processingTimes: []
+          processingTimes: [],
+          maxProcessingTimes: 50, // Limit array size to prevent memory growth
+          lastMemoryCheck: 0,
+          memoryCheckInterval: 5000 // Check memory every 5 seconds
         };
       }
 
@@ -1931,9 +1955,21 @@
             this.frameCallback(imageData, this.videoElement.currentTime, this.processedFrames);
           }
 
-          // Track processing time
+          // Track processing time with bounded array
           const processingTime = performance.now() - processingStart;
           this.frameStats.processingTimes.push(processingTime);
+
+          // Limit array size to prevent memory growth
+          if (this.frameStats.processingTimes.length > this.frameStats.maxProcessingTimes) {
+            this.frameStats.processingTimes.shift(); // Remove oldest entry
+          }
+
+          // Memory management and performance monitoring
+          const now = performance.now();
+          if (now - this.frameStats.lastMemoryCheck > this.frameStats.memoryCheckInterval) {
+            this.performMemoryCheck();
+            this.frameStats.lastMemoryCheck = now;
+          }
 
           // Calculate average processing time every 30 frames
           if (this.frameStats.processed % 30 === 0) {
@@ -1941,8 +1977,11 @@
               this.frameStats.processingTimes.length;
             console.log(`Avg frame processing time: ${avgTime.toFixed(2)}ms over last ${this.frameStats.processingTimes.length} frames`);
 
-            // Reset the array to avoid memory growth
-            this.frameStats.processingTimes = [];
+            // Check if we need to pause processing for buffer management
+            if (this.shouldPauseForBufferManagement(avgTime)) {
+              this.pauseForBufferCleanup();
+              return; // Exit current frame processing
+            }
 
             // Adjust frame interval if needed
             if (avgTime > this.frameInterval * 1.5) {
@@ -1985,6 +2024,170 @@
         console.log(`Video processing stopped. Processed ${this.frameStats.processed} frames, detected ${this.frameStats.qrCodesDetected} QR codes`);
 
         this.completed();
+      }
+
+      // Memory management methods
+      performMemoryCheck() {
+        if (performance.memory) {
+          const memory = performance.memory;
+          const memoryUsage = {
+            used: Math.round(memory.usedJSHeapSize / 1048576), // MB
+            allocated: Math.round(memory.totalJSHeapSize / 1048576), // MB
+            limit: Math.round(memory.jsHeapSizeLimit / 1048576) // MB
+          };
+
+          console.log(`🧠 Memory: ${memoryUsage.used}MB used, ${memoryUsage.allocated}MB allocated, ${memoryUsage.limit}MB limit`);
+
+          // Trigger garbage collection hint if memory usage is high
+          if (memoryUsage.used / memoryUsage.limit > 0.8) {
+            console.warn(`⚠️ High memory usage detected: ${memoryUsage.used}MB/${memoryUsage.limit}MB (${Math.round(memoryUsage.used/memoryUsage.limit*100)}%)`);
+            this.triggerMemoryCleanup();
+          }
+        }
+
+        // Check if decoder buffers need cleanup
+        if (window.qrFileDecoder && window.qrFileDecoder.fountainDecoder) {
+          const decoder = window.qrFileDecoder.fountainDecoder;
+          const codedPacketsCount = decoder.codedPackets ? decoder.codedPackets.length : 0;
+
+          if (codedPacketsCount > 10000) { // Large buffer threshold
+            console.warn(`⚠️ Large coded packets buffer detected: ${codedPacketsCount} packets`);
+            this.cleanupDecoderBuffers();
+          }
+        }
+      }
+
+      shouldPauseForBufferManagement(avgProcessingTime) {
+        // Pause if processing time is consistently high
+        if (avgProcessingTime > 100) { // More than 100ms per frame
+          console.log(`🔴 High processing time detected: ${avgProcessingTime.toFixed(2)}ms - considering pause for cleanup`);
+          return true;
+        }
+
+        // Check worker queue size
+        if (window.qrFileDecoder && window.qrFileDecoder.workerPool) {
+          const queueSize = window.qrFileDecoder.workerPool.taskQueue.length;
+          if (queueSize > 100) { // High queue backlog
+            console.log(`🔴 High worker queue detected: ${queueSize} tasks - pausing for buffer cleanup`);
+            return true;
+          }
+        }
+
+        return false;
+      }
+
+      pauseForBufferCleanup() {
+        console.log(`⏸️ Pausing video processing for buffer cleanup...`);
+
+        // Pause video temporarily
+        const wasPaused = this.videoElement.paused;
+        if (!wasPaused) {
+          this.videoElement.pause();
+        }
+
+        // Clear timers to stop frame processing
+        if (this.processTimer) {
+          clearInterval(this.processTimer);
+          this.processTimer = null;
+        }
+
+        // Perform cleanup
+        this.performBufferCleanup().then(() => {
+          console.log(`✅ Buffer cleanup completed, resuming processing...`);
+
+          // Resume video if it was playing
+          if (!wasPaused) {
+            this.videoElement.play().then(() => {
+              // Restart frame processing
+              this.startProcessing();
+            });
+          }
+        });
+      }
+
+      async performBufferCleanup() {
+        // Clean up decoder buffers
+        this.cleanupDecoderBuffers();
+
+        // Clean up canvas contexts
+        this.cleanupCanvasMemory();
+
+        // Clean up worker queues
+        this.cleanupWorkerQueues();
+
+        // Force garbage collection hint
+        this.triggerMemoryCleanup();
+
+        // Wait for cleanup to take effect
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      cleanupDecoderBuffers() {
+        if (window.qrFileDecoder && window.qrFileDecoder.fountainDecoder) {
+          const decoder = window.qrFileDecoder.fountainDecoder;
+
+          if (decoder.codedPackets && decoder.codedPackets.length > 1000) {
+            // Keep only the most recent packets if buffer is too large
+            const keepCount = 500;
+            const removed = decoder.codedPackets.length - keepCount;
+            decoder.codedPackets = decoder.codedPackets.slice(-keepCount);
+            console.log(`🧹 Cleaned up coded packets buffer: removed ${removed} old packets, kept ${keepCount}`);
+          }
+
+          // Clean up source chunks that are taking too much memory
+          if (decoder.sourceChunks) {
+            let totalSize = 0;
+            for (const chunk of decoder.sourceChunks) {
+              if (chunk && chunk.data) {
+                totalSize += chunk.data.length;
+              }
+            }
+
+            // If source chunks are using > 100MB, warn about memory usage
+            if (totalSize > 100 * 1024 * 1024) {
+              console.warn(`⚠️ Source chunks using ${Math.round(totalSize / 1048576)}MB memory`);
+            }
+          }
+        }
+      }
+
+      cleanupCanvasMemory() {
+        // Clear canvas to free up GPU memory
+        if (this.ctx && this.canvas) {
+          this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+          console.log(`🧹 Cleared canvas memory`);
+        }
+      }
+
+      cleanupWorkerQueues() {
+        if (window.qrFileDecoder && window.qrFileDecoder.workerPool) {
+          const pool = window.qrFileDecoder.workerPool;
+          const queueSize = pool.taskQueue.length;
+
+          if (queueSize > 50) {
+            // Remove oldest queued tasks to prevent overflow
+            const keepCount = 25;
+            const removed = queueSize - keepCount;
+            pool.taskQueue = pool.taskQueue.slice(-keepCount);
+            console.log(`🧹 Cleaned up worker queue: removed ${removed} old tasks, kept ${keepCount}`);
+          }
+        }
+      }
+
+      triggerMemoryCleanup() {
+        // Force garbage collection hints
+        if (window.gc) {
+          window.gc(); // Only available in dev tools or with --expose-gc flag
+        }
+
+        // Alternative: trigger memory pressure by creating and releasing objects
+        const tempObjects = [];
+        for (let i = 0; i < 1000; i++) {
+          tempObjects.push(new Array(1000));
+        }
+        tempObjects.length = 0; // Clear array to trigger cleanup
+
+        console.log(`🧹 Triggered memory cleanup hints`);
       }
 
       handleVideoEnd() {
@@ -2869,6 +3072,168 @@
         }
       }
 
+      // Pause processing when new file is detected to handle buffered frames
+      pauseForNewFileProcessing(fileName, metadata) {
+        this.logger.info(`⏸️ Pausing video processing for new file: ${fileName}`);
+
+        // Only pause if video processor exists and is currently processing
+        if (this.videoProcessor && this.videoProcessor.isProcessing) {
+          // Pause video temporarily
+          const videoElement = this.videoProcessor.videoElement;
+          const wasPaused = videoElement.paused;
+
+          if (!wasPaused) {
+            videoElement.pause();
+            this.logger.info(`📹 Video paused at ${videoElement.currentTime.toFixed(2)}s for new file processing`);
+          }
+
+          // Clear processing timers to stop frame processing
+          if (this.videoProcessor.processTimer) {
+            clearInterval(this.videoProcessor.processTimer);
+            this.videoProcessor.processTimer = null;
+          }
+
+          // Process any remaining buffered frames for the current file
+          this.processBufferedFrames().then(() => {
+            this.logger.info(`✅ Buffered frames processed for ${fileName}, resuming video...`);
+
+            // Resume video processing if it was playing
+            if (!wasPaused) {
+              videoElement.play().then(() => {
+                // Restart frame processing for the new file
+                if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+                  this.videoProcessor.processWithVideoFrameCallback();
+                } else {
+                  this.videoProcessor.processTimer = setInterval(() => {
+                    this.videoProcessor.processCurrentFrame();
+                  }, this.videoProcessor.frameInterval);
+                }
+              });
+            }
+          });
+        }
+      }
+
+      // Validate that data packet belongs to current file to prevent cross-contamination
+      validateDataPacketForCurrentFile(packet) {
+        if (!this.fileMetadata || !this.fountainDecoder) {
+          return { isValid: false, reason: 'No file metadata or decoder available' };
+        }
+
+        // Primary validation: Check fileId match for new format packets
+        if (packet.fileId) {
+          const expectedFileId = this.currentFileId || (this.fileMetadata.fileChecksum ? this.fileMetadata.fileChecksum.substring(0, 8) : null);
+
+          if (!expectedFileId) {
+            return { isValid: false, reason: 'No fileId available in current file metadata' };
+          }
+
+          if (packet.fileId !== expectedFileId) {
+            return {
+              isValid: false,
+              reason: `FileId mismatch: packet has '${packet.fileId}' but current file expects '${expectedFileId}'`
+            };
+          }
+
+          // FileId matches - packet belongs to current file
+          return { isValid: true, reason: 'FileId validation passed' };
+        }
+
+        // Legacy validation for packets without fileId - Method 1: Check packet parameters against current file metadata
+        const currentFileParams = {
+          chunksCount: this.fileMetadata.chunksCount,
+          fileSize: this.fileMetadata.fileSize,
+          maxDegree: this.fileMetadata.maxDegree || 10
+        };
+
+        // Validate source chunk indices are within bounds of current file
+        if (packet.sourceChunks && packet.sourceChunks.length > 0) {
+          const maxChunkIndex = Math.max(...packet.sourceChunks);
+          if (maxChunkIndex >= currentFileParams.chunksCount) {
+            return {
+              isValid: false,
+              reason: `Packet references chunk ${maxChunkIndex} but current file only has ${currentFileParams.chunksCount} chunks`
+            };
+          }
+        }
+
+        // Method 2: Check packet degree against file parameters
+        if (packet.actualDegree > currentFileParams.maxDegree) {
+          return {
+            isValid: false,
+            reason: `Packet degree ${packet.actualDegree} exceeds file max degree ${currentFileParams.maxDegree}`
+          };
+        }
+
+        // Method 3: Validate systematic chunk data size consistency
+        if (packet.systematicDataChunks && packet.systematicDataChunks.length > 0) {
+          const expectedChunkSize = Math.ceil(currentFileParams.fileSize / currentFileParams.chunksCount);
+
+          for (const chunk of packet.systematicDataChunks) {
+            // Allow some tolerance for last chunk which may be smaller
+            const maxExpectedSize = chunk.index === currentFileParams.chunksCount - 1 ?
+              expectedChunkSize : expectedChunkSize;
+
+            if (chunk.data.length > maxExpectedSize * 1.1) { // 10% tolerance
+              return {
+                isValid: false,
+                reason: `Chunk ${chunk.index} size ${chunk.data.length} much larger than expected ${expectedChunkSize}`
+              };
+            }
+          }
+        }
+
+        // Method 4: Detect packets from different files by checking systematic chunk indices
+        if (packet.systematicDataChunks && packet.systematicDataChunks.length > 0) {
+          for (const chunk of packet.systematicDataChunks) {
+            if (chunk.index >= currentFileParams.chunksCount) {
+              return {
+                isValid: false,
+                reason: `Systematic chunk index ${chunk.index} exceeds file chunk count ${currentFileParams.chunksCount}`
+              };
+            }
+          }
+        }
+
+        return { isValid: true, reason: 'Packet appears to belong to current file' };
+      }
+
+      // Process any remaining buffered frames before switching files
+      async processBufferedFrames() {
+        this.logger.info(`🔄 Processing buffered frames and worker queues...`);
+
+        // Wait for worker queues to empty
+        if (this.workerPool) {
+          let waitCount = 0;
+          while (this.workerPool.taskQueue.length > 0 && waitCount < 50) { // Max 5 second wait
+            await new Promise(resolve => setTimeout(resolve, 100));
+            waitCount++;
+          }
+
+          if (this.workerPool.taskQueue.length > 0) {
+            this.logger.warn(`⚠️ Some tasks still queued after wait: ${this.workerPool.taskQueue.length} tasks`);
+          }
+        }
+
+        // Wait for any pending fountain decoder processing
+        if (this.fountainDecoder && this.fountainDecoder.codedPackets) {
+          const pendingPackets = this.fountainDecoder.codedPackets.length;
+          if (pendingPackets > 0) {
+            this.logger.info(`📦 Processing ${pendingPackets} pending coded packets...`);
+
+            // Give decoder time to process remaining packets
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+        }
+
+        // Trigger cleanup of decoder buffers
+        if (this.videoProcessor) {
+          this.videoProcessor.cleanupDecoderBuffers();
+        }
+
+        this.logger.info(`✅ Buffered frame processing completed`);
+      }
+
       // Start processing a specific discovered file
       startFileProcessing(filename, startTime) {
         if (this.isProcessing) return;
@@ -3054,7 +3419,10 @@
               lastSeenAt: currentTime
             });
             this.logger.info(`📁 DISCOVERY: NEW file found: ${fileName} at ${currentTime.toFixed(2)}s`);
-            
+
+            // Pause video processing to handle new file
+            this.pauseForNewFileProcessing(fileName, metadata);
+
             // Switch to processing this new file
             this.switchToFile(metadata, fileName);
           } else {
@@ -3098,6 +3466,12 @@
         this.metadataReceived = true;
         this.fileMetadata = metadata;
 
+        // Store 8-char fileId for packet validation
+        this.currentFileId = metadata.fileChecksum ? metadata.fileChecksum.substring(0, 8) : null;
+        if (this.currentFileId) {
+          this.logger.info(`📋 File ID set: ${this.currentFileId} for ${metadata.fileName}`);
+        }
+
         // Initialize UI with metadata
         this.ui.initializeChunkGrid(metadata.chunksCount);
         this.ui.updateFileInfo(`
@@ -3136,6 +3510,18 @@
         // Skip if metadata hasn't been received
         if (!this.metadataReceived) {
           this.logger.warn("Received data packet before metadata, ignoring");
+          return;
+        }
+
+        // File correlation validation to prevent cross-file contamination
+        const validation = this.validateDataPacketForCurrentFile(packet);
+        if (!validation.isValid) {
+          this.logger.warn(`🚨 Data packet validation failed: ${validation.reason} - ignoring packet`);
+
+          // If this looks like a packet from a different file, suggest re-scanning
+          if (validation.reason.includes('chunk') || validation.reason.includes('degree')) {
+            this.logger.info(`💡 Suggestion: Video may have skipped frames. Consider refreshing page and using 'Continue' from current position.`);
+          }
           return;
         }
 
