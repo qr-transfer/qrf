@@ -432,6 +432,25 @@
                     Recommended for files >100KB to improve transmission success rate
                 </div>
             </div>
+
+            <div class="control-group">
+                <label class="control-label">
+                    Selective Split Transmission
+                    <span class="tooltip" data-tooltip="Specify which split parts to send (e.g., '1,5,10-15,23'). Leave empty to send all parts.">?</span>
+                </label>
+                <input type="text" id="selectiveSplitInput" placeholder="e.g., 1,5,10-15,23 (leave empty for all parts)"
+                       style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px; font-family: monospace;">
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+                    <strong>Format examples:</strong><br>
+                    • <code>5,10,15</code> - Send parts 5, 10, and 15<br>
+                    • <code>1-10,25,30-35</code> - Send parts 1-10, 25, and 30-35<br>
+                    • <code>45,123,456,789,890</code> - Send specific missing parts<br>
+                    • <em>Empty = send all parts (default behavior)</em>
+                </div>
+                <div id="splitParseInfo" style="font-size: 11px; color: #059669; margin-top: 5px; display: none;">
+                    <strong>Parsed parts to send:</strong> <span id="parsedSplitList"></span>
+                </div>
+            </div>
             
             <div class="control-group">
                 <div class="control-label">
@@ -541,6 +560,10 @@
                     <div class="info-label" style="color: #b91c1c;">High Density Mode:</div>
                     <div style="color: #b91c1c; font-weight: bold;">Active</div>
                 </div>
+                <div id="selectiveSplitInfo" class="info-row" style="display: none;">
+                    <div class="info-label" style="color: #059669;">Selective Transmission:</div>
+                    <div id="selectiveSplitStatus" style="color: #059669; font-weight: bold;">-</div>
+                </div>
             </div>
 
             <div class="handshake-notice">
@@ -585,6 +608,9 @@
         const fountainDegreeSlider = document.getElementById('fountainDegreeSlider');
         const splitThresholdSlider = document.getElementById('splitThresholdSlider');
         const enableAutoSplitCheckbox = document.getElementById('enableAutoSplitCheckbox');
+        const selectiveSplitInput = document.getElementById('selectiveSplitInput');
+        const splitParseInfo = document.getElementById('splitParseInfo');
+        const parsedSplitList = document.getElementById('parsedSplitList');
         const speedValue = document.getElementById('speedValue');
         const sizeValue = document.getElementById('sizeValue');
         const chunkValue = document.getElementById('chunkValue');
@@ -620,6 +646,8 @@
         const redundancyLevel = document.getElementById('redundancyLevel');
         const transferTime = document.getElementById('transferTime');
         const optimalDistance = document.getElementById('optimalDistance');
+        const selectiveSplitInfo = document.getElementById('selectiveSplitInfo');
+        const selectiveSplitStatus = document.getElementById('selectiveSplitStatus');
         const fullscreenDisplay = document.getElementById('fullscreenDisplay');
         const fullscreenQR = document.getElementById('fullscreenQR');
         const fullscreenCounter = document.getElementById('fullscreenCounter');
@@ -679,6 +707,7 @@
                     if (settings.enableTransitions !== undefined) enableTransitionsCheckbox.checked = settings.enableTransitions;
                     if (settings.highDensity !== undefined) highDensityCheckbox.checked = settings.highDensity;
                     if (settings.enableAutoSplit !== undefined) enableAutoSplitCheckbox.checked = settings.enableAutoSplit;
+                    if (settings.selectiveSplitInput !== undefined) selectiveSplitInput.value = settings.selectiveSplitInput;
                     
                     // Update display values
                     speedValue.textContent = `${speedSlider.value} FPS`;
@@ -719,7 +748,8 @@
                     showGuides: showGuidesCheckbox.checked,
                     enableTransitions: enableTransitionsCheckbox.checked,
                     highDensity: highDensityCheckbox.checked,
-                    enableAutoSplit: enableAutoSplitCheckbox.checked
+                    enableAutoSplit: enableAutoSplitCheckbox.checked,
+                    selectiveSplitInput: selectiveSplitInput.value
                 };
                 
                 localStorage.setItem('qrEncoderSettings', JSON.stringify(settings));
@@ -812,6 +842,12 @@
         });
 
         enableAutoSplitCheckbox.addEventListener('change', () => {
+            saveEncoderSettings();
+        });
+
+        // Selective split input parsing
+        selectiveSplitInput.addEventListener('input', () => {
+            parseSelectiveSplitInput();
             saveEncoderSettings();
         });
 
@@ -1124,22 +1160,42 @@
                     
                     if (shouldSplit) {
                         console.log(`✂️ ENTERPRISE: File ${fileItem.name} (${formatFileSize(fileItem.size)}) exceeds ${splitThresholdSlider.value}KB threshold - auto-splitting`);
-                        
-                        // Split file and generate QR codes for each part
-                        const splitParts = await splitFileIntoParts(fileItem.file, parseInt(splitThresholdSlider.value) * 1024);
-                        
+
+                        // Get selective parts list if specified
+                        const selectedParts = parseSelectiveSplitInput();
+
+                        // Split file with selective parts support
+                        const splitParts = await splitFileIntoSelectiveParts(fileItem.file, parseInt(splitThresholdSlider.value) * 1024, selectedParts);
+
+                        if (splitParts.length === 0) {
+                            console.warn(`⚠️ No valid parts to process for ${fileItem.name}`);
+                            updateFileStatus(fileItem.id, 'error');
+                            continue;
+                        }
+
                         for (let partIndex = 0; partIndex < splitParts.length; partIndex++) {
                             const partFile = splitParts[partIndex];
                             console.log(`📦 Processing part ${partIndex + 1}/${splitParts.length}: ${partFile.name}`);
-                            
+
                             const partPackets = await generateQRCodesForFileOnly(partFile);
                             combinedPackets.push(...partPackets);
                             totalCombinedPackets += partPackets.length;
-                            
+
                             console.log(`📦 Added ${partPackets.length} packets for ${partFile.name} (total: ${totalCombinedPackets})`);
                         }
-                        
-                        console.log(`✅ ENTERPRISE: Completed auto-split processing for ${fileItem.name} → ${splitParts.length} parts`);
+
+                        const totalPossibleParts = Math.ceil(fileItem.size / (parseInt(splitThresholdSlider.value) * 1024));
+                        const processingType = selectedParts ? `SELECTIVE (${splitParts.length} of ${totalPossibleParts} parts)` : `COMPLETE (${splitParts.length} parts)`;
+
+                        // Update selective transmission UI
+                        if (selectedParts) {
+                            selectiveSplitInfo.style.display = 'block';
+                            selectiveSplitStatus.textContent = `Sending ${splitParts.length}/${totalPossibleParts} parts: ${selectedParts.join(', ')}`;
+                        } else {
+                            selectiveSplitInfo.style.display = 'none';
+                        }
+
+                        console.log(`✅ ENTERPRISE: Completed ${processingType} processing for ${fileItem.name}`);
                     } else {
                         console.log(`📄 File ${fileItem.name} (${formatFileSize(fileItem.size)}) under ${splitThresholdSlider.value}KB threshold - processing as single file`);
                         
@@ -3057,6 +3113,134 @@
                 }
                 return Math.abs(hash).toString(36).substring(0, 6); // Base36 representation, 6 chars
             }
+        }
+
+        // =============================================
+        // Selective Split Transmission Functions
+        // =============================================
+
+        function parseSelectiveSplitInput() {
+            const input = selectiveSplitInput.value.trim();
+
+            if (!input) {
+                splitParseInfo.style.display = 'none';
+                return null; // Send all parts
+            }
+
+            try {
+                const parts = new Set();
+                const segments = input.split(',').map(s => s.trim());
+
+                for (const segment of segments) {
+                    if (segment.includes('-')) {
+                        // Range format: "10-15"
+                        const [start, end] = segment.split('-').map(s => parseInt(s.trim()));
+                        if (isNaN(start) || isNaN(end) || start < 1 || end < start) {
+                            throw new Error(`Invalid range: ${segment}`);
+                        }
+                        for (let i = start; i <= end; i++) {
+                            parts.add(i);
+                        }
+                    } else {
+                        // Single number: "5"
+                        const num = parseInt(segment);
+                        if (isNaN(num) || num < 1) {
+                            throw new Error(`Invalid part number: ${segment}`);
+                        }
+                        parts.add(num);
+                    }
+                }
+
+                const sortedParts = Array.from(parts).sort((a, b) => a - b);
+
+                // Update UI with parsed parts
+                splitParseInfo.style.display = 'block';
+                parsedSplitList.textContent = sortedParts.join(', ');
+                console.log(`📋 Parsed selective parts: ${sortedParts.join(', ')}`);
+
+                return sortedParts;
+
+            } catch (error) {
+                splitParseInfo.style.display = 'block';
+                parsedSplitList.textContent = `Error: ${error.message}`;
+                parsedSplitList.style.color = '#dc2626';
+                console.warn(`⚠️ Selective split parsing error: ${error.message}`);
+                return null;
+            }
+        }
+
+        // Modified file splitting function with selective part support
+        async function splitFileIntoSelectiveParts(file, maxPartSize, selectedParts = null) {
+            return new Promise((resolve, reject) => {
+                const fileReader = new FileReader();
+                fileReader.onload = () => {
+                    try {
+                        const arrayBuffer = fileReader.result;
+                        const fileData = new Uint8Array(arrayBuffer);
+                        const parts = [];
+
+                        // Calculate total parts needed
+                        const totalParts = Math.ceil(fileData.length / maxPartSize);
+
+                        if (selectedParts) {
+                            console.log(`✂️ SELECTIVE: Splitting ${file.name} - sending only parts ${selectedParts.join(', ')} out of ${totalParts} total`);
+
+                            // Only process selected parts
+                            for (const partNum of selectedParts) {
+                                if (partNum > totalParts) {
+                                    console.warn(`⚠️ Part ${partNum} exceeds total parts (${totalParts}) - skipping`);
+                                    continue;
+                                }
+
+                                const i = partNum - 1; // Convert to 0-based index
+                                const start = i * maxPartSize;
+                                const end = Math.min(start + maxPartSize, fileData.length);
+                                const partData = fileData.slice(start, end);
+
+                                // Create part filename
+                                const fileExtension = file.name.split('.').pop();
+                                const baseName = file.name.replace(`.${fileExtension}`, '');
+                                const partName = `${baseName}.part${partNum}-${totalParts}.${fileExtension}`;
+
+                                // Create File object for the part
+                                const partBlob = new Blob([partData], { type: file.type });
+                                const partFile = new File([partBlob], partName, { type: file.type });
+
+                                parts.push(partFile);
+                                console.log(`📦 Created selective part ${partNum}/${totalParts}: ${partName} (${formatFileSize(partData.length)})`);
+                            }
+
+                        } else {
+                            console.log(`✂️ STANDARD: Splitting ${file.name} (${fileData.length} bytes) into ${totalParts} parts of ~${formatFileSize(maxPartSize)} each`);
+
+                            // Process all parts (original logic)
+                            for (let i = 0; i < totalParts; i++) {
+                                const start = i * maxPartSize;
+                                const end = Math.min(start + maxPartSize, fileData.length);
+                                const partData = fileData.slice(start, end);
+
+                                const fileExtension = file.name.split('.').pop();
+                                const baseName = file.name.replace(`.${fileExtension}`, '');
+                                const partName = `${baseName}.part${i + 1}-${totalParts}.${fileExtension}`;
+
+                                const partBlob = new Blob([partData], { type: file.type });
+                                const partFile = new File([partBlob], partName, { type: file.type });
+
+                                parts.push(partFile);
+                                console.log(`📦 Created part ${i + 1}/${totalParts}: ${partName} (${formatFileSize(partData.length)})`);
+                            }
+                        }
+
+                        console.log(`✅ Split operation complete: ${parts.length} parts created`);
+                        resolve(parts);
+
+                    } catch (error) {
+                        console.error(`❌ Error splitting file: ${error.message}`);
+                        reject(error);
+                    }
+                };
+                fileReader.readAsArrayBuffer(file);
+            });
         }
 
         // =============================================
