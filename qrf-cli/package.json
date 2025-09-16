@@ -1,33 +1,29 @@
 {
-  "name": "qrf-cli",
+  "name": "qrf-workspace",
   "version": "1.0.0",
-  "description": "QR Code File Decoder CLI with React-based UI",
-  "main": "index.js",
+  "private": true,
+  "description": "QRF - QR Code File Encoder/Decoder Workspace",
   "type": "module",
-  "bin": {
-    "qrf": "./index.js",
-    "qrf-encoder": "./encoder-simple.js"
-  },
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "start": "node index.js",
-    "dev": "node --watch index.js"
+    "build": "echo 'Building all packages...'",
+    "test": "echo 'Testing all packages...'",
+    "publish:core": "cd packages/qrf-core && npm publish",
+    "publish:encoder": "cd packages/qrf-encoder && npm publish",
+    "publish:decoder": "cd packages/qrf-decoder && npm publish",
+    "publish:all": "npm run publish:core && npm run publish:encoder && npm run publish:decoder",
+    "link:local": "cd packages/qrf-core && npm link && cd ../qrf-encoder && npm link @qrf/core && npm link && cd ../qrf-decoder && npm link @qrf/core && npm link"
   },
-  "dependencies": {
-    "ink": "^5.0.0",
-    "react": "^18.2.0",
-    "@inkjs/ui": "^2.0.0",
-    "ink-spinner": "^5.0.0",
-    "ink-progress-bar": "^3.0.0",
-    "commander": "^11.1.0",
-    "qrcode-reader": "^1.0.4",
-    "jimp": "^0.22.10",
-    "fluent-ffmpeg": "^2.1.2",
-    "chalk": "^5.3.0",
-    "qrcode": "^1.5.3",
-    "canvas": "^2.11.2",
-    "mime-types": "^2.1.35"
+  "devDependencies": {
+    "eslint": "^8.0.0",
+    "prettier": "^3.0.0"
   },
-  "keywords": ["qr", "decoder", "cli", "fountain-codes"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/qrf"
+  },
   "author": "",
   "license": "MIT"
 }
