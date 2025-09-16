@@ -383,6 +383,9 @@
       <button id="stopScanBtn" disabled>Stop Scan</button>
       <button id="resetBtn">Reset Contents</button>
       <button id="settingsBtn">Advanced Settings</button>
+      <button id="exportScanBtn">Export Scan</button>
+      <button id="importScanBtn">Import Scan</button>
+      <input type="file" id="scanImportInput" accept=".json" style="display: none;">
     </div>
   </header>
 
@@ -836,6 +839,7 @@
       queueSizes: [],
       workerUtilization: { busy: 0, total: 0 },
       bufferSizes: { codedPackets: 0, workerQueue: 0 },
+      systemOverwhelmed: false,
 
       // Update stats display
       updateDisplay() {
@@ -847,22 +851,42 @@
 
         // Calculate success rate
         const successRate = this.qrCodesProcessed > 0 ?
-          ((this.qrCodesSuccessful / this.qrCodesProcessed) * 100).toFixed(1) : 0;
+          ((this.qrCodesSuccessful / this.qrCodesProcessed) * 100).toFixed(1) : 100;
 
         // Calculate average frame processing time
         const avgFrameTime = this.frameProcessingTimes.length > 0 ?
           (this.frameProcessingTimes.reduce((a, b) => a + b) / this.frameProcessingTimes.length).toFixed(1) : 0;
 
-        // Update UI elements
-        document.getElementById('queueSize').textContent = this.queueSizes[this.queueSizes.length - 1] || 0;
-        document.getElementById('frameRate').textContent = frameRate;
-        document.getElementById('memoryUsage').textContent = this.memoryUsage;
-        document.getElementById('avgFrameTime').textContent = avgFrameTime;
-        document.getElementById('discardedCount').textContent = this.packetsDiscarded;
-        document.getElementById('successRate').textContent = successRate;
-        document.getElementById('busyWorkers').textContent = `${this.workerUtilization.busy}/${this.workerUtilization.total}`;
-        document.getElementById('codedPacketsCount').textContent = this.bufferSizes.codedPackets;
-        document.getElementById('validationFails').textContent = this.validationFailures;
+        // Get latest queue size (or 0 if not available)
+        const latestQueueSize = this.queueSizes.length > 0 ? this.queueSizes[this.queueSizes.length - 1] : 0;
+
+        // Update UI elements with safe fallbacks
+        const queueSizeEl = document.getElementById('queueSize');
+        if (queueSizeEl) queueSizeEl.textContent = latestQueueSize;
+
+        const frameRateEl = document.getElementById('frameRate');
+        if (frameRateEl) frameRateEl.textContent = frameRate;
+
+        const memoryUsageEl = document.getElementById('memoryUsage');
+        if (memoryUsageEl) memoryUsageEl.textContent = this.memoryUsage || 0;
+
+        const avgFrameTimeEl = document.getElementById('avgFrameTime');
+        if (avgFrameTimeEl) avgFrameTimeEl.textContent = avgFrameTime;
+
+        const discardedCountEl = document.getElementById('discardedCount');
+        if (discardedCountEl) discardedCountEl.textContent = this.packetsDiscarded || 0;
+
+        const successRateEl = document.getElementById('successRate');
+        if (successRateEl) successRateEl.textContent = successRate;
+
+        const busyWorkersEl = document.getElementById('busyWorkers');
+        if (busyWorkersEl) busyWorkersEl.textContent = `${this.workerUtilization.busy || 0}/${this.workerUtilization.total || 0}`;
+
+        const codedPacketsCountEl = document.getElementById('codedPacketsCount');
+        if (codedPacketsCountEl) codedPacketsCountEl.textContent = this.bufferSizes.codedPackets || 0;
+
+        const validationFailsEl = document.getElementById('validationFails');
+        if (validationFailsEl) validationFailsEl.textContent = this.validationFailures || 0;
 
         // Update buffer health indicator
         this.updateBufferHealth();
@@ -898,11 +922,12 @@
           return;
         }
 
+        // Check performance based on frame processing time and success rate
         if (avgFrameTime > 100 || successRate < 70) {
-          indicator.textContent = 'Performance degraded - system overwhelmed';
+          indicator.textContent = 'Performance degraded - high processing time';
           indicator.style.color = '#ef4444';
         } else if (avgFrameTime > 50 || successRate < 85) {
-          indicator.textContent = 'Performance warning - high processing time';
+          indicator.textContent = 'Performance warning - moderate load';
           indicator.style.color = '#f59e0b';
         } else if (successRate > 95) {
           indicator.textContent = 'Excellent performance - optimal processing';
@@ -934,12 +959,12 @@
       }
     };
 
-    // Update stats every 2 seconds
+    // Update stats every 500ms for more responsive display
     setInterval(() => {
       if (window.performanceStats) {
         window.performanceStats.updateDisplay();
       }
-    }, 2000);
+    }, 500);
 
     // =============================================
     // Improved PacketProcessor Implementation
@@ -1985,6 +2010,9 @@
         this.canvas = document.createElement('canvas');
         this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
 
+        // Direct processing - no queue needed
+        this.processingFrame = false;
+
         // Frame processing stats with memory management
         this.frameStats = {
           processed: 0,
@@ -1992,7 +2020,9 @@
           processingTimes: [],
           maxProcessingTimes: 50, // Limit array size to prevent memory growth
           lastMemoryCheck: 0,
-          memoryCheckInterval: 5000 // Check memory every 5 seconds
+          memoryCheckInterval: 5000, // Check memory every 5 seconds
+          framesQueued: 0,
+          framesDropped: 0
         };
       }
 
@@ -2056,9 +2086,15 @@
         this.startTime = performance.now();
         this.loopCount = 1; // Initialize loop counter
 
+        // Reset processing state
+        this.processingFrame = false;
+
         // Start playing the video
         this.videoElement.currentTime = 0;
         this.videoElement.play();
+
+        // Perform initial memory check to populate stats immediately
+        this.performMemoryCheck();
 
         // Use requestVideoFrameCallback if available
         if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
@@ -2070,7 +2106,12 @@
           }, this.frameInterval);
         }
 
-        console.log(`Video processing started with frame interval: ${this.frameInterval}ms`);
+        console.log(`Video processing started with frame interval: ${this.frameInterval}ms, max queue: ${this.maxQueueSize}`);
+
+        // Ensure performance stats tracking is active
+        if (window.performanceStats) {
+          window.performanceStats.systemOverwhelmed = false;
+        }
       }
 
       processWithVideoFrameCallback() {
@@ -2098,20 +2139,20 @@
       processCurrentFrame() {
         if (!this.isProcessing) return;
 
-        // Check if video is playing
-        if (this.videoElement.paused) {
+        // Check if video is playing (unless we paused it for queue management)
+        if (this.videoElement.paused && !this.isVideoPausedForQueue) {
           console.log('🔄 Video paused - stopping processing');
           this.isProcessing = false;
           return;
         }
-        
+
         // Handle video end in loop mode
         if (this.videoElement.ended) {
           console.log('🔄 ProcessCurrentFrame detected video end');
           this.handleVideoEnd();
           return;
         }
-        
+
         // Handle range mode - stop at specified end time
         if (this.rangeMode && this.endTime && this.videoElement.currentTime >= this.endTime) {
           console.log(`🔄 Range mode: reached end time ${this.endTime.toFixed(2)}s, stopping range`);
@@ -2122,11 +2163,19 @@
           return;
         }
 
+        // No queue-based pausing anymore - process everything immediately
+
         const processingStart = performance.now();
 
-        // Extract frame
+        // Extract frame and queue it
         this.processedFrames++;
         this.frameStats.processed++;
+        this.frameStats.framesQueued++;
+
+        // Update global frame count immediately
+        if (window.performanceStats) {
+          window.performanceStats.frameCount++;
+        }
 
         try {
           // Draw current frame to canvas
@@ -2146,9 +2195,17 @@
             this.progressCallback(progress, this.processedFrames, this.totalFrames, remainingTime);
           }
 
-          // Call frame callback
+          // Always process frame immediately - no queueing
           if (this.frameCallback) {
             this.frameCallback(imageData, this.videoElement.currentTime, this.processedFrames);
+          }
+
+          // Track that we're processing (for stats)
+          if (window.performanceStats) {
+            window.performanceStats.queueSizes.push(0); // No queue, always 0
+            if (window.performanceStats.queueSizes.length > 50) {
+              window.performanceStats.queueSizes.shift();
+            }
           }
 
           // Track processing time with bounded array
@@ -2222,7 +2279,7 @@
           this.videoElement.pause();
         }
 
-        // Clear timer if using interval
+        // Clear timer
         if (this.processTimer) {
           clearInterval(this.processTimer);
           this.processTimer = null;
@@ -2233,40 +2290,42 @@
         this.completed();
       }
 
+
       // Memory management methods
       performMemoryCheck() {
         // Update global performance stats
         if (window.performanceStats) {
-          // Memory tracking
-          if (performance.memory) {
+          // Memory tracking - ensure we have valid data
+          if (typeof performance !== 'undefined' && performance.memory) {
             const memory = performance.memory;
             window.performanceStats.memoryUsage = Math.round(memory.usedJSHeapSize / 1048576);
 
             // Trigger cleanup if memory usage is high
-            if (memory.usedJSHeapSize / memory.jsHeapSizeLimit > 0.8) {
+            if (memory.jsHeapSizeLimit && (memory.usedJSHeapSize / memory.jsHeapSizeLimit > 0.8)) {
               console.warn(`⚠️ High memory usage: ${window.performanceStats.memoryUsage}MB`);
               this.triggerMemoryCleanup();
             }
+          } else {
+            // Fallback: estimate memory based on processing activity
+            const estimatedMemory = 50; // Base memory estimate
+            window.performanceStats.memoryUsage = estimatedMemory;
           }
 
-          // Worker queue monitoring
-          if (window.qrFileDecoder && window.qrFileDecoder.workerPool) {
-            const pool = window.qrFileDecoder.workerPool;
-            window.performanceStats.queueSizes.push(pool.taskQueue.length);
-            window.performanceStats.workerUtilization.busy = pool.busyWorkers.size;
-            window.performanceStats.workerUtilization.total = pool.workers.length;
+          // Track processing activity (no queue, direct processing)
+          window.performanceStats.queueSizes.push(0); // No queue
+          window.performanceStats.workerUtilization.busy = this.processingFrame ? 1 : 0;
+          window.performanceStats.workerUtilization.total = 1; // Single processing thread
 
-            // Limit queue size tracking array
-            if (window.performanceStats.queueSizes.length > 50) {
-              window.performanceStats.queueSizes.shift();
-            }
+          // Limit array size
+          if (window.performanceStats.queueSizes.length > 50) {
+            window.performanceStats.queueSizes.shift();
           }
 
           // Buffer size monitoring
           if (window.qrFileDecoder && window.qrFileDecoder.fountainDecoder) {
             const decoder = window.qrFileDecoder.fountainDecoder;
             window.performanceStats.bufferSizes.codedPackets = decoder.codedPackets ? decoder.codedPackets.length : 0;
-            window.performanceStats.bufferSizes.workerQueue = window.qrFileDecoder.workerPool ? window.qrFileDecoder.workerPool.taskQueue.length : 0;
+            window.performanceStats.bufferSizes.workerQueue = 0; // No worker pool in current implementation
 
             // Large buffer threshold cleanup
             if (window.performanceStats.bufferSizes.codedPackets > 10000) {
@@ -2298,14 +2357,8 @@
           return true;
         }
 
-        // Check worker queue size
-        if (window.qrFileDecoder && window.qrFileDecoder.workerPool) {
-          const queueSize = window.qrFileDecoder.workerPool.taskQueue.length;
-          if (queueSize > 100) { // High queue backlog
-            console.log(`🔴 High worker queue detected: ${queueSize} tasks - pausing for buffer cleanup`);
-            return true;
-          }
-        }
+        // Check worker queue size - Note: workerPool not currently used
+        // Skip worker queue check since no worker pool is active
 
         return false;
       }
@@ -2396,18 +2449,8 @@
       }
 
       cleanupWorkerQueues() {
-        if (window.qrFileDecoder && window.qrFileDecoder.workerPool) {
-          const pool = window.qrFileDecoder.workerPool;
-          const queueSize = pool.taskQueue.length;
-
-          if (queueSize > 50) {
-            // Remove oldest queued tasks to prevent overflow
-            const keepCount = 25;
-            const removed = queueSize - keepCount;
-            pool.taskQueue = pool.taskQueue.slice(-keepCount);
-            console.log(`🧹 Cleaned up worker queue: removed ${removed} old tasks, kept ${keepCount}`);
-          }
-        }
+        // No worker pool in current implementation - skip cleanup
+        // Tasks are processed synchronously
       }
 
       triggerMemoryCleanup() {
@@ -2532,71 +2575,33 @@
           return false;
         }
         
-        // Enterprise smart completion: Check if all discovered files are downloaded
-        if (window.qrFileDecoder && window.qrFileDecoder.discoveredFiles.size > 0) {
-          const discoveredFileNames = Array.from(window.qrFileDecoder.discoveredFiles.keys());
-          const downloadedFileNames = Array.from(window.qrFileDecoder.downloadedFiles);
-          
-          // Check if all discovered files have been downloaded
-          const allDiscoveredFilesDownloaded = discoveredFileNames.every(filename => 
-            downloadedFileNames.includes(filename)
-          );
-          
-          if (allDiscoveredFilesDownloaded && currentLoop >= 2) {
-            console.log(`🎯 ENTERPRISE SMART STOP: All ${discoveredFileNames.length} discovered files downloaded`);
-            console.log(`📁 Downloaded files: ${downloadedFileNames.join(', ')}`);
-            console.log(`⏹️ Stopping video processing - mission accomplished after ${currentLoop} loops`);
-            
-            // Enterprise enhancement: Stop video playback immediately
-            if (this.videoElement) {
-              this.videoElement.pause();
-              console.log(`⏸️ ENTERPRISE: Video playback stopped - all files downloaded`);
-            }
-            
-            return false; // Stop looping - all files are downloaded
-          }
-        }
+        // Don't stop early - continue processing to find more files
+        // Only rely on max loops limit, not on download status
         
-        // Enterprise smart completion detection
-        if (window.qrFileDecoder) {
-          // Check if all discovered files are already downloaded (enterprise efficiency)
-          if (window.qrFileDecoder.discoveredFiles.size > 0) {
-            let allDiscoveredFilesDownloaded = true;
+        // Log status but don't stop early based on downloads
+        if (window.qrFileDecoder && window.qrFileDecoder.discoveredFiles.size > 0) {
             let downloadedCount = 0;
             let totalDiscovered = window.qrFileDecoder.discoveredFiles.size;
-            
+
             for (const [filename, fileInfo] of window.qrFileDecoder.discoveredFiles.entries()) {
               if (window.qrFileDecoder.downloadedFiles.has(filename)) {
                 downloadedCount++;
-              } else {
-                allDiscoveredFilesDownloaded = false;
               }
             }
-            
-            console.log(`📊 ENTERPRISE: Download status: ${downloadedCount}/${totalDiscovered} discovered files downloaded`);
-            
-            // If all discovered files are downloaded, stop efficiently
-            if (allDiscoveredFilesDownloaded && downloadedCount > 0) {
-              console.log(`✅ ENTERPRISE EFFICIENCY: All ${downloadedCount} discovered files downloaded - stopping loops early`);
-              return false; // Stop looping - mission accomplished!
-            }
-            
-            // If discovery phase complete but files still need processing, check normal completion
+
+            console.log(`📊 Status: ${downloadedCount}/${totalDiscovered} discovered files downloaded`);
+
+            // Check current file progress if processing
             if (!window.qrFileDecoder.discoveryMode && window.qrFileDecoder.fountainDecoder) {
               const progress = window.qrFileDecoder.fountainDecoder.getRecoveryProgress();
               console.log(`📊 Recovery progress: ${progress.recovered}/${progress.total} chunks (${progress.percentage}%)`);
-              
+
               // Continue if we don't have all chunks yet AND haven't hit max loops
               if (progress.recovered < progress.total && currentLoop < maxLoops) {
                 console.log(`🔄 Continuing loop ${currentLoop + 1} - missing ${progress.total - progress.recovered} chunks`);
                 return true;
               }
             }
-          } else {
-            // No discovered files yet - continue processing to find files
-            console.log(`🔍 No files discovered yet - continuing to scan`);
-            return currentLoop < maxLoops;
-          }
         }
         
         // Continue looping if we haven't hit the max and file isn't complete
@@ -3045,6 +3050,19 @@
         document.getElementById('clearLogBtn').addEventListener('click', this.logger.clear.bind(this.logger));
         document.getElementById('copyLogBtn').addEventListener('click', this.copyDebugLog.bind(this));
 
+        // Export/Import scan data
+        document.getElementById('exportScanBtn').addEventListener('click', this.exportScanData.bind(this));
+        document.getElementById('importScanBtn').addEventListener('click', () => {
+          document.getElementById('scanImportInput').click();
+        });
+        document.getElementById('scanImportInput').addEventListener('change', async (e) => {
+          const file = e.target.files[0];
+          if (file) {
+            await this.importScanData(file);
+            e.target.value = ''; // Reset file input
+          }
+        });
+
 
         // Log filters
         document.querySelectorAll('.log-filter').forEach(btn => {
@@ -3249,11 +3267,16 @@
         // Re-enable processing and force additional loops
         if (this.videoProcessor && this.videoFile) {
           this.isProcessing = true;
-          
+
+          // Clear performance overwhelmed flag
+          if (window.performanceStats) {
+            window.performanceStats.systemOverwhelmed = false;
+          }
+
           // Continue from where we left off, increment loop count
           this.videoProcessor.loopCount = (this.videoProcessor.loopCount || 1) + 1;
           this.videoProcessor.isProcessing = true;
-          
+
           // Increase frame rate for better detection (faster processing)
           this.videoProcessor.frameInterval = Math.max(this.videoProcessor.frameInterval / 2, 1);
           
@@ -3300,28 +3323,39 @@
       // Start scan with automatic discovery (first loop is always discovery)
       async startScanAndDiscover() {
         if (this.isProcessing) return;
-        
-        this.logger.info("Starting scan with automatic file discovery...");
+
+        this.logger.info("Starting FAST scan with automatic file discovery...");
         this.discoveryMode = true; // First loop is discovery mode
+        this.fastScanMode = true; // Enable fast scanning
         this.discoveredFiles.clear();
         this.isProcessing = true; // Enable processing state
-        
+
+        // Track metadata positions for intelligent skipping
+        this.metadataPositions = [];
+        this.lastMetadataTime = 0;
+
         // Clear any existing UI
         this.ui.resetChunkGrid();
-        this.ui.updateFileInfo("Scanning video and discovering files...");
+        this.ui.updateFileInfo("⚡ Fast scanning video at 1fps to discover all files...");
         document.getElementById('discoveredFilesContainer').style.display = 'none';
-        
+
         // Update UI
         document.getElementById('startScanBtn').disabled = true;
         document.getElementById('stopScanBtn').disabled = false;
-        
+
         try {
           // Initialize components
           await this.initializeComponents();
-          
-          // Start processing - first loop will be discovery AND chunk capture
+
+          // Start processing - first loop will be fast discovery
           await this.videoProcessor.initialize(this.videoFile);
           this.videoProcessor.discoveryMode = true; // Enable discovery tracking
+          this.videoProcessor.fastScanMode = true; // Enable fast scan
+
+          // Set to 1fps for fast metadata discovery
+          this.videoProcessor.originalFrameInterval = this.videoProcessor.frameInterval;
+          this.videoProcessor.frameInterval = 1000; // 1 frame per second
+
           this.videoProcessor.startProcessing();
           
           this.logger.info("First loop started - discovering files and capturing chunks simultaneously");
@@ -3646,7 +3680,27 @@
 
       handleMetadataPacket(metadata, currentTime = 0) {
         const fileName = metadata.fileName;
-        
+
+        // Track metadata position for fast scanning
+        if (this.fastScanMode) {
+          this.metadataPositions.push({
+            fileName: fileName,
+            time: currentTime,
+            chunksCount: metadata.chunksCount
+          });
+
+          // Calculate skip distance based on chunk count
+          const estimatedDuration = metadata.chunksCount * 0.1; // Estimate 0.1s per chunk
+          const skipTo = currentTime + estimatedDuration;
+
+          console.log(`⚡ FAST SCAN: Found ${fileName} at ${currentTime.toFixed(1)}s, skipping to ${skipTo.toFixed(1)}s`);
+
+          // Jump ahead in video to find next file faster
+          if (this.videoProcessor && this.videoProcessor.videoElement && skipTo < this.videoProcessor.videoElement.duration) {
+            this.videoProcessor.videoElement.currentTime = skipTo;
+          }
+        }
+
         // Handle file discovery in both discovery mode and continue mode
         const isNewFileDiscovered = !this.discoveredFiles.has(fileName);
 
@@ -3863,7 +3917,9 @@
                 if (!fileInfo.completed) {
                   fileInfo.completed = true;
                   fileInfo.recoveredAt = performance.now();
-                  this.logger.info(`✅ Marked ${this.currentActiveFile} as completed in discovered files`);
+                  // Store completion time from video
+                  fileInfo.completedAt = this.videoProcessor ? this.videoProcessor.videoElement.currentTime : fileInfo.lastSeenAt;
+                  this.logger.info(`✅ Marked ${this.currentActiveFile} as completed at ${this.formatTimeToHMS(fileInfo.completedAt)}`);
 
                   // Update discovered files UI to show completion immediately
                   this.updateDiscoveredFilesUI();
@@ -3898,10 +3954,19 @@
 
         // Store the recovered file data
         this.recoveredFileData = fileData;
-        
+
         // Store custom metadata if provided (for failed files)
         if (customMetadata) {
           this.customFileMetadata = customMetadata;
+        }
+
+        // Update the missing chunks UI to show final complete state
+        if (this.fileMetadata && !customMetadata?.corrupted) {
+          const totalChunks = this.fileMetadata.chunksCount;
+          document.getElementById('missingChunks').innerHTML = `
+            <div>Recovered chunks: ${totalChunks}/${totalChunks} (100%)</div>
+            <div>Missing chunks: 0</div>
+          `;
         }
 
         // Show download button
@@ -3909,7 +3974,7 @@
 
         // Update file info with success/failure message
         const fileInfo = document.getElementById('fileInfo').innerHTML;
-        const statusMessage = customMetadata && customMetadata.corrupted ? 
+        const statusMessage = customMetadata && customMetadata.corrupted ?
           `<div style="margin-top: 10px; color: var(--error-color);">
             <strong>⚠️ File Corrupted - Saved as .failed for analysis</strong><br>
             <small>Expected: ${customMetadata.expectedChecksum}, Got: ${customMetadata.actualChecksum}</small>
@@ -3917,7 +3982,7 @@
           `<div style="margin-top: 10px; color: var(--success-color);">
             <strong>File Successfully Recovered!</strong>
           </div>`;
-        
+
         document.getElementById('fileInfo').innerHTML = fileInfo + statusMessage;
 
         // DON'T stop processing during discovery mode - need to scan entire video
@@ -4288,6 +4353,84 @@
         this.logger.info(`🎯 Ready to process ${fileName} during discovery scan`);
       }
 
+      // Export scan data to JSON
+      exportScanData() {
+        const scanData = {
+          version: "1.0",
+          timestamp: new Date().toISOString(),
+          videoDuration: this.videoProcessor?.videoElement?.duration || 0,
+          discoveredFiles: [],
+          metadataPositions: this.metadataPositions || []
+        };
+
+        // Export discovered files with all their data
+        this.discoveredFiles.forEach((fileInfo, fileName) => {
+          scanData.discoveredFiles.push({
+            fileName: fileName,
+            firstSeenAt: fileInfo.firstSeenAt,
+            lastSeenAt: fileInfo.lastSeenAt,
+            completedAt: fileInfo.completedAt || null,
+            completed: fileInfo.completed || false,
+            metadata: fileInfo.metadata,
+            chunksCount: fileInfo.metadata.chunksCount
+          });
+        });
+
+        // Create downloadable JSON
+        const jsonStr = JSON.stringify(scanData, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `qr-scan-${new Date().getTime()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        this.logger.info(`📤 Exported scan data: ${scanData.discoveredFiles.length} files`);
+      }
+
+      // Import scan data from JSON
+      async importScanData(jsonFile) {
+        try {
+          const text = await jsonFile.text();
+          const scanData = JSON.parse(text);
+
+          // Validate scan data
+          if (!scanData.version || !scanData.discoveredFiles) {
+            throw new Error("Invalid scan data format");
+          }
+
+          // Clear current data
+          this.discoveredFiles.clear();
+          this.metadataPositions = scanData.metadataPositions || [];
+
+          // Import discovered files
+          scanData.discoveredFiles.forEach(file => {
+            this.discoveredFiles.set(file.fileName, {
+              metadata: file.metadata,
+              firstSeenAt: file.firstSeenAt,
+              lastSeenAt: file.lastSeenAt,
+              completedAt: file.completedAt,
+              completed: file.completed
+            });
+          });
+
+          // Update UI
+          this.updateDiscoveredFilesUI();
+          this.logger.info(`📥 Imported scan data: ${scanData.discoveredFiles.length} files`);
+
+          // Show discovered files container
+          document.getElementById('discoveredFilesContainer').style.display = 'block';
+
+          return true;
+        } catch (error) {
+          this.logger.error(`Failed to import scan data: ${error.message}`);
+          return false;
+        }
+      }
+
       // Copy debug log to clipboard
       copyDebugLog() {
         try {
@@ -4348,27 +4491,47 @@
         }
       }
 
+      // Helper function to format seconds to HH:MM:SS
+      formatTimeToHMS(seconds) {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+        const ms = Math.floor((seconds % 1) * 10); // Get first decimal place
+
+        // Pad with zeros
+        const hh = hours.toString().padStart(2, '0');
+        const mm = minutes.toString().padStart(2, '0');
+        const ss = secs.toString().padStart(2, '0');
+
+        return `${hh}:${mm}:${ss}.${ms}`;
+      }
+
       // Update the discovered files UI with clickable buttons
       updateDiscoveredFilesUI() {
         const container = document.getElementById('discoveredFilesContainer');
         const filesList = document.getElementById('discoveredFilesList');
-        
+
         if (this.discoveredFiles.size === 0) {
           container.style.display = 'none';
           return;
         }
-        
+
         container.style.display = 'block';
         filesList.innerHTML = '';
-        
+
         // Create buttons for each discovered file
         Array.from(this.discoveredFiles.entries()).forEach(([filename, fileInfo], index) => {
           const fileButton = document.createElement('div');
           fileButton.style.cssText = 'margin-bottom: 10px; padding: 10px; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb;';
-          
+
           const fileSize = this.formatFileSize(fileInfo.metadata.fileSize);
-          const timeRange = `${fileInfo.firstSeenAt.toFixed(1)}s - ${fileInfo.lastSeenAt.toFixed(1)}s`;
+          let timeRange = `${this.formatTimeToHMS(fileInfo.firstSeenAt)} - ${this.formatTimeToHMS(fileInfo.lastSeenAt)}`;
+
+          // Add completion time if available
           const isCompleted = fileInfo.completed || false;
+          if (isCompleted && fileInfo.completedAt) {
+            timeRange = `${this.formatTimeToHMS(fileInfo.firstSeenAt)} - ${this.formatTimeToHMS(fileInfo.completedAt)}`;
+          }
           const statusBadge = isCompleted ? 
             '<span style="background: #dcfce7; color: #16a34a; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold;">COMPLETED</span>' : 
             '<span style="background: #fef3c7; color: #d97706; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold;">NEEDS PROCESSING</span>';

@@ -1,0 +1,31 @@
+{
+  "name": "@qrf/core",
+  "version": "1.0.0",
+  "description": "Core libraries for QRF encoder and decoder",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./file": "./lib/fileProcessor.js",
+    "./fountain": "./lib/fountainEncoder.js",
+    "./fountain-decoder": "./lib/fountainDecoder.js",
+    "./qr": "./lib/qrGenerator.js",
+    "./qr-decoder": "./lib/qrDecoder.js",
+    "./video": "./lib/videoEncoder.js",
+    "./video-processor": "./lib/videoProcessor.js"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.3",
+    "canvas": "^2.11.2",
+    "mime-types": "^2.1.35",
+    "fluent-ffmpeg": "^2.1.2",
+    "jimp": "^0.22.10",
+    "qrcode-reader": "^1.0.4"
+  },
+  "keywords": ["qr", "fountain-codes", "encoding", "decoding"],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
