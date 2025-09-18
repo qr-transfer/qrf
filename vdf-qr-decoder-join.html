@@ -383,9 +383,6 @@
       <button id="stopScanBtn" disabled>Stop Scan</button>
       <button id="resetBtn">Reset Contents</button>
       <button id="settingsBtn">Advanced Settings</button>
-      <button id="exportScanBtn">Export Scan</button>
-      <button id="importScanBtn">Import Scan</button>
-      <input type="file" id="scanImportInput" accept=".json" style="display: none;">
     </div>
   </header>
 
@@ -520,7 +517,7 @@
   </div>
 
   <!-- Html5QRCode library -->
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="html5-qrcode.min.js"></script>
 
   <!-- Main script -->
   <script>
@@ -1082,7 +1079,9 @@
 
           // Reduced logging for legacy format
           if (packetId % 50 === 1 || packetId <= 5) {
-            console.log(`🔄 LEGACY FORMAT DETECTED: packetId=${packetId}, degree=${chunkCount} (no fileId)`);
+            if (window.logConfig && window.logConfig.shouldLog('packet', 'DEBUG')) {
+              console.log(`🔄 LEGACY FORMAT DETECTED: packetId=${packetId}, degree=${chunkCount} (no fileId)`);
+            }
           }
         } else {
           console.error(`❌ INVALID FORMAT: parts.length=${parts.length}, expected >=7`);
@@ -1103,7 +1102,9 @@
           // FOUNTAIN PACKET: Comma-separated indices in field (always chunkCount=1)
           const sourceIndices = parts[dataFieldOffset].split(',').map(idx => parseInt(idx));
           const actualDegree = sourceIndices.length; // TRUE degree from comma count
-          console.debug(`Fountain packet ${packetId} with degree=${actualDegree} (XOR of ${sourceIndices.join(',')}) ${isNewFormat ? `fileId=${fileId}` : '(legacy)'}`);
+          if (window.logConfig && window.logConfig.shouldLog('packet', 'DEBUG')) {
+            console.debug(`Fountain packet ${packetId} with degree=${actualDegree} (XOR of ${sourceIndices.join(',')}) ${isNewFormat ? `fileId=${fileId}` : '(legacy)'}`);
+          }
 
           format = "enhanced";
           sourceChunks = sourceIndices;
@@ -2239,7 +2240,9 @@
           if (this.frameStats.processed % 30 === 0) {
             const avgTime = this.frameStats.processingTimes.reduce((sum, time) => sum + time, 0) /
               this.frameStats.processingTimes.length;
-            console.log(`Avg frame processing time: ${avgTime.toFixed(2)}ms over last ${this.frameStats.processingTimes.length} frames`);
+            if (window.logConfig && window.logConfig.shouldLog('performance', 'DEBUG')) {
+              console.log(`Avg frame processing time: ${avgTime.toFixed(2)}ms over last ${this.frameStats.processingTimes.length} frames`);
+            }
 
             // Check if we need to pause processing for buffer management
             if (this.shouldPauseForBufferManagement(avgTime)) {
@@ -2673,6 +2676,10 @@
         this.recentlySeenQRs = new Map();
         this.maxCacheSize = 50;
 
+        // Track scans for periodic cleanup to prevent memory leak
+        this.scanCount = 0;
+        this.maxScansBeforeReset = 500;
+
         // Create a hidden element for the QR code reader
         this.qrElement = document.createElement('div');
         this.qrElement.id = 'qr-reader-hidden';
@@ -2710,12 +2717,21 @@
         }
       }
 
-      processFrame(imageData, frameIndex) {
+      async processFrame(imageData, frameIndex) {
         if (!this.isReady) {
           throw new Error("QR processor not initialized");
         }
 
         this.detectionStats.attempts++;
+        this.scanCount++;
+
+        // Recreate Html5Qrcode instance every 500 scans to prevent memory leak
+        if (this.scanCount >= this.maxScansBeforeReset) {
+          if (window.logConfig && window.logConfig.shouldLog('memory', 'INFO')) {
+            console.log(`Recreating Html5Qrcode instance after ${this.scanCount} scans to prevent memory leak`);
+          }
+          await this.resetScanner();
+        }
 
         return new Promise((resolve, reject) => {
           try {
@@ -2728,15 +2744,25 @@
             // Draw image data to canvas
             this.ctx.putImageData(imageData, 0, 0);
 
-            // Convert to data URL
-            const dataUrl = this.canvas.toDataURL('image/jpeg');
+            // Convert to blob instead of dataURL to save memory
+            this.canvas.toBlob((blob) => {
+              if (!blob) {
+                resolve({
+                  success: false,
+                  frameIndex: frameIndex
+                });
+                return;
+              }
 
-            // Use HTML5QRCode to scan the image
-            this.html5QrCode.scanFile(
-              this.dataURLtoFile(dataUrl, 'frame.jpg'),
-        /* showImage= */ false,
-        /* defaultZoomValueIfZoomFeatureEnabled= */ undefined)
-              .then(decodedText => {
+              // Create File from blob
+              const file = new File([blob], 'frame.jpg', { type: 'image/jpeg' });
+
+              // Use HTML5QRCode to scan the image
+              this.html5QrCode.scanFile(
+                file,
+          /* showImage= */ false,
+          /* defaultZoomValueIfZoomFeatureEnabled= */ undefined)
+                .then(decodedText => {
                 // QR code found
                 this.detectionStats.successes++;
 
@@ -2758,7 +2784,9 @@
 
                   // If every 10 successful detections, log stats
                   if (this.detectionStats.successes % 10 === 0) {
-                    console.log(`QR detection stats: ${this.detectionStats.successes}/${this.detectionStats.attempts} successful (${this.detectionStats.duplicates} duplicates)`);
+                    if (window.logConfig && window.logConfig.shouldLog('qr', 'DEBUG')) {
+                      console.log(`QR detection stats: ${this.detectionStats.successes}/${this.detectionStats.attempts} successful (${this.detectionStats.duplicates} duplicates)`);
+                    }
                   }
 
                   // Get the last decodedResult from the html5QrCode instance (if available)
@@ -2774,15 +2802,16 @@
                     })
                   });
                 }
-              })
-              .catch(error => {
-                // No QR code found or error
-                this.detectionStats.failures++;
-                resolve({
-                  success: false,
-                  frameIndex: frameIndex
+                })
+                .catch(error => {
+                  // No QR code found or error
+                  this.detectionStats.failures++;
+                  resolve({
+                    success: false,
+                    frameIndex: frameIndex
+                  });
                 });
-              });
+            }, 'image/jpeg', 0.8); // JPEG quality 80% for smaller blob size
           } catch (error) {
             // Error during processing
             this.detectionStats.failures++;
@@ -2875,7 +2904,44 @@
           height: size
         };
       }
-      // Convert data URL to File object
+      // Reset scanner to prevent memory leak
+      async resetScanner() {
+        try {
+          // Clear the old instance
+          if (this.html5QrCode) {
+            try {
+              await this.html5QrCode.clear();
+            } catch (e) {
+              // Ignore cleanup errors
+            }
+            this.html5QrCode = null;
+          }
+
+          // Create new instance
+          this.html5QrCode = new Html5Qrcode('qr-reader-hidden', {
+            formatsToSupport: [
+              Html5QrcodeSupportedFormats.QR_CODE,
+              Html5QrcodeSupportedFormats.DATA_MATRIX,
+              Html5QrcodeSupportedFormats.CODE_39,
+              Html5QrcodeSupportedFormats.CODE_93,
+              Html5QrcodeSupportedFormats.CODE_128,
+              Html5QrcodeSupportedFormats.EAN_8,
+              Html5QrcodeSupportedFormats.EAN_13,
+              Html5QrcodeSupportedFormats.ITF,
+              Html5QrcodeSupportedFormats.UPC_A,
+              Html5QrcodeSupportedFormats.UPC_E
+            ]
+          });
+
+          this.scanCount = 0;
+          console.log('Scanner reset successfully');
+        } catch (error) {
+          console.error('Error resetting scanner:', error);
+          throw error;
+        }
+      }
+
+      // Convert data URL to File object (kept for compatibility but no longer used)
       dataURLtoFile(dataurl, filename) {
         const arr = dataurl.split(',');
         const mime = arr[0].match(/:(.*?);/)[1];
@@ -2891,14 +2957,15 @@
       }
 
       // Clean up resources
-      dispose() {
+      async dispose() {
         if (this.html5QrCode) {
           // Clean up HTML5QRCode
           try {
-            this.html5QrCode.clear();
+            await this.html5QrCode.clear();
           } catch (error) {
             console.error("Error clearing HTML5QRCode", error);
           }
+          this.html5QrCode = null;
         }
 
         // Remove the QR element from the document
@@ -3049,19 +3116,6 @@
         });
         document.getElementById('clearLogBtn').addEventListener('click', this.logger.clear.bind(this.logger));
         document.getElementById('copyLogBtn').addEventListener('click', this.copyDebugLog.bind(this));
-
-        // Export/Import scan data
-        document.getElementById('exportScanBtn').addEventListener('click', this.exportScanData.bind(this));
-        document.getElementById('importScanBtn').addEventListener('click', () => {
-          document.getElementById('scanImportInput').click();
-        });
-        document.getElementById('scanImportInput').addEventListener('change', async (e) => {
-          const file = e.target.files[0];
-          if (file) {
-            await this.importScanData(file);
-            e.target.value = ''; // Reset file input
-          }
-        });
 
 
         // Log filters
@@ -3323,39 +3377,28 @@
       // Start scan with automatic discovery (first loop is always discovery)
       async startScanAndDiscover() {
         if (this.isProcessing) return;
-
-        this.logger.info("Starting FAST scan with automatic file discovery...");
+        
+        this.logger.info("Starting scan with automatic file discovery...");
         this.discoveryMode = true; // First loop is discovery mode
-        this.fastScanMode = true; // Enable fast scanning
         this.discoveredFiles.clear();
         this.isProcessing = true; // Enable processing state
-
-        // Track metadata positions for intelligent skipping
-        this.metadataPositions = [];
-        this.lastMetadataTime = 0;
-
+        
         // Clear any existing UI
         this.ui.resetChunkGrid();
-        this.ui.updateFileInfo("⚡ Fast scanning video at 1fps to discover all files...");
+        this.ui.updateFileInfo("Scanning video and discovering files...");
         document.getElementById('discoveredFilesContainer').style.display = 'none';
-
+        
         // Update UI
         document.getElementById('startScanBtn').disabled = true;
         document.getElementById('stopScanBtn').disabled = false;
-
+        
         try {
           // Initialize components
           await this.initializeComponents();
-
-          // Start processing - first loop will be fast discovery
+          
+          // Start processing - first loop will be discovery AND chunk capture
           await this.videoProcessor.initialize(this.videoFile);
           this.videoProcessor.discoveryMode = true; // Enable discovery tracking
-          this.videoProcessor.fastScanMode = true; // Enable fast scan
-
-          // Set to 1fps for fast metadata discovery
-          this.videoProcessor.originalFrameInterval = this.videoProcessor.frameInterval;
-          this.videoProcessor.frameInterval = 1000; // 1 frame per second
-
           this.videoProcessor.startProcessing();
           
           this.logger.info("First loop started - discovering files and capturing chunks simultaneously");
@@ -3680,27 +3723,7 @@
 
       handleMetadataPacket(metadata, currentTime = 0) {
         const fileName = metadata.fileName;
-
-        // Track metadata position for fast scanning
-        if (this.fastScanMode) {
-          this.metadataPositions.push({
-            fileName: fileName,
-            time: currentTime,
-            chunksCount: metadata.chunksCount
-          });
-
-          // Calculate skip distance based on chunk count
-          const estimatedDuration = metadata.chunksCount * 0.1; // Estimate 0.1s per chunk
-          const skipTo = currentTime + estimatedDuration;
-
-          console.log(`⚡ FAST SCAN: Found ${fileName} at ${currentTime.toFixed(1)}s, skipping to ${skipTo.toFixed(1)}s`);
-
-          // Jump ahead in video to find next file faster
-          if (this.videoProcessor && this.videoProcessor.videoElement && skipTo < this.videoProcessor.videoElement.duration) {
-            this.videoProcessor.videoElement.currentTime = skipTo;
-          }
-        }
-
+        
         // Handle file discovery in both discovery mode and continue mode
         const isNewFileDiscovered = !this.discoveredFiles.has(fileName);
 
@@ -4351,84 +4374,6 @@
         this.updateMissingChunksUI();
         
         this.logger.info(`🎯 Ready to process ${fileName} during discovery scan`);
-      }
-
-      // Export scan data to JSON
-      exportScanData() {
-        const scanData = {
-          version: "1.0",
-          timestamp: new Date().toISOString(),
-          videoDuration: this.videoProcessor?.videoElement?.duration || 0,
-          discoveredFiles: [],
-          metadataPositions: this.metadataPositions || []
-        };
-
-        // Export discovered files with all their data
-        this.discoveredFiles.forEach((fileInfo, fileName) => {
-          scanData.discoveredFiles.push({
-            fileName: fileName,
-            firstSeenAt: fileInfo.firstSeenAt,
-            lastSeenAt: fileInfo.lastSeenAt,
-            completedAt: fileInfo.completedAt || null,
-            completed: fileInfo.completed || false,
-            metadata: fileInfo.metadata,
-            chunksCount: fileInfo.metadata.chunksCount
-          });
-        });
-
-        // Create downloadable JSON
-        const jsonStr = JSON.stringify(scanData, null, 2);
-        const blob = new Blob([jsonStr], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `qr-scan-${new Date().getTime()}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        this.logger.info(`📤 Exported scan data: ${scanData.discoveredFiles.length} files`);
-      }
-
-      // Import scan data from JSON
-      async importScanData(jsonFile) {
-        try {
-          const text = await jsonFile.text();
-          const scanData = JSON.parse(text);
-
-          // Validate scan data
-          if (!scanData.version || !scanData.discoveredFiles) {
-            throw new Error("Invalid scan data format");
-          }
-
-          // Clear current data
-          this.discoveredFiles.clear();
-          this.metadataPositions = scanData.metadataPositions || [];
-
-          // Import discovered files
-          scanData.discoveredFiles.forEach(file => {
-            this.discoveredFiles.set(file.fileName, {
-              metadata: file.metadata,
-              firstSeenAt: file.firstSeenAt,
-              lastSeenAt: file.lastSeenAt,
-              completedAt: file.completedAt,
-              completed: file.completed
-            });
-          });
-
-          // Update UI
-          this.updateDiscoveredFilesUI();
-          this.logger.info(`📥 Imported scan data: ${scanData.discoveredFiles.length} files`);
-
-          // Show discovered files container
-          document.getElementById('discoveredFilesContainer').style.display = 'block';
-
-          return true;
-        } catch (error) {
-          this.logger.error(`Failed to import scan data: ${error.message}`);
-          return false;
-        }
       }
 
       // Copy debug log to clipboard
