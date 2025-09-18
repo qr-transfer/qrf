@@ -27,6 +27,9 @@ export class QRDecoder {
       this.qr.decode(prepared.bitmap);
 
       if (this.lastResult) {
+        if (process.env.DEBUG_QR) {
+          console.log('QR detected:', this.lastResult.result?.substring(0, 100));
+        }
         const data = this.parseQRData(this.lastResult.result);
         return data;
       }
@@ -47,6 +50,11 @@ export class QRDecoder {
   }
 
   parseQRData(qrString) {
+    // Debug: log raw QR data
+    if (process.env.DEBUG_QR) {
+      console.log('Raw QR data:', qrString.substring(0, 100));
+    }
+
     // Parse QR data based on format
     if (qrString.startsWith('M:')) {
       // Metadata packet
@@ -67,28 +75,18 @@ export class QRDecoder {
       // Data packet
       const parts = qrString.split(':');
 
-      // Check for new format with fileId
-      if (parts[1] && parts[1].length === 8 && /^[a-fA-F0-9]{8}$/.test(parts[1])) {
-        return {
-          type: 'data',
-          fileId: parts[1],
-          packetId: parseInt(parts[2]),
-          seed: parseInt(parts[3]),
-          seedBase: parseInt(parts[4]),
-          numChunks: parseInt(parts[5]),
-          degree: parseInt(parts[6]),
-          data: parts.slice(7).join(':')
-        };
-      } else {
-        // Legacy format
+      // The format appears to be: D:packetId:timestamp1:timestamp2:totalChunks:degree:index:data
+      // Let's handle this format
+      if (parts.length >= 7) {
         return {
           type: 'data',
           packetId: parseInt(parts[1]),
-          seed: parseInt(parts[2]),
-          seedBase: parseInt(parts[3]),
+          timestamp1: parts[2],
+          timestamp2: parts[3],
           numChunks: parseInt(parts[4]),
           degree: parseInt(parts[5]),
-          data: parts.slice(6).join(':')
+          sourceIndices: [parseInt(parts[6])], // Convert single index to array
+          data: parts.slice(7).join(':')
         };
       }
     }

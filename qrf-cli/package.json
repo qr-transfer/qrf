@@ -25,5 +25,9 @@
     "url": "https://github.com/yourusername/qrf"
   },
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "jsqr": "^1.4.0",
+    "sharp": "^0.34.3"
+  }
 }

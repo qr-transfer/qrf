@@ -27,35 +27,57 @@ export class VideoProcessor extends EventEmitter {
         const command = ffmpeg(this.videoPath)
           .fps(this.frameRate)
           .format('image2pipe')
-          .videoCodec('mjpeg');
+          .videoCodec('mjpeg')
+          .pipe();  // Add pipe to output to stdout
 
         let frameCount = 0;
         const startTime = Date.now();
+        let buffer = Buffer.alloc(0);
 
-        command.on('data', (frameBuffer) => {
-          frameCount++;
-          this.processedFrames++;
+        command.on('data', (chunk) => {
+          // Accumulate chunks until we have a complete frame
+          buffer = Buffer.concat([buffer, chunk]);
 
-          // Emit frame for processing
-          this.emit('frame', {
-            data: frameBuffer,
-            index: frameCount,
-            timestamp: frameCount / this.frameRate
-          });
+          // Simple JPEG detection - look for JPEG markers
+          let frameStart = 0;
+          while (frameStart < buffer.length - 1) {
+            // Find JPEG start marker (FFD8)
+            const jpegStart = buffer.indexOf(Buffer.from([0xFF, 0xD8]), frameStart);
+            if (jpegStart === -1) break;
 
-          // Update progress
-          const progress = this.processedFrames / this.totalFrames;
-          this.emit('progress', progress);
+            // Find JPEG end marker (FFD9) after the start
+            const jpegEnd = buffer.indexOf(Buffer.from([0xFF, 0xD9]), jpegStart + 2);
+            if (jpegEnd === -1) break;
 
-          // Calculate FPS
-          const elapsed = (Date.now() - startTime) / 1000;
-          const fps = frameCount / elapsed;
-          this.emit('fps', fps);
+            // Extract complete JPEG frame
+            const frameBuffer = buffer.slice(jpegStart, jpegEnd + 2);
+            frameStart = jpegEnd + 2;
 
-          // Fast scan mode - skip ahead after finding metadata
-          if (this.fastScan && this.shouldSkip(frameCount)) {
-            // Seek ahead in video
-            command.seek(this.getSkipTime(frameCount));
+            frameCount++;
+            this.processedFrames++;
+
+            // Emit frame for processing
+            this.emit('frame', {
+              data: frameBuffer,
+              index: frameCount,
+              timestamp: frameCount / this.frameRate
+            });
+
+            // Update progress
+            const progress = this.processedFrames / this.totalFrames;
+            this.emit('progress', progress);
+
+            // Calculate FPS
+            const elapsed = (Date.now() - startTime) / 1000;
+            const fps = frameCount / elapsed;
+            this.emit('fps', fps);
+          }
+
+          // Keep remaining data in buffer
+          if (frameStart < buffer.length) {
+            buffer = buffer.slice(frameStart);
+          } else {
+            buffer = Buffer.alloc(0);
           }
         });
 
