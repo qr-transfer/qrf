@@ -968,7 +968,24 @@
     // =============================================
     class PacketProcessor {
       constructor() {
-        // No initialization needed for packet processing
+        // Chunk tracking for validation and recovery
+        this.chunkTracker = {
+          expected: new Set(),     // Expected chunk indices
+          received: new Set(),     // Actually received chunk indices
+          missing: new Set(),      // Missing chunk indices
+          lastPacketId: -1,        // Track packet sequence
+          gapDetection: [],        // Detect gaps in packet sequence
+          maxGap: 10              // Maximum allowed gap before warning
+        };
+
+        // Statistics
+        this.stats = {
+          packetsProcessed: 0,
+          chunksReceived: 0,
+          sequenceGaps: 0,
+          duplicatePackets: 0,
+          invalidPackets: 0
+        };
       }
 
       processQRData(qrData, frameIndex) {
@@ -1049,6 +1066,11 @@
         // Enhanced Format: D:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<sourceIndices>:<xorData>
         // New Format: D:<fileId>:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<sourceIndices>:<xorData>
         const parts = dataString.split(':');
+
+        this.stats.packetsProcessed++;
+
+        // Validate packet sequence and detect gaps
+        this.validatePacketSequence(parts, frameIndex);
 
         // Auto-detect packet format based on length and content
         let fileId, packetId, seed, seedBase, numChunks, chunkCount;
@@ -1264,14 +1286,14 @@
       // Check if string is valid base64
       isValidBase64(str) {
         if (!str || str.length === 0) return false;
-        
+
         // Check for valid base64 characters only
         const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
         if (!base64Regex.test(str)) return false;
-        
+
         // Check length is multiple of 4 (base64 requirement)
         if (str.length % 4 !== 0) return false;
-        
+
         try {
           // Try to decode to verify it's actually valid
           atob(str);
@@ -1279,6 +1301,70 @@
         } catch (e) {
           return false;
         }
+      }
+
+      // Validate packet sequence and detect gaps
+      validatePacketSequence(parts, frameIndex) {
+        try {
+          let packetId;
+
+          // Extract packetId based on format
+          if (parts.length >= 8 && parts[1] && parts[1].length === 8 && /^[a-fA-F0-9]{8}$/.test(parts[1])) {
+            // New format: D:<fileId>:<packetId>:...
+            packetId = parseInt(parts[2]);
+          } else if (parts.length >= 7) {
+            // Legacy format: D:<packetId>:...
+            packetId = parseInt(parts[1]);
+          } else {
+            this.stats.invalidPackets++;
+            console.warn(`⚠️ Invalid packet format at frame ${frameIndex}: ${parts.length} parts`);
+            return;
+          }
+
+          // Check for duplicate packets
+          if (this.chunkTracker.gapDetection.includes(packetId)) {
+            this.stats.duplicatePackets++;
+            if (window.logConfig && window.logConfig.shouldLog('packet', 'DEBUG')) {
+              console.log(`🔄 Duplicate packet ${packetId} detected at frame ${frameIndex}`);
+            }
+            return;
+          }
+
+          // Track packet sequence
+          this.chunkTracker.gapDetection.push(packetId);
+
+          // Detect sequence gaps
+          if (this.chunkTracker.lastPacketId >= 0) {
+            const gap = packetId - this.chunkTracker.lastPacketId;
+
+            if (gap > this.chunkTracker.maxGap) {
+              this.stats.sequenceGaps++;
+              console.warn(`⚠️ Large packet gap detected: packet ${this.chunkTracker.lastPacketId} → ${packetId} (gap: ${gap}) at frame ${frameIndex}`);
+            }
+          }
+
+          this.chunkTracker.lastPacketId = Math.max(this.chunkTracker.lastPacketId, packetId);
+
+          // Limit gap detection array to prevent memory growth
+          if (this.chunkTracker.gapDetection.length > 1000) {
+            this.chunkTracker.gapDetection = this.chunkTracker.gapDetection.slice(-500);
+          }
+
+        } catch (error) {
+          console.error(`Packet sequence validation error at frame ${frameIndex}:`, error);
+        }
+      }
+
+      // Get processing statistics
+      getProcessingStats() {
+        return {
+          ...this.stats,
+          expectedChunks: this.chunkTracker.expected.size,
+          receivedChunks: this.chunkTracker.received.size,
+          missingChunks: this.chunkTracker.missing.size,
+          completionPercent: this.chunkTracker.expected.size > 0 ?
+            (this.chunkTracker.received.size / this.chunkTracker.expected.size * 100).toFixed(1) : 0
+        };
       }
     }
 
@@ -1990,6 +2076,142 @@
     }
 
     // =============================================
+    // Circular Buffer for QR Processing
+    // =============================================
+    class CircularFrameBuffer {
+      constructor(options = {}) {
+        this.size = options.size || 10;
+        this.buffer = new Array(this.size);
+        this.head = 0;
+        this.tail = 0;
+        this.count = 0;
+        this.processing = false;
+        this.droppedFrames = 0;
+        this.processedFrames = 0;
+
+        // Processing callback
+        this.onFrameReady = options.onFrameReady || null;
+
+        // Stats
+        this.stats = {
+          added: 0,
+          processed: 0,
+          dropped: 0,
+          maxBufferUsage: 0
+        };
+      }
+
+      // Add frame to buffer (non-blocking)
+      addFrame(imageData, frameIndex, timestamp) {
+        this.stats.added++;
+
+        // If buffer is full, drop oldest frame
+        if (this.count >= this.size) {
+          this.dropOldestFrame();
+        }
+
+        // Add new frame
+        this.buffer[this.tail] = {
+          imageData: imageData,
+          frameIndex: frameIndex,
+          timestamp: timestamp,
+          addedAt: performance.now()
+        };
+
+        this.tail = (this.tail + 1) % this.size;
+        this.count++;
+
+        // Update max buffer usage
+        this.stats.maxBufferUsage = Math.max(this.stats.maxBufferUsage, this.count);
+
+        // Start processing if not already running
+        if (!this.processing && this.onFrameReady) {
+          this.startProcessing();
+        }
+      }
+
+      // Drop oldest frame when buffer is full
+      dropOldestFrame() {
+        if (this.count > 0) {
+          this.head = (this.head + 1) % this.size;
+          this.count--;
+          this.stats.dropped++;
+          this.droppedFrames++;
+        }
+      }
+
+      // Get next frame to process
+      getNextFrame() {
+        if (this.count === 0) {
+          return null;
+        }
+
+        const frame = this.buffer[this.head];
+        this.head = (this.head + 1) % this.size;
+        this.count--;
+
+        return frame;
+      }
+
+      // Start processing frames asynchronously
+      async startProcessing() {
+        if (this.processing) return;
+
+        this.processing = true;
+
+        while (this.count > 0) {
+          const frame = this.getNextFrame();
+          if (!frame) break;
+
+          try {
+            const processingStart = performance.now();
+
+            // Process the frame
+            if (this.onFrameReady) {
+              await this.onFrameReady(frame.imageData, frame.frameIndex, frame.timestamp);
+            }
+
+            this.stats.processed++;
+            this.processedFrames++;
+
+            // Track processing time
+            const processingTime = performance.now() - processingStart;
+
+            // Adaptive delay based on processing time
+            if (processingTime > 50) {
+              // If processing is slow, add small delay to prevent blocking
+              await new Promise(resolve => setTimeout(resolve, 5));
+            }
+
+          } catch (error) {
+            console.error(`Frame processing error for frame ${frame.frameIndex}:`, error);
+          }
+        }
+
+        this.processing = false;
+      }
+
+      // Get buffer statistics
+      getStats() {
+        return {
+          ...this.stats,
+          currentSize: this.count,
+          bufferCapacity: this.size,
+          utilizationPercent: (this.stats.maxBufferUsage / this.size * 100).toFixed(1)
+        };
+      }
+
+      // Clear buffer
+      clear() {
+        this.buffer = new Array(this.size);
+        this.head = 0;
+        this.tail = 0;
+        this.count = 0;
+        this.processing = false;
+      }
+    }
+
+    // =============================================
     // Enhanced Video Processor
     // =============================================
     class EnhancedVideoProcessor {
@@ -2011,7 +2233,13 @@
         this.canvas = document.createElement('canvas');
         this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
 
-        // Direct processing - no queue needed
+        // Circular buffer for reliable frame processing
+        this.frameBuffer = new CircularFrameBuffer({
+          size: 15,  // Buffer up to 15 frames
+          onFrameReady: this.processBufferedFrame.bind(this)
+        });
+
+        // Processing state
         this.processingFrame = false;
 
         // Frame processing stats with memory management
@@ -2137,6 +2365,18 @@
         this.videoElement.requestVideoFrameCallback(processFrame);
       }
 
+      // Process frame from circular buffer
+      async processBufferedFrame(imageData, frameIndex, timestamp) {
+        try {
+          // Call the original frame callback
+          if (this.frameCallback) {
+            await this.frameCallback(imageData, timestamp, frameIndex);
+          }
+        } catch (error) {
+          console.error(`Buffered frame processing error for frame ${frameIndex}:`, error);
+        }
+      }
+
       processCurrentFrame() {
         if (!this.isProcessing) return;
 
@@ -2196,14 +2436,16 @@
             this.progressCallback(progress, this.processedFrames, this.totalFrames, remainingTime);
           }
 
-          // Always process frame immediately - no queueing
-          if (this.frameCallback) {
-            this.frameCallback(imageData, this.videoElement.currentTime, this.processedFrames);
-          }
+          // Add frame to circular buffer for reliable processing
+          this.frameBuffer.addFrame(
+            imageData,
+            this.processedFrames,
+            this.videoElement.currentTime
+          );
 
-          // Track that we're processing (for stats)
+          // Track buffer usage for stats
           if (window.performanceStats) {
-            window.performanceStats.queueSizes.push(0); // No queue, always 0
+            window.performanceStats.queueSizes.push(this.frameBuffer.count);
             if (window.performanceStats.queueSizes.length > 50) {
               window.performanceStats.queueSizes.shift();
             }
@@ -2227,6 +2469,19 @@
           // Limit array size to prevent memory growth
           if (this.frameStats.processingTimes.length > this.frameStats.maxProcessingTimes) {
             this.frameStats.processingTimes.shift(); // Remove oldest entry
+          }
+
+          // Buffer monitoring every 100 frames
+          if (this.processedFrames % 100 === 0) {
+            const bufferStats = this.frameBuffer.getStats();
+            if (window.logConfig && window.logConfig.shouldLog('performance', 'DEBUG')) {
+              console.log(`📊 Buffer stats: ${bufferStats.currentSize}/${bufferStats.bufferCapacity} frames, dropped: ${bufferStats.dropped}, max usage: ${bufferStats.utilizationPercent}%`);
+            }
+
+            // Warn if dropping too many frames
+            if (bufferStats.dropped > 0 && bufferStats.dropped % 50 === 0) {
+              console.warn(`⚠️ Frame buffer has dropped ${bufferStats.dropped} frames - consider increasing buffer size or optimizing processing`);
+            }
           }
 
           // Memory management and performance monitoring
