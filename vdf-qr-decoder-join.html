@@ -2733,175 +2733,85 @@
           await this.resetScanner();
         }
 
-        return new Promise(async (resolve, reject) => {
+        try {
+          // Make sure canvas is the right size
+          if (this.canvas.width !== imageData.width || this.canvas.height !== imageData.height) {
+            this.canvas.width = imageData.width;
+            this.canvas.height = imageData.height;
+          }
+
+          // Draw image data to canvas
+          this.ctx.putImageData(imageData, 0, 0);
+
+          // Direct canvas decoding - no blob URLs created
+          // Uses the same internal method that scanFile uses
+          if (!this.html5QrCode.qrcode || !this.html5QrCode.qrcode.decodeRobustlyAsync) {
+            throw new Error("Internal decoder not available");
+          }
+
           try {
-            // Make sure canvas is the right size
-            if (this.canvas.width !== imageData.width || this.canvas.height !== imageData.height) {
-              this.canvas.width = imageData.width;
-              this.canvas.height = imageData.height;
+            const result = await this.html5QrCode.qrcode.decodeRobustlyAsync(this.canvas);
+
+            // QR code found - process the result
+            this.detectionStats.successes++;
+
+            // Check if this is a duplicate
+            const isDuplicate = this.checkDuplicate(result.text, frameIndex);
+
+            if (isDuplicate) {
+              this.detectionStats.duplicates++;
+              return {
+                success: false,
+                isDuplicate: true,
+                frameIndex: frameIndex
+              };
             }
 
-            // Draw image data to canvas
-            this.ctx.putImageData(imageData, 0, 0);
+            // Track this detected QR code
+            this.addToRecentlySeen(result.text, frameIndex);
+            this.detectionStats.lastDetectedFrameIndex = frameIndex;
 
-            // Method 1: Try to decode directly from canvas using internal decoder
-            // This avoids creating blob URLs entirely
-            try {
-              if (this.html5QrCode.qrcode) {
-                // Try decodeRobustlyAsync which is what scanFile uses internally
-                if (this.html5QrCode.qrcode.decodeRobustlyAsync) {
-                  const result = await this.html5QrCode.qrcode.decodeRobustlyAsync(this.canvas);
-                  this.handleDecodedResult(result.text, frameIndex, resolve);
-                  return;
-                }
-                // Fall back to decodeAsync if available
-                else if (this.html5QrCode.qrcode.decodeAsync) {
-                  const result = await this.html5QrCode.qrcode.decodeAsync(this.canvas);
-                  this.handleDecodedResult(result.text, frameIndex, resolve);
-                  return;
-                }
+            // Log stats periodically
+            if (this.detectionStats.successes % 10 === 0) {
+              if (window.logConfig && window.logConfig.shouldLog('qr', 'DEBUG')) {
+                console.log(`QR detection stats: ${this.detectionStats.successes}/${this.detectionStats.attempts} successful (${this.detectionStats.duplicates} duplicates)`);
               }
-            } catch (internalError) {
-              // Internal methods failed, continue to next method
             }
 
-            // Method 2: Use data URL approach (more stable but uses more memory)
-            try {
-              const dataUrl = this.canvas.toDataURL('image/jpeg', 0.8);
+            // Return successful result
+            return {
+              success: true,
+              qrData: result.text,
+              frameIndex: frameIndex,
+              bounds: this.estimateBounds({
+                result: result,
+                imageData: { width: this.canvas.width, height: this.canvas.height }
+              })
+            };
 
-              // Convert data URL to blob
-              const response = await fetch(dataUrl);
-              const blob = await response.blob();
-
-              // Keep blob reference to prevent garbage collection
-              this.currentBlob = blob;
-              const file = new File([blob], 'frame.jpg', { type: 'image/jpeg' });
-              this.currentFile = file;
-
-              try {
-                // Scan with timeout
-                const decodedText = await Promise.race([
-                  this.html5QrCode.scanFile(file, false),
-                  new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Scan timeout')), 1000)
-                  )
-                ]);
-
-                this.handleDecodedResult(decodedText, frameIndex, resolve);
-
-                // Clean up references after successful scan
-                this.currentBlob = null;
-                this.currentFile = null;
-              } catch (scanError) {
-                // No QR code found or timeout
-                this.detectionStats.failures++;
-                resolve({
-                  success: false,
-                  frameIndex: frameIndex
-                });
-
-                // Clean up references
-                this.currentBlob = null;
-                this.currentFile = null;
-              }
-            } catch (dataUrlError) {
-              // Method 3: Fallback to direct blob creation (original method)
-              this.canvas.toBlob(async (blob) => {
-                if (!blob) {
-                  resolve({
-                    success: false,
-                    frameIndex: frameIndex
-                  });
-                  return;
-                }
-
-                // Keep references to prevent GC
-                this.currentBlob = blob;
-                const file = new File([blob], 'frame.jpg', { type: 'image/jpeg' });
-                this.currentFile = file;
-
-                try {
-                  const decodedText = await Promise.race([
-                    this.html5QrCode.scanFile(file, false),
-                    new Promise((_, reject) =>
-                      setTimeout(() => reject(new Error('Scan timeout')), 1000)
-                    )
-                  ]);
-
-                  this.handleDecodedResult(decodedText, frameIndex, resolve);
-
-                  // Clean up
-                  this.currentBlob = null;
-                  this.currentFile = null;
-                } catch (error) {
-                  this.detectionStats.failures++;
-                  resolve({
-                    success: false,
-                    frameIndex: frameIndex
-                  });
-
-                  // Clean up
-                  this.currentBlob = null;
-                  this.currentFile = null;
-                }
-              }, 'image/jpeg', 0.8);
-            }
-          } catch (error) {
-            // Error during processing
+          } catch (decodeError) {
+            // No QR code found in this frame
             this.detectionStats.failures++;
-            if (this.onError) {
-              this.onError(error);
-            }
-            resolve({
+            return {
               success: false,
               frameIndex: frameIndex
-            });
+            };
           }
-        });
-      }
 
-      // Helper method to handle decoded results
-      handleDecodedResult(decodedText, frameIndex, resolve) {
-        // QR code found
-        this.detectionStats.successes++;
-
-        // Check if this is a duplicate (same QR code detected in recent frames)
-        const isDuplicate = this.checkDuplicate(decodedText, frameIndex);
-
-        if (isDuplicate) {
-          this.detectionStats.duplicates++;
-          resolve({
+        } catch (error) {
+          // Error during processing
+          this.detectionStats.failures++;
+          if (this.onError) {
+            this.onError(error);
+          }
+          return {
             success: false,
-            isDuplicate: true,
-            frameIndex: frameIndex
-          });
-        } else {
-          // Track this detected QR code
-          this.addToRecentlySeen(decodedText, frameIndex);
-
-          this.detectionStats.lastDetectedFrameIndex = frameIndex;
-
-          // If every 10 successful detections, log stats
-          if (this.detectionStats.successes % 10 === 0) {
-            if (window.logConfig && window.logConfig.shouldLog('qr', 'DEBUG')) {
-              console.log(`QR detection stats: ${this.detectionStats.successes}/${this.detectionStats.attempts} successful (${this.detectionStats.duplicates} duplicates)`);
-            }
-          }
-
-          // Get the last decodedResult from the html5QrCode instance (if available)
-          const lastResult = this.html5QrCode._lastScanResult || null;
-
-          resolve({
-            success: true,
-            qrData: decodedText,
             frameIndex: frameIndex,
-            bounds: this.estimateBounds({
-              result: lastResult,
-              imageData: {width: this.canvas.width, height: this.canvas.height}
-            })
-          });
+            error: error.message
+          };
         }
       }
+
       // Check if a QR code is a duplicate of one we've seen recently
       checkDuplicate(qrData, frameIndex) {
         if (this.recentlySeenQRs.has(qrData)) {
