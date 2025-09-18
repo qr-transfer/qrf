@@ -1,0 +1,10 @@
+/Users/qr-transfer/workspace/qrf/qr-video-extractor/target/release/deps/libavif_serialize-7c1e7282b7252b99.rmeta: /Users/qr-transfer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.6/src/lib.rs /Users/qr-transfer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.6/src/boxes.rs /Users/qr-transfer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.6/src/constants.rs /Users/qr-transfer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.6/src/writer.rs
+
+/Users/qr-transfer/workspace/qrf/qr-video-extractor/target/release/deps/libavif_serialize-7c1e7282b7252b99.rlib: /Users/qr-transfer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.6/src/lib.rs /Users/qr-transfer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.6/src/boxes.rs /Users/qr-transfer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.6/src/constants.rs /Users/qr-transfer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.6/src/writer.rs
+
+/Users/qr-transfer/workspace/qrf/qr-video-extractor/target/release/deps/avif_serialize-7c1e7282b7252b99.d: /Users/qr-transfer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.6/src/lib.rs /Users/qr-transfer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.6/src/boxes.rs /Users/qr-transfer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.6/src/constants.rs /Users/qr-transfer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.6/src/writer.rs
+
+/Users/qr-transfer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.6/src/lib.rs:
+/Users/qr-transfer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.6/src/boxes.rs:
+/Users/qr-transfer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.6/src/constants.rs:
+/Users/qr-transfer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/avif-serialize-0.8.6/src/writer.rs:
