@@ -2673,16 +2673,6 @@
         this.recentlySeenQRs = new Map();
         this.maxCacheSize = 50;
 
-        // Memory management for blob leak prevention
-        this.scanCount = 0;
-        this.maxScansBeforeReset = 1000;  // Reset every 1000 scans
-        this.blobUrls = new Set();  // Track created blob URLs for cleanup
-
-        // Small frame queue for timing difference handling
-        this.frameQueue = [];
-        this.maxQueueSize = 5;  // Small buffer to handle timing differences
-        this.isProcessing = false;
-
         // Create a hidden element for the QR code reader
         this.qrElement = document.createElement('div');
         this.qrElement.id = 'qr-reader-hidden';
@@ -2720,59 +2710,14 @@
         }
       }
 
-      async processFrame(imageData, frameIndex) {
+      processFrame(imageData, frameIndex) {
         if (!this.isReady) {
           throw new Error("QR processor not initialized");
         }
 
-        // Smart queueing: handle timing differences
-        if (this.isProcessing) {
-          // If queue is full, drop oldest frame to prevent memory buildup
-          if (this.frameQueue.length >= this.maxQueueSize) {
-            const dropped = this.frameQueue.shift();
-            console.warn(`⚠️ Dropped frame ${dropped.frameIndex} due to processing backlog`);
-          }
-
-          // Add frame to queue for later processing
-          return new Promise((resolve) => {
-            this.frameQueue.push({
-              imageData: imageData,
-              frameIndex: frameIndex,
-              resolve: resolve
-            });
-          });
-        }
-
-        // Process immediately if not busy
-        return this.processFrameImmediate(imageData, frameIndex);
-      }
-
-      async processFrameImmediate(imageData, frameIndex) {
         this.detectionStats.attempts++;
-        this.scanCount++;
-        this.isProcessing = true;
 
-        // Memory management: reset instance periodically to prevent blob URL leaks
-        if (this.scanCount >= this.maxScansBeforeReset) {
-          console.log(`🧹 Resetting Html5Qrcode after ${this.scanCount} scans to prevent memory leak`);
-          await this.resetScannerInstance();
-        }
-
-        try {
-          const result = await this.scanSingleFrame(imageData, frameIndex);
-
-          // Process next queued frame if any
-          this.processNextQueuedFrame();
-
-          return result;
-        } catch (error) {
-          this.isProcessing = false;
-          throw error;
-        }
-      }
-
-      async scanSingleFrame(imageData, frameIndex) {
-        return new Promise(async (resolve, reject) => {
+        return new Promise((resolve, reject) => {
           try {
             // Make sure canvas is the right size
             if (this.canvas.width !== imageData.width || this.canvas.height !== imageData.height) {
@@ -2783,25 +2728,52 @@
             // Draw image data to canvas
             this.ctx.putImageData(imageData, 0, 0);
 
-            // Try direct canvas decoding first (fastest, no blobs)
-            try {
-              if (this.html5QrCode.qrcode && this.html5QrCode.qrcode.decodeRobustlyAsync) {
-                const result = await this.html5QrCode.qrcode.decodeRobustlyAsync(this.canvas);
-                this.handleScanSuccess(result.text, frameIndex, resolve);
-                return;
-              }
-            } catch (directError) {
-              // Direct method failed, use standard method
-            }
-
-            // Standard method: Convert to data URL and scan file
-            const dataUrl = this.canvas.toDataURL('image/jpeg', 0.9);
-            const file = this.dataURLtoFile(dataUrl, 'frame.jpg');
+            // Convert to data URL
+            const dataUrl = this.canvas.toDataURL('image/jpeg');
 
             // Use HTML5QRCode to scan the image
-            this.html5QrCode.scanFile(file, false)
+            this.html5QrCode.scanFile(
+              this.dataURLtoFile(dataUrl, 'frame.jpg'),
+        /* showImage= */ false,
+        /* defaultZoomValueIfZoomFeatureEnabled= */ undefined)
               .then(decodedText => {
-                this.handleScanSuccess(decodedText, frameIndex, resolve);
+                // QR code found
+                this.detectionStats.successes++;
+
+                // Check if this is a duplicate (same QR code detected in recent frames)
+                const isDuplicate = this.checkDuplicate(decodedText, frameIndex);
+
+                if (isDuplicate) {
+                  this.detectionStats.duplicates++;
+                  resolve({
+                    success: false,
+                    isDuplicate: true,
+                    frameIndex: frameIndex
+                  });
+                } else {
+                  // Track this detected QR code
+                  this.addToRecentlySeen(decodedText, frameIndex);
+
+                  this.detectionStats.lastDetectedFrameIndex = frameIndex;
+
+                  // If every 10 successful detections, log stats
+                  if (this.detectionStats.successes % 10 === 0) {
+                    console.log(`QR detection stats: ${this.detectionStats.successes}/${this.detectionStats.attempts} successful (${this.detectionStats.duplicates} duplicates)`);
+                  }
+
+                  // Get the last decodedResult from the html5QrCode instance (if available)
+                  const lastResult = this.html5QrCode._lastScanResult || null;
+
+                  resolve({
+                    success: true,
+                    qrData: decodedText,
+                    frameIndex: frameIndex,
+                    bounds: this.estimateBounds({
+                      result: lastResult,
+                      imageData: imageData
+                    })
+                  });
+                }
               })
               .catch(error => {
                 // No QR code found or error
@@ -2824,139 +2796,6 @@
           }
         });
       }
-
-      // Process next frame from queue
-      async processNextQueuedFrame() {
-        this.isProcessing = false;
-
-        if (this.frameQueue.length > 0) {
-          const nextFrame = this.frameQueue.shift();
-          try {
-            const result = await this.processFrameImmediate(
-              nextFrame.imageData,
-              nextFrame.frameIndex
-            );
-            nextFrame.resolve(result);
-          } catch (error) {
-            nextFrame.resolve({
-              success: false,
-              frameIndex: nextFrame.frameIndex,
-              error: error.message
-            });
-          }
-        }
-      }
-
-      // Handle successful QR scan (extracted for reuse)
-      handleScanSuccess(decodedText, frameIndex, resolve) {
-        this.detectionStats.successes++;
-
-        // Check if this is a duplicate (same QR code detected in recent frames)
-        const isDuplicate = this.checkDuplicate(decodedText, frameIndex);
-
-        if (isDuplicate) {
-          this.detectionStats.duplicates++;
-          resolve({
-            success: false,
-            isDuplicate: true,
-            frameIndex: frameIndex
-          });
-        } else {
-          // Track this detected QR code
-          this.addToRecentlySeen(decodedText, frameIndex);
-
-          this.detectionStats.lastDetectedFrameIndex = frameIndex;
-
-          // If every 10 successful detections, log stats
-          if (this.detectionStats.successes % 10 === 0) {
-            console.log(`QR detection stats: ${this.detectionStats.successes}/${this.detectionStats.attempts} successful (${this.detectionStats.duplicates} duplicates)`);
-          }
-
-          // Get the last decodedResult from the html5QrCode instance (if available)
-          const lastResult = this.html5QrCode._lastScanResult || null;
-
-          resolve({
-            success: true,
-            qrData: decodedText,
-            frameIndex: frameIndex,
-            bounds: this.estimateBounds({
-              result: lastResult,
-              imageData: { width: this.canvas.width, height: this.canvas.height }
-            })
-          });
-        }
-      }
-
-      // Reset scanner instance to prevent memory leaks
-      async resetScannerInstance() {
-        try {
-          // Clean up old instance
-          if (this.html5QrCode) {
-            try {
-              await this.html5QrCode.clear();
-            } catch (e) {
-              // Ignore cleanup errors
-            }
-            this.html5QrCode = null;
-          }
-
-          // Create new instance with same configuration
-          this.html5QrCode = new Html5Qrcode('qr-reader-hidden', {
-            formatsToSupport: [
-              Html5QrcodeSupportedFormats.QR_CODE,
-              Html5QrcodeSupportedFormats.DATA_MATRIX,
-              Html5QrcodeSupportedFormats.CODE_39,
-              Html5QrcodeSupportedFormats.CODE_93,
-              Html5QrcodeSupportedFormats.CODE_128,
-              Html5QrcodeSupportedFormats.EAN_8,
-              Html5QrcodeSupportedFormats.EAN_13,
-              Html5QrcodeSupportedFormats.ITF,
-              Html5QrcodeSupportedFormats.UPC_A,
-              Html5QrcodeSupportedFormats.UPC_E
-            ]
-          });
-
-          this.scanCount = 0;
-          console.log('🔄 Scanner instance reset completed');
-        } catch (error) {
-          console.error('Error resetting scanner instance:', error);
-          throw error;
-        }
-      }
-
-      // Cleanup memory when file is complete
-      onFileComplete() {
-        console.log('📁 File complete - cleaning up QR processor memory');
-
-        // Clear frame queue
-        this.frameQueue.forEach(frame => {
-          frame.resolve({
-            success: false,
-            frameIndex: frame.frameIndex,
-            skipped: true
-          });
-        });
-        this.frameQueue = [];
-        this.isProcessing = false;
-
-        // Clear recent QR cache
-        this.recentlySeenQRs.clear();
-
-        // Reset stats
-        this.detectionStats = {
-          attempts: 0,
-          successes: 0,
-          failures: 0,
-          lastDetectedFrameIndex: -1,
-          duplicates: 0
-        };
-
-        // Force garbage collection if available
-        if (window.gc) {
-          setTimeout(() => window.gc(), 100);
-        }
-      }
-
       // Check if a QR code is a duplicate of one we've seen recently
       checkDuplicate(qrData, frameIndex) {
         if (this.recentlySeenQRs.has(qrData)) {
@@ -3053,17 +2892,6 @@
 
       // Clean up resources
       dispose() {
-        // Clear frame queue
-        this.frameQueue.forEach(frame => {
-          frame.resolve({
-            success: false,
-            frameIndex: frame.frameIndex,
-            disposed: true
-          });
-        });
-        this.frameQueue = [];
-        this.isProcessing = false;
-
         if (this.html5QrCode) {
           // Clean up HTML5QRCode
           try {
@@ -4120,11 +3948,6 @@
 
       handleFileComplete(fileData, customMetadata = null) {
         this.logger.info("File recovery complete!");
-
-        // Clean up QR processor memory since file is complete
-        if (this.qrProcessor && this.qrProcessor.onFileComplete) {
-          this.qrProcessor.onFileComplete();
-        }
 
         // Release wake lock since file is complete
         this.releaseWakeLock();
