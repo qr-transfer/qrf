@@ -1075,6 +1075,9 @@
         // Validate packet sequence and detect gaps
         this.validatePacketSequence(parts, frameIndex);
 
+        // Report statistics periodically
+        this.reportStatsIfNeeded();
+
         // Auto-detect packet format based on length and content
         let fileId, packetId, seed, seedBase, numChunks, chunkCount;
         let isNewFormat = false;
@@ -3386,8 +3389,15 @@
         this.ui.hideErrorMessage();
 
         // Keep the video input and file if the user wants to try scanning again
-        document.getElementById('startScanBtn').disabled = this.videoFile ? false : true;
-        document.getElementById('discoverBtn').disabled = this.videoFile ? false : true;
+        const startBtn = document.getElementById('startScanBtn');
+        const discoverBtn = document.getElementById('discoverBtn');
+
+        if (startBtn) {
+          startBtn.disabled = this.videoFile ? false : true;
+        }
+        if (discoverBtn) {
+          discoverBtn.disabled = this.videoFile ? false : true;
+        }
 
         this.logger.info("Contents completely reset, ready for new scan");
       }
