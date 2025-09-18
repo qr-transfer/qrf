@@ -2744,36 +2744,42 @@
             // Draw image data to canvas
             this.ctx.putImageData(imageData, 0, 0);
 
-            // Try to decode directly from canvas using the internal qrcode object
-            // This avoids creating blob URLs that cause memory leaks
+            // Method 1: Try to decode directly from canvas using internal decoder
+            // This avoids creating blob URLs entirely
             try {
-              // Access the internal qrcode decoder if available
-              if (this.html5QrCode.qrcode && this.html5QrCode.qrcode.decodeAsync) {
-                // Use internal decoder directly on our canvas
-                const result = await this.html5QrCode.qrcode.decodeAsync(this.canvas);
-                this.handleDecodedResult(result.text, frameIndex, resolve);
-                return;
+              if (this.html5QrCode.qrcode) {
+                // Try decodeRobustlyAsync which is what scanFile uses internally
+                if (this.html5QrCode.qrcode.decodeRobustlyAsync) {
+                  const result = await this.html5QrCode.qrcode.decodeRobustlyAsync(this.canvas);
+                  this.handleDecodedResult(result.text, frameIndex, resolve);
+                  return;
+                }
+                // Fall back to decodeAsync if available
+                else if (this.html5QrCode.qrcode.decodeAsync) {
+                  const result = await this.html5QrCode.qrcode.decodeAsync(this.canvas);
+                  this.handleDecodedResult(result.text, frameIndex, resolve);
+                  return;
+                }
               }
             } catch (internalError) {
-              // If internal method fails or doesn't exist, fall back to standard method
+              // Internal methods failed, continue to next method
             }
 
-            // Fallback: Use standard scanFile method but with direct canvas data
-            // Convert canvas to blob for compatibility
-            this.canvas.toBlob(async (blob) => {
-              if (!blob) {
-                resolve({
-                  success: false,
-                  frameIndex: frameIndex
-                });
-                return;
-              }
+            // Method 2: Use data URL approach (more stable but uses more memory)
+            try {
+              const dataUrl = this.canvas.toDataURL('image/jpeg', 0.8);
 
-              // Create File from blob - keep reference to ensure it's not GC'd
+              // Convert data URL to blob
+              const response = await fetch(dataUrl);
+              const blob = await response.blob();
+
+              // Keep blob reference to prevent garbage collection
+              this.currentBlob = blob;
               const file = new File([blob], 'frame.jpg', { type: 'image/jpeg' });
+              this.currentFile = file;
 
               try {
-                // Scan with a timeout to prevent hanging
+                // Scan with timeout
                 const decodedText = await Promise.race([
                   this.html5QrCode.scanFile(file, false),
                   new Promise((_, reject) =>
@@ -2782,15 +2788,64 @@
                 ]);
 
                 this.handleDecodedResult(decodedText, frameIndex, resolve);
-              } catch (error) {
+
+                // Clean up references after successful scan
+                this.currentBlob = null;
+                this.currentFile = null;
+              } catch (scanError) {
                 // No QR code found or timeout
                 this.detectionStats.failures++;
                 resolve({
                   success: false,
                   frameIndex: frameIndex
                 });
+
+                // Clean up references
+                this.currentBlob = null;
+                this.currentFile = null;
               }
-            }, 'image/jpeg', 0.8);
+            } catch (dataUrlError) {
+              // Method 3: Fallback to direct blob creation (original method)
+              this.canvas.toBlob(async (blob) => {
+                if (!blob) {
+                  resolve({
+                    success: false,
+                    frameIndex: frameIndex
+                  });
+                  return;
+                }
+
+                // Keep references to prevent GC
+                this.currentBlob = blob;
+                const file = new File([blob], 'frame.jpg', { type: 'image/jpeg' });
+                this.currentFile = file;
+
+                try {
+                  const decodedText = await Promise.race([
+                    this.html5QrCode.scanFile(file, false),
+                    new Promise((_, reject) =>
+                      setTimeout(() => reject(new Error('Scan timeout')), 1000)
+                    )
+                  ]);
+
+                  this.handleDecodedResult(decodedText, frameIndex, resolve);
+
+                  // Clean up
+                  this.currentBlob = null;
+                  this.currentFile = null;
+                } catch (error) {
+                  this.detectionStats.failures++;
+                  resolve({
+                    success: false,
+                    frameIndex: frameIndex
+                  });
+
+                  // Clean up
+                  this.currentBlob = null;
+                  this.currentFile = null;
+                }
+              }, 'image/jpeg', 0.8);
+            }
           } catch (error) {
             // Error during processing
             this.detectionStats.failures++;
