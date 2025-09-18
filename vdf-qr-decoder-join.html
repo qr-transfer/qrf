@@ -984,7 +984,10 @@
           chunksReceived: 0,
           sequenceGaps: 0,
           duplicatePackets: 0,
-          invalidPackets: 0
+          invalidPackets: 0,
+          systematicPackets: 0,    // degree=1 or 2
+          fountainPackets: 0,      // degree>2
+          degreeDistribution: {}   // Track packet degrees
         };
       }
 
@@ -1124,6 +1127,11 @@
           // FOUNTAIN PACKET: Comma-separated indices in field (always chunkCount=1)
           const sourceIndices = parts[dataFieldOffset].split(',').map(idx => parseInt(idx));
           const actualDegree = sourceIndices.length; // TRUE degree from comma count
+
+          // Track fountain packet statistics
+          this.stats.fountainPackets++;
+          this.stats.degreeDistribution[actualDegree] = (this.stats.degreeDistribution[actualDegree] || 0) + 1;
+
           if (window.logConfig && window.logConfig.shouldLog('packet', 'DEBUG')) {
             console.debug(`Fountain packet ${packetId} with degree=${actualDegree} (XOR of ${sourceIndices.join(',')}) ${isNewFormat ? `fileId=${fileId}` : '(legacy)'}`);
           }
@@ -1141,6 +1149,9 @@
 
         } else {
           // SYSTEMATIC PACKET: chunkCount (1, 2, 3, 4+)
+          this.stats.systematicPackets++;
+          this.stats.degreeDistribution[chunkCount] = (this.stats.degreeDistribution[chunkCount] || 0) + 1;
+
           if (debugMode) {
             console.debug(`Systematic packet ${packetId} with chunkCount=${chunkCount}`);
           }
@@ -1355,16 +1366,72 @@
         }
       }
 
+      // Analyze packet gaps and missing sequences
+      analyzePacketGaps() {
+        if (this.chunkTracker.gapDetection.length < 10) return null;
+
+        const packets = [...this.chunkTracker.gapDetection].sort((a, b) => a - b);
+        const gaps = [];
+
+        for (let i = 1; i < packets.length; i++) {
+          const gap = packets[i] - packets[i-1];
+          if (gap > 1) {
+            gaps.push({
+              start: packets[i-1],
+              end: packets[i],
+              size: gap - 1,
+              missing: Array.from({length: gap - 1}, (_, idx) => packets[i-1] + idx + 1)
+            });
+          }
+        }
+
+        return {
+          totalPackets: packets.length,
+          minPacket: packets[0],
+          maxPacket: packets[packets.length - 1],
+          expectedRange: packets[packets.length - 1] - packets[0] + 1,
+          missingCount: gaps.reduce((sum, gap) => sum + gap.size, 0),
+          gaps: gaps.slice(0, 10), // Show first 10 gaps
+          largestGap: gaps.length > 0 ? Math.max(...gaps.map(g => g.size)) : 0
+        };
+      }
+
       // Get processing statistics
       getProcessingStats() {
+        const gapAnalysis = this.analyzePacketGaps();
+
         return {
           ...this.stats,
           expectedChunks: this.chunkTracker.expected.size,
           receivedChunks: this.chunkTracker.received.size,
           missingChunks: this.chunkTracker.missing.size,
           completionPercent: this.chunkTracker.expected.size > 0 ?
-            (this.chunkTracker.received.size / this.chunkTracker.expected.size * 100).toFixed(1) : 0
+            (this.chunkTracker.received.size / this.chunkTracker.expected.size * 100).toFixed(1) : 0,
+          gapAnalysis: gapAnalysis,
+          systematicRatio: this.stats.packetsProcessed > 0 ?
+            (this.stats.systematicPackets / this.stats.packetsProcessed * 100).toFixed(1) : 0,
+          fountainRatio: this.stats.packetsProcessed > 0 ?
+            (this.stats.fountainPackets / this.stats.packetsProcessed * 100).toFixed(1) : 0
         };
+      }
+
+      // Report processing statistics periodically
+      reportStatsIfNeeded() {
+        if (this.stats.packetsProcessed % 100 === 0 && this.stats.packetsProcessed > 0) {
+          const stats = this.getProcessingStats();
+          console.log(`📊 Packet Stats (${this.stats.packetsProcessed} processed):`);
+          console.log(`   Systematic: ${stats.systematicRatio}% (${this.stats.systematicPackets})`);
+          console.log(`   Fountain: ${stats.fountainRatio}% (${this.stats.fountainPackets})`);
+          console.log(`   Degree distribution:`, this.stats.degreeDistribution);
+
+          if (stats.gapAnalysis && stats.gapAnalysis.missingCount > 0) {
+            console.warn(`⚠️ Missing ${stats.gapAnalysis.missingCount} packets in range ${stats.gapAnalysis.minPacket}-${stats.gapAnalysis.maxPacket}`);
+            console.warn(`   Largest gap: ${stats.gapAnalysis.largestGap} packets`);
+            if (stats.gapAnalysis.gaps.length > 0) {
+              console.warn(`   First few gaps:`, stats.gapAnalysis.gaps.slice(0, 3).map(g => `${g.start+1}-${g.end-1}`));
+            }
+          }
+        }
       }
     }
 
@@ -2235,7 +2302,7 @@
 
         // Circular buffer for reliable frame processing
         this.frameBuffer = new CircularFrameBuffer({
-          size: 15,  // Buffer up to 15 frames
+          size: 500,  // Buffer up to 500 frames for maximum reliability
           onFrameReady: this.processBufferedFrame.bind(this)
         });
 
