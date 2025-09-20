@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code File Decoder - Batch Processing</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9fafb;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #1d4ed8; }
+        button:disabled { background: #9ca3af; cursor: not-allowed; }
+        .progress {
+            background: #f3f4f6;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .chunk-grid {
+            display: grid;
+            grid-template-columns: repeat(50, 1fr);
+            gap: 2px;
+            margin: 10px 0;
+        }
+        .chunk {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        .chunk.pending { background: #e5e7eb; }
+        .chunk.received { background: #10b981; }
+        .log {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>QR Code File Decoder - Batch Processing</h1>
+
+        <div>
+            <input type="file" id="qrJsonFile" accept=".json">
+            <button onclick="loadAndProcess()">Load QR Codes & Process</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+
+        <div class="progress">
+            <div id="status">Ready to process QR codes...</div>
+            <div id="fileInfo"></div>
+            <div id="chunkProgress"></div>
+            <div class="chunk-grid" id="chunkGrid"></div>
+        </div>
+
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        // Embed the decoder logic from the working HTML file
+        let qrFileDecoder = null;
+        let processedCount = 0;
+        let totalQRCodes = 0;
+
+        function log(message) {
+            const logEl = document.getElementById('log');
+            logEl.innerHTML += new Date().toISOString().substring(11, 23) + ': ' + message + '\n';
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+
+        async function loadAndProcess() {
+            const fileInput = document.getElementById('qrJsonFile');
+            if (!fileInput.files[0]) {
+                alert('Please select a QR codes JSON file');
+                return;
+            }
+
+            try {
+                updateStatus('Loading QR codes...');
+                const file = fileInput.files[0];
+                const text = await file.text();
+                const data = JSON.parse(text);
+
+                const qrCodes = data.unique_qr_codes || [];
+                totalQRCodes = qrCodes.length;
+
+                log(`Loaded ${totalQRCodes} QR codes in temporal order`);
+                updateStatus(`Processing ${totalQRCodes} QR codes...`);
+
+                // Initialize decoder
+                initializeDecoder();
+
+                // Process QR codes in order
+                processedCount = 0;
+                for (let i = 0; i < qrCodes.length; i++) {
+                    if (i % 100 === 0) {
+                        updateStatus(`Processing ${i + 1}/${totalQRCodes} QR codes...`);
+                        await new Promise(resolve => setTimeout(resolve, 10)); // Allow UI updates
+                    }
+
+                    try {
+                        const result = qrFileDecoder.processQRCode(qrCodes[i], i);
+                        if (result.isValid) {
+                            processedCount++;
+                        }
+                    } catch (error) {
+                        log(`Error processing QR ${i + 1}: ${error.message}`);
+                    }
+                }
+
+                updateStatus('Processing complete!');
+                log(`Successfully processed ${processedCount}/${totalQRCodes} QR codes`);
+
+            } catch (error) {
+                log(`Error: ${error.message}`);
+                updateStatus('Error occurred');
+            }
+        }
+
+        function initializeDecoder() {
+            // Initialize the fountain decoder (simplified version of the HTML script logic)
+            qrFileDecoder = {
+                fountainDecoder: {
+                    initialized: false,
+                    metaData: null,
+                    totalChunks: 0,
+                    sourceChunks: {},
+                    recoveredChunkCount: 0,
+                    codedPackets: [],
+
+                    initialize(metadata) {
+                        this.metaData = metadata;
+                        this.totalChunks = metadata.chunksCount;
+                        this.sourceChunks = {};
+                        this.recoveredChunkCount = 0;
+                        this.codedPackets = [];
+                        this.initialized = true;
+
+                        log(`Initialized decoder for ${metadata.fileName} (${metadata.chunksCount} chunks)`);
+                        updateFileInfo(metadata);
+                        initializeChunkGrid(metadata.chunksCount);
+                    },
+
+                    addPacket(packet) {
+                        if (!this.initialized) return false;
+
+                        if (packet.systematicDataChunks && packet.systematicDataChunks.length > 0) {
+                            // Process systematic chunks
+                            packet.systematicDataChunks.forEach(chunk => {
+                                if (!this.sourceChunks[chunk.chunkIndex]) {
+                                    this.sourceChunks[chunk.chunkIndex] = new Uint8Array(chunk.chunkData);
+                                    this.recoveredChunkCount++;
+                                    markChunkAsRecovered(chunk.chunkIndex);
+                                    log(`Recovered chunk ${chunk.chunkIndex}`);
+                                }
+                            });
+                        } else {
+                            // Store fountain packet for later processing
+                            this.codedPackets.push(packet);
+                            this.processCoded();
+                        }
+
+                        updateProgress();
+                        return true;
+                    },
+
+                    processCoded() {
+                        let progress = true;
+                        while (progress) {
+                            progress = false;
+                            for (let i = this.codedPackets.length - 1; i >= 0; i--) {
+                                const packet = this.codedPackets[i];
+                                const missing = packet.sourceChunks.filter(idx => !this.sourceChunks[idx]);
+
+                                if (missing.length === 1) {
+                                    // Can recover one chunk
+                                    const missingIdx = missing[0];
+                                    let result = new Uint8Array(packet.xorData);
+
+                                    // XOR with known chunks
+                                    for (const idx of packet.sourceChunks) {
+                                        if (idx !== missingIdx && this.sourceChunks[idx]) {
+                                            for (let j = 0; j < result.length; j++) {
+                                                result[j] ^= this.sourceChunks[idx][j];
+                                            }
+                                        }
+                                    }
+
+                                    this.sourceChunks[missingIdx] = result;
+                                    this.recoveredChunkCount++;
+                                    markChunkAsRecovered(missingIdx);
+                                    log(`Fountain recovered chunk ${missingIdx}`);
+
+                                    this.codedPackets.splice(i, 1);
+                                    progress = true;
+                                } else if (missing.length === 0) {
+                                    this.codedPackets.splice(i, 1);
+                                }
+                            }
+                        }
+                    },
+
+                    isComplete() {
+                        return this.recoveredChunkCount >= this.totalChunks;
+                    },
+
+                    finalize() {
+                        if (!this.isComplete()) return null;
+
+                        log('Reconstructing file...');
+                        let fileData = new Uint8Array(this.metaData.fileSize);
+                        let offset = 0;
+
+                        for (let i = 0; i < this.totalChunks; i++) {
+                            const chunk = this.sourceChunks[i];
+                            if (!chunk) {
+                                log(`Missing chunk ${i}!`);
+                                return null;
+                            }
+
+                            const copyLength = Math.min(chunk.length, fileData.length - offset);
+                            fileData.set(chunk.subarray(0, copyLength), offset);
+                            offset += copyLength;
+                        }
+
+                        // Verify checksum if available
+                        if (this.metaData.fileChecksum) {
+                            const calculated = this.calculateChecksum(fileData);
+                            if (calculated === this.metaData.fileChecksum) {
+                                log(`✅ Checksum verified: ${calculated}`);
+                            } else {
+                                log(`❌ Checksum failed: expected ${this.metaData.fileChecksum}, got ${calculated}`);
+                                return null;
+                            }
+                        }
+
+                        // Download file
+                        this.downloadFile(fileData, this.metaData.fileName);
+                        return fileData;
+                    },
+
+                    calculateChecksum(data) {
+                        let hash = 2166136261; // FNV-1a offset basis
+                        for (let i = 0; i < data.length; i++) {
+                            hash ^= data[i];
+                            hash = Math.imul(hash, 16777619); // FNV-1a prime
+                        }
+                        return (hash >>> 0).toString(36).substring(0, 8);
+                    },
+
+                    downloadFile(data, filename) {
+                        const blob = new Blob([data]);
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        log(`📁 Downloaded: ${filename} (${data.length} bytes)`);
+                    }
+                },
+
+                processQRCode(qrData, frameIndex) {
+                    try {
+                        if (qrData.startsWith('M:')) {
+                            return this.processMetadataPacket(qrData, frameIndex);
+                        } else if (qrData.startsWith('D:')) {
+                            return this.processDataPacket(qrData, frameIndex);
+                        }
+                        return { isValid: false, reason: 'Unknown packet type' };
+                    } catch (error) {
+                        return { isValid: false, reason: error.message };
+                    }
+                },
+
+                processMetadataPacket(metaString, frameIndex) {
+                    const parts = metaString.split(':');
+                    if (parts.length < 10) {
+                        throw new Error('Invalid metadata format');
+                    }
+
+                    const metadata = {
+                        fileName: decodeURIComponent(parts[2]),
+                        fileType: decodeURIComponent(parts[3]),
+                        fileSize: parseInt(parts[4]),
+                        chunksCount: parseInt(parts[5]),
+                        fileChecksum: parts[13] || null
+                    };
+
+                    if (!this.fountainDecoder.initialized) {
+                        this.fountainDecoder.initialize(metadata);
+                    }
+
+                    return { isValid: true, type: 'metadata' };
+                },
+
+                processDataPacket(dataString, frameIndex) {
+                    const parts = dataString.split(':');
+                    if (parts.length < 6) {
+                        throw new Error('Invalid data packet format');
+                    }
+
+                    const packet = {
+                        packetId: parseInt(parts[1]),
+                        sourceChunks: [],
+                        systematicDataChunks: [],
+                        xorData: null
+                    };
+
+                    // Parse enhanced format systematic packets
+                    if (parts.length >= 8 && parts[6].includes('|')) {
+                        // Systematic packet: chunkIndex:base64Data|chunkIndex:base64Data
+                        const records = parts[6].split('|');
+                        for (const record of records) {
+                            const [chunkIndexStr, chunkDataB64] = record.split(':');
+                            const chunkIndex = parseInt(chunkIndexStr);
+
+                            if (!isNaN(chunkIndex) && chunkDataB64) {
+                                try {
+                                    const chunkData = atob(chunkDataB64);
+                                    const uint8Data = new Uint8Array(chunkData.length);
+                                    for (let i = 0; i < chunkData.length; i++) {
+                                        uint8Data[i] = chunkData.charCodeAt(i);
+                                    }
+
+                                    packet.sourceChunks.push(chunkIndex);
+                                    packet.systematicDataChunks.push({
+                                        chunkIndex: chunkIndex,
+                                        chunkData: uint8Data
+                                    });
+                                } catch (e) {
+                                    log(`Failed to decode chunk ${chunkIndex}: ${e.message}`);
+                                }
+                            }
+                        }
+                    } else if (parts.length >= 8 && parts[6].includes(',')) {
+                        // Fountain packet: comma-separated indices
+                        packet.sourceChunks = parts[6].split(',').map(s => parseInt(s));
+                        try {
+                            const xorDataB64 = parts[7];
+                            const xorData = atob(xorDataB64);
+                            packet.xorData = new Uint8Array(xorData.length);
+                            for (let i = 0; i < xorData.length; i++) {
+                                packet.xorData[i] = xorData.charCodeAt(i);
+                            }
+                        } catch (e) {
+                            log(`Failed to decode fountain XOR data: ${e.message}`);
+                        }
+                    }
+
+                    // Add packet to decoder
+                    const success = this.fountainDecoder.addPacket(packet);
+
+                    // Check if file is complete
+                    if (this.fountainDecoder.isComplete()) {
+                        log('🎉 File complete! Finalizing...');
+                        this.fountainDecoder.finalize();
+                    }
+
+                    return { isValid: success, type: 'data' };
+                }
+            };
+
+            log('Decoder initialized and ready');
+        }
+
+        function updateFileInfo(metadata) {
+            document.getElementById('fileInfo').innerHTML = `
+                <strong>File:</strong> ${metadata.fileName}<br>
+                <strong>Size:</strong> ${metadata.fileSize} bytes<br>
+                <strong>Chunks:</strong> ${metadata.chunksCount}
+            `;
+        }
+
+        function initializeChunkGrid(chunkCount) {
+            const grid = document.getElementById('chunkGrid');
+            grid.innerHTML = '';
+            for (let i = 0; i < chunkCount; i++) {
+                const chunk = document.createElement('div');
+                chunk.className = 'chunk pending';
+                chunk.dataset.index = i;
+                grid.appendChild(chunk);
+            }
+        }
+
+        function markChunkAsRecovered(chunkIndex) {
+            const chunk = document.querySelector(`.chunk[data-index="${chunkIndex}"]`);
+            if (chunk) {
+                chunk.classList.remove('pending');
+                chunk.classList.add('received');
+            }
+        }
+
+        function updateProgress() {
+            if (qrFileDecoder && qrFileDecoder.fountainDecoder.initialized) {
+                const recovered = qrFileDecoder.fountainDecoder.recoveredChunkCount;
+                const total = qrFileDecoder.fountainDecoder.totalChunks;
+                document.getElementById('chunkProgress').textContent =
+                    `Progress: ${recovered}/${total} chunks (${Math.round(recovered/total*100)}%)`;
+            }
+        }
+
+        // Initialize on page load
+        window.onload = function() {
+            initializeDecoder();
+        };
+    </script>
+</body>
+</html>

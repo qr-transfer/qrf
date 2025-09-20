@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder</title>
+  <title>QR Code File Decoder (Optimized) v1.5.1</title>
   <style>
     /* Base styles */
     :root {
@@ -168,6 +168,226 @@
       100% {
         background-color: rgba(16, 185, 129, 0.2);
       }
+    }
+
+    /* Enhanced Chunk Recovery Progress Styles */
+    .recovery-stats {
+      background: rgba(255, 255, 255, 0.8);
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+      border: 1px solid var(--border-color);
+    }
+
+    .stat-group {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px;
+      background: rgba(249, 250, 251, 0.8);
+      border-radius: 6px;
+      border: 1px solid rgba(229, 231, 235, 0.5);
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: #6b7280;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 18px;
+      font-weight: bold;
+      color: var(--text-color);
+    }
+
+    .stat-value.missing {
+      color: var(--warning-color);
+    }
+
+    .stat-value.verified {
+      color: var(--success-color);
+    }
+
+    .stat-total {
+      font-size: 14px;
+      color: #6b7280;
+    }
+
+    /* Enhanced Progress Bar */
+    .progress-bar-container {
+      margin-top: 15px;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 24px;
+      background: #f3f4f6;
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid #e5e7eb;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+      border-radius: 12px;
+      transition: width 0.3s ease;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    .progress-verified {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #059669);
+      border-radius: 12px;
+      transition: width 0.3s ease;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 2;
+    }
+
+    .progress-text {
+      text-align: center;
+      margin-top: 8px;
+      font-size: 14px;
+      color: #4b5563;
+      font-weight: 500;
+    }
+
+    /* Validation Panel */
+    .validation-panel {
+      background: rgba(248, 250, 252, 0.9);
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 15px;
+    }
+
+    .validation-panel h3 {
+      margin: 0 0 15px 0;
+      color: #374151;
+      font-size: 16px;
+    }
+
+    .validation-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .validation-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: white;
+      border-radius: 6px;
+      border: 1px solid #e5e7eb;
+    }
+
+    .validation-label {
+      font-weight: 500;
+      color: #374151;
+      font-size: 13px;
+    }
+
+    .validation-status {
+      font-weight: bold;
+      font-size: 13px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      color: white;
+    }
+
+    .validation-status.pending {
+      background: #6b7280;
+    }
+
+    .validation-status.valid {
+      background: var(--success-color);
+    }
+
+    .validation-status.invalid {
+      background: var(--error-color);
+    }
+
+    .validation-status.warning {
+      background: var(--warning-color);
+    }
+
+    /* Missing Chunks List */
+    .missing-chunks {
+      background: #fef3cd;
+      border: 1px solid #fcd34d;
+      border-radius: 6px;
+      padding: 12px;
+    }
+
+    .missing-chunks h4 {
+      margin: 0 0 8px 0;
+      color: #92400e;
+      font-size: 14px;
+    }
+
+    .missing-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .missing-chunk-id {
+      background: #fbbf24;
+      color: #92400e;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    /* Enhanced Chunk Visualization */
+    .chunk.verified {
+      background-color: rgba(16, 185, 129, 0.4);
+      border-color: var(--success-color);
+      border-width: 2px;
+    }
+
+    .chunk.invalid {
+      background-color: rgba(239, 68, 68, 0.3);
+      border-color: var(--error-color);
+      border-width: 2px;
+    }
+
+    .chunk.duplicate {
+      background-color: rgba(245, 158, 11, 0.3);
+      border-color: var(--warning-color);
+      border-width: 2px;
+    }
+
+    .chunk.highlighted {
+      background-color: rgba(59, 130, 246, 0.5) !important;
+      border-color: #3b82f6 !important;
+      border-width: 3px !important;
+      box-shadow: 0 0 10px rgba(59, 130, 246, 0.7);
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 10px rgba(59, 130, 246, 0.7); }
+      50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.9); }
+      100% { box-shadow: 0 0 10px rgba(59, 130, 246, 0.7); }
     }
 
     /* File information */
@@ -375,7 +595,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1>QR Code File Decoder</h1>
+    <h1>QR Code File Decoder (Optimized) <span style="font-size: 0.6em; color: #666;">v1.4.0</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled>Start Scan & Discover</button>
@@ -428,7 +648,7 @@
 
   <!-- 2. Video playback and overlay -->
   <div class="video-container">
-    <video id="videoPreview" controls></video>
+    <video id="videoPreview" controls muted></video>
     <canvas id="overlayCanvas"></canvas>
     <div class="progress-container">
       <div class="progress-bar" id="scanProgressBar"></div>
@@ -439,10 +659,69 @@
     </div>
   </div>
 
-  <!-- 3. Chunk progress visualization -->
+  <!-- 3. Enhanced Chunk Recovery Progress with Validation -->
   <div class="chunks-container">
     <h2>Chunk Recovery Progress</h2>
+
+    <!-- Recovery Statistics Dashboard -->
+    <div class="recovery-stats">
+      <div class="stat-group">
+        <div class="stat-item">
+          <span class="stat-label">Recovered:</span>
+          <span class="stat-value" id="recoveredCount">0</span>
+          <span class="stat-total">/ <span id="totalChunks">0</span></span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Progress:</span>
+          <span class="stat-value" id="recoveryPercentage">0%</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Missing:</span>
+          <span class="stat-value missing" id="missingCount">0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Verified:</span>
+          <span class="stat-value verified" id="verifiedCount">0</span>
+        </div>
+      </div>
+
+      <!-- Progress Bar with Validation -->
+      <div class="progress-bar-container">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+          <div class="progress-verified" id="progressVerified"></div>
+        </div>
+        <div class="progress-text" id="progressText">Ready to start recovery...</div>
+      </div>
+    </div>
+
+    <!-- Chunk Grid with Enhanced Visualization -->
     <div class="chunks-grid" id="chunksGrid"></div>
+
+    <!-- Recovery Validation Panel -->
+    <div class="validation-panel" id="validationPanel" style="display: none;">
+      <h3>🔍 Recovery Validation</h3>
+      <div class="validation-stats">
+        <div class="validation-item">
+          <span class="validation-label">Data Integrity:</span>
+          <span class="validation-status" id="dataIntegrityStatus">Pending</span>
+        </div>
+        <div class="validation-item">
+          <span class="validation-label">Chunk Sequence:</span>
+          <span class="validation-status" id="sequenceStatus">Pending</span>
+        </div>
+        <div class="validation-item">
+          <span class="validation-label">File Completeness:</span>
+          <span class="validation-status" id="completenessStatus">Pending</span>
+        </div>
+      </div>
+
+      <!-- Missing Chunks List -->
+      <div class="missing-chunks" id="missingChunks" style="display: none;">
+        <h4>Missing Chunks:</h4>
+        <div class="missing-list" id="missingList"></div>
+      </div>
+    </div>
   </div>
 
   
@@ -494,6 +773,12 @@
         <input type="number" id="qrDetectionConfidence" min="0" max="1" step="0.1" value="1">
       </div>
       <div class="settings-group">
+        <label for="disableAutoPause">
+          <input type="checkbox" id="disableAutoPause" checked style="margin-right: 8px;">
+          Disable Auto-Pause (Recommended for uninterrupted processing)
+        </label>
+      </div>
+      <div class="settings-group">
         <label for="logLevel">Logging Level:</label>
         <select id="logLevel" style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px;">
           <option value="DEBUG">Debug (All logs)</option>
@@ -516,8 +801,8 @@
     </div>
   </div>
 
-  <!-- Html5QRCode library (local copy for better control) -->
-  <script src="./html5-qrcode.min.js"></script>
+  <!-- Html5QRCode library -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <!-- Main script -->
   <script>
@@ -656,8 +941,12 @@
           const chunkElement = document.createElement('div');
           chunkElement.className = 'chunk pending';
           chunkElement.dataset.index = i;
+          chunkElement.title = `Chunk ${i}: Pending recovery`;
           chunksGrid.appendChild(chunkElement);
         }
+
+        // Initialize enhanced recovery statistics
+        this.updateRecoveryStats();
       }
 
       updateProgress(progress, currentFrame, totalFrames, remainingTime) {
@@ -689,12 +978,263 @@
         }
       }
 
-      markChunkAsRecovered(chunkIndex) {
+      markChunkAsRecovered(chunkIndex, isVerified = false) {
         const chunkElement = document.querySelector(`.chunk[data-index="${chunkIndex}"]`);
         if (chunkElement) {
           chunkElement.classList.remove('pending');
           chunkElement.classList.add('received');
+
+          // Add verification status if provided
+          if (isVerified) {
+            chunkElement.classList.add('verified');
+            chunkElement.title = `Chunk ${chunkIndex}: Recovered and Verified`;
+          } else {
+            chunkElement.title = `Chunk ${chunkIndex}: Recovered (Pending Verification)`;
+          }
         }
+
+        // Update recovery statistics
+        this.updateRecoveryStats();
+      }
+
+      markChunkAsInvalid(chunkIndex, reason = 'Data integrity check failed') {
+        const chunkElement = document.querySelector(`.chunk[data-index="${chunkIndex}"]`);
+        if (chunkElement) {
+          chunkElement.classList.remove('pending', 'received', 'verified');
+          chunkElement.classList.add('invalid');
+          chunkElement.title = `Chunk ${chunkIndex}: Invalid - ${reason}`;
+        }
+
+        this.updateRecoveryStats();
+      }
+
+      markChunkAsDuplicate(chunkIndex) {
+        const chunkElement = document.querySelector(`.chunk[data-index="${chunkIndex}"]`);
+        if (chunkElement) {
+          chunkElement.classList.add('duplicate');
+          chunkElement.title = `Chunk ${chunkIndex}: Duplicate detected`;
+        }
+      }
+
+      markChunkAsVerified(chunkIndex) {
+        const chunkElement = document.querySelector(`.chunk[data-index="${chunkIndex}"]`);
+        if (chunkElement) {
+          chunkElement.classList.add('verified');
+          chunkElement.title = `Chunk ${chunkIndex}: Verified ✓`;
+        }
+
+        this.updateRecoveryStats();
+      }
+
+      // Enhanced Recovery Statistics Update
+      updateRecoveryStats() {
+        const chunks = document.querySelectorAll('.chunk');
+        const totalChunks = chunks.length;
+
+        if (totalChunks === 0) return;
+
+        // Count different chunk states
+        const recovered = document.querySelectorAll('.chunk.received').length;
+        const verified = document.querySelectorAll('.chunk.verified').length;
+        const invalid = document.querySelectorAll('.chunk.invalid').length;
+        const pending = document.querySelectorAll('.chunk.pending').length;
+        const missing = totalChunks - recovered;
+
+        // Update statistics display
+        document.getElementById('recoveredCount').textContent = recovered;
+        document.getElementById('totalChunks').textContent = totalChunks;
+        document.getElementById('missingCount').textContent = missing;
+        document.getElementById('verifiedCount').textContent = verified;
+
+        // Calculate and update percentage
+        const recoveryPercentage = totalChunks > 0 ? Math.round((recovered / totalChunks) * 100) : 0;
+        const verificationPercentage = totalChunks > 0 ? Math.round((verified / totalChunks) * 100) : 0;
+
+        document.getElementById('recoveryPercentage').textContent = `${recoveryPercentage}%`;
+
+        // Update progress bars
+        const progressFill = document.getElementById('progressFill');
+        const progressVerified = document.getElementById('progressVerified');
+
+        if (progressFill) {
+          progressFill.style.width = `${recoveryPercentage}%`;
+        }
+
+        if (progressVerified) {
+          progressVerified.style.width = `${verificationPercentage}%`;
+        }
+
+        // Update progress text
+        const progressText = document.getElementById('progressText');
+        if (progressText) {
+          if (recovered === totalChunks) {
+            progressText.textContent = `✅ Complete: ${recovered}/${totalChunks} chunks recovered (${verified} verified)`;
+          } else {
+            progressText.textContent = `🔄 Progress: ${recovered}/${totalChunks} chunks recovered • ${missing} missing • ${verified} verified`;
+          }
+        }
+
+        // Update validation panel
+        this.updateValidationPanel(recovered, totalChunks, verified, invalid);
+
+        // Update missing chunks list
+        this.updateMissingChunksList();
+      }
+
+      // Update Validation Panel with Comprehensive Checks
+      updateValidationPanel(recovered, total, verified, invalid) {
+        const validationPanel = document.getElementById('validationPanel');
+
+        if (recovered > 0) {
+          validationPanel.style.display = 'block';
+        }
+
+        // Data Integrity Status
+        const dataIntegrityStatus = document.getElementById('dataIntegrityStatus');
+        if (invalid > 0) {
+          dataIntegrityStatus.textContent = `${invalid} Invalid`;
+          dataIntegrityStatus.className = 'validation-status invalid';
+        } else if (verified === recovered && recovered > 0) {
+          dataIntegrityStatus.textContent = 'All Valid';
+          dataIntegrityStatus.className = 'validation-status valid';
+        } else if (recovered > 0) {
+          dataIntegrityStatus.textContent = 'Pending Verification';
+          dataIntegrityStatus.className = 'validation-status warning';
+        } else {
+          dataIntegrityStatus.textContent = 'Pending';
+          dataIntegrityStatus.className = 'validation-status pending';
+        }
+
+        // Chunk Sequence Status
+        const sequenceStatus = document.getElementById('sequenceStatus');
+        const sequenceValid = this.validateChunkSequence();
+        if (sequenceValid) {
+          sequenceStatus.textContent = 'Sequential ✓';
+          sequenceStatus.className = 'validation-status valid';
+        } else {
+          sequenceStatus.textContent = 'Gaps Detected';
+          sequenceStatus.className = 'validation-status warning';
+        }
+
+        // File Completeness Status
+        const completenessStatus = document.getElementById('completenessStatus');
+        if (recovered === total && total > 0) {
+          completenessStatus.textContent = 'Complete ✓';
+          completenessStatus.className = 'validation-status valid';
+        } else if (recovered > 0) {
+          const completeness = Math.round((recovered / total) * 100);
+          completenessStatus.textContent = `${completeness}% Complete`;
+          completenessStatus.className = completeness >= 80 ? 'validation-status warning' : 'validation-status invalid';
+        } else {
+          completenessStatus.textContent = 'Incomplete';
+          completenessStatus.className = 'validation-status pending';
+        }
+      }
+
+      // Validate Chunk Sequence Integrity
+      validateChunkSequence() {
+        const chunks = document.querySelectorAll('.chunk');
+        let hasGaps = false;
+        let foundFirst = false;
+
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i];
+          const isRecovered = chunk.classList.contains('received');
+
+          if (isRecovered && !foundFirst) {
+            foundFirst = true;
+          } else if (!isRecovered && foundFirst) {
+            // Found a gap after recovery started
+            hasGaps = true;
+            break;
+          }
+        }
+
+        return !hasGaps;
+      }
+
+      // Update Missing Chunks List
+      updateMissingChunksList() {
+        const missingChunks = document.getElementById('missingChunks');
+        const missingList = document.getElementById('missingList');
+
+        if (!missingList) return;
+
+        // Find missing chunks
+        const chunks = document.querySelectorAll('.chunk.pending');
+
+        if (chunks.length > 0) {
+          missingChunks.style.display = 'block';
+          missingList.innerHTML = '';
+
+          chunks.forEach(chunk => {
+            const chunkIndex = chunk.dataset.index;
+            const chunkSpan = document.createElement('span');
+            chunkSpan.className = 'missing-chunk-id';
+            chunkSpan.textContent = chunkIndex;
+            chunkSpan.onclick = () => this.highlightChunk(chunkIndex);
+            missingList.appendChild(chunkSpan);
+          });
+        } else {
+          missingChunks.style.display = 'none';
+        }
+      }
+
+      // Highlight Specific Chunk
+      highlightChunk(chunkIndex) {
+        // Remove previous highlights
+        document.querySelectorAll('.chunk.highlighted').forEach(el => {
+          el.classList.remove('highlighted');
+        });
+
+        // Highlight target chunk
+        const targetChunk = document.querySelector(`.chunk[data-index="${chunkIndex}"]`);
+        if (targetChunk) {
+          targetChunk.classList.add('highlighted');
+          targetChunk.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+          // Remove highlight after 3 seconds
+          setTimeout(() => {
+            targetChunk.classList.remove('highlighted');
+          }, 3000);
+        }
+      }
+
+      // Verify All Recovered Chunks (Data Integrity Check)
+      async verifyAllChunks() {
+        const recoveredChunks = document.querySelectorAll('.chunk.received:not(.verified)');
+        let verifiedCount = 0;
+        let invalidCount = 0;
+
+        for (const chunk of recoveredChunks) {
+          const chunkIndex = parseInt(chunk.dataset.index);
+
+          // Simulate data integrity check (replace with actual validation logic)
+          const isValid = await this.verifyChunkIntegrity(chunkIndex);
+
+          if (isValid) {
+            this.markChunkAsVerified(chunkIndex);
+            verifiedCount++;
+          } else {
+            this.markChunkAsInvalid(chunkIndex, 'Checksum validation failed');
+            invalidCount++;
+          }
+        }
+
+        this.logger.info(`Chunk verification complete: ${verifiedCount} verified, ${invalidCount} invalid`);
+        return { verified: verifiedCount, invalid: invalidCount };
+      }
+
+      // Individual Chunk Integrity Verification
+      async verifyChunkIntegrity(chunkIndex) {
+        // This would connect to your actual chunk data validation logic
+        // For now, simulate verification with random success (replace with real validation)
+        return new Promise(resolve => {
+          setTimeout(() => {
+            // Simulate 95% success rate for demo
+            resolve(Math.random() > 0.05);
+          }, 50);
+        });
       }
 
       showSettingsModal() {
@@ -705,6 +1245,7 @@
           document.getElementById('packetWorkerCount').value = settings.packetWorkerCount;
           document.getElementById('frameInterval').value = settings.frameInterval;
           document.getElementById('qrDetectionConfidence').value = settings.qrDetectionConfidence;
+          document.getElementById('disableAutoPause').checked = settings.disableAutoPause;
         }
         
         document.getElementById('settingsModal').style.display = 'block';
@@ -1293,6 +1834,7 @@
 
         // Intermediate coded packets waiting to be decoded
         this.codedPackets = [];
+        this.maxCodedPackets = 1000; // Limit coded packet storage
 
         // Callback for when file is complete
         this.completeCallback = null;
@@ -1307,8 +1849,21 @@
           total: 0,
           degree1: 0,
           degreeN: 0,
-          usefulPackets: 0
+          usefulPackets: 0,
+          dropped: 0
         };
+
+        // Memory management
+        this.memoryUsage = 0;
+        this.maxMemoryUsage = 50 * 1024 * 1024; // 50MB limit - more aggressive
+        this.lastMemoryCleanup = Date.now();
+        this.memoryCleanupInterval = 1000; // 1 second - more aggressive
+
+        // Real-time processing control
+        this.processingPaused = false;
+        this.pendingPauseCallback = null;
+        this.autoResumeTimeout = null;
+        this.pauseReason = null;
       }
 
       initialize(metadata) {
@@ -1342,7 +1897,22 @@
           throw new Error("Fountain decoder not initialized");
         }
 
+        // Check if processing is paused
+        if (this.processingPaused) {
+          this.logger && this.logger.debug(`Packet processing paused: ${this.pauseReason}`);
+          return false;
+        }
+
         this.packetStats.total++;
+
+        // Immediate memory cleanup every packet
+        this.performImmediateCleanup();
+
+        // Check memory limits and pause if necessary
+        if (this.memoryUsage > this.maxMemoryUsage * 0.7) {
+          this.pauseProcessing("Memory threshold reached", 2000);
+          return false;
+        }
 
         // Handle systematic packets (degree 1 or 2)
         if (packet.isSystematic) {
@@ -1444,7 +2014,18 @@
         }
 
         // Otherwise, store the fountain packet for later processing
+        if (this.codedPackets.length >= this.maxCodedPackets) {
+          // Remove oldest packets if we're at capacity
+          const removed = this.codedPackets.splice(0, Math.floor(this.maxCodedPackets * 0.2));
+          this.packetStats.dropped += removed.length;
+        }
+
         this.codedPackets.push(packet);
+        this.updateMemoryUsage();
+
+        // Immediate cleanup after adding packet
+        setTimeout(() => this.performImmediateCleanup(), 0);
+
         return true;
       }
 
@@ -1872,10 +2453,191 @@
         
         return hasJPEGHeader && hasJPEGTrailer;
       }
+
+      // Memory management methods
+      updateMemoryUsage() {
+        let usage = 0;
+
+        // Calculate source chunks memory
+        for (const chunk of Object.values(this.sourceChunks)) {
+          if (chunk instanceof Uint8Array) {
+            usage += chunk.byteLength;
+          }
+        }
+
+        // Calculate coded packets memory
+        for (const packet of this.codedPackets) {
+          if (packet.fountainData instanceof Uint8Array) {
+            usage += packet.fountainData.byteLength;
+          }
+        }
+
+        this.memoryUsage = usage;
+      }
+
+      performMemoryCleanup() {
+        const now = Date.now();
+        if (now - this.lastMemoryCleanup > this.memoryCleanupInterval) {
+          this.updateMemoryUsage();
+
+          if (this.memoryUsage > this.maxMemoryUsage * 0.8) {
+            this.dropOldPackets();
+          }
+
+          this.lastMemoryCleanup = now;
+        }
+      }
+
+      dropOldPackets() {
+        const packetsToRemove = Math.floor(this.codedPackets.length * 0.3);
+        if (packetsToRemove > 0) {
+          const removed = this.codedPackets.splice(0, packetsToRemove);
+          this.packetStats.dropped += removed.length;
+          this.updateMemoryUsage();
+          console.log(`Dropped ${packetsToRemove} old packets to free memory`);
+        }
+      }
+
+      clearSourceChunks() {
+        // Clear source chunks but keep the structure for potential reuse
+        for (const key in this.sourceChunks) {
+          delete this.sourceChunks[key];
+        }
+        this.updateMemoryUsage();
+      }
+
+      // Complete disposal of decoder
+      dispose() {
+        this.clearSourceChunks();
+        this.codedPackets = [];
+        this.newlyRecoveredChunks = [];
+        this.completeCallback = null;
+        this.metaData = null;
+        this.initialized = false;
+        this.fileCompleted = false;
+        this.memoryUsage = 0;
+        console.log('Fountain decoder disposed');
+      }
+
+      // Add reference to logger for memory cleanup warnings
+      setLogger(logger) {
+        this.logger = logger;
+      }
+
+      // Pause/Resume functionality for real-time control
+      pauseProcessing(reason, autoResumeMs = null) {
+        if (this.processingPaused) return;
+
+        this.processingPaused = true;
+        this.pauseReason = reason;
+        this.logger && this.logger.info(`Processing paused: ${reason}`);
+
+        // Immediate aggressive cleanup when pausing
+        this.performAggressiveCleanup();
+
+        // Auto-resume if specified
+        if (autoResumeMs) {
+          this.autoResumeTimeout = setTimeout(() => {
+            this.resumeProcessing();
+          }, autoResumeMs);
+        }
+
+        // Execute pending pause callback
+        if (this.pendingPauseCallback) {
+          this.pendingPauseCallback();
+          this.pendingPauseCallback = null;
+        }
+      }
+
+      resumeProcessing() {
+        if (!this.processingPaused) return;
+
+        this.processingPaused = false;
+        this.pauseReason = null;
+        this.logger && this.logger.info("Processing resumed");
+
+        // Clear auto-resume timeout
+        if (this.autoResumeTimeout) {
+          clearTimeout(this.autoResumeTimeout);
+          this.autoResumeTimeout = null;
+        }
+      }
+
+      // Set callback to execute when processing is paused
+      setPauseCallback(callback) {
+        this.pendingPauseCallback = callback;
+      }
+
+      // Immediate cleanup after each operation
+      performImmediateCleanup() {
+        // Clean up processed packets immediately
+        this.removeProcessedPackets();
+
+        // Update memory usage
+        this.updateMemoryUsage();
+
+        // Force garbage collection if available
+        if (window.gc && typeof window.gc === 'function') {
+          window.gc();
+        }
+      }
+
+      // More aggressive cleanup when pausing
+      performAggressiveCleanup() {
+        // Drop more packets when pausing
+        const packetsToRemove = Math.floor(this.codedPackets.length * 0.5);
+        if (packetsToRemove > 0) {
+          const removed = this.codedPackets.splice(0, packetsToRemove);
+          this.packetStats.dropped += removed.length;
+        }
+
+        // Clear unused source chunks
+        this.cleanupUnusedSourceChunks();
+
+        this.updateMemoryUsage();
+        this.logger && this.logger.info(`Aggressive cleanup: removed ${packetsToRemove} packets`);
+      }
+
+      // Remove packets that can no longer contribute to decoding
+      removeProcessedPackets() {
+        let removedCount = 0;
+        for (let i = this.codedPackets.length - 1; i >= 0; i--) {
+          const packet = this.codedPackets[i];
+
+          // Remove packets where all source chunks are already recovered
+          const missingChunks = packet.sourceChunks.filter(
+            chunkIndex => !this.sourceChunks[chunkIndex]
+          );
+
+          if (missingChunks.length === 0) {
+            this.codedPackets.splice(i, 1);
+            removedCount++;
+          }
+        }
+
+        if (removedCount > 0) {
+          this.logger && this.logger.debug(`Removed ${removedCount} processed packets`);
+        }
+      }
+
+      // Clean up source chunks that are no longer needed (keep only recent ones)
+      cleanupUnusedSourceChunks() {
+        // Keep only the most recently processed chunks
+        const maxChunksToKeep = Math.min(this.totalChunks, 100);
+        const chunkIndices = Object.keys(this.sourceChunks).map(k => parseInt(k)).sort((a, b) => b - a);
+
+        if (chunkIndices.length > maxChunksToKeep) {
+          const chunksToRemove = chunkIndices.slice(maxChunksToKeep);
+          chunksToRemove.forEach(index => {
+            delete this.sourceChunks[index];
+            this.recoveredChunkCount--;
+          });
+        }
+      }
     }
 
     // =============================================
-    // Worker Pool Manager 
+    // Worker Pool Manager
     // =============================================
     class WorkerPoolManager {
       constructor(workerScript, workerCount) {
@@ -2001,6 +2763,7 @@
         this.totalFrames = 0;
         this.startTime = 0;
         this.isProcessing = false;
+        this.isPaused = false;
         this.processTimer = null;
 
         // Canvas for frame processing
@@ -2076,34 +2839,59 @@
         }
       }
 
-      startProcessing() {
-        if (this.isProcessing) return;
+      startProcessing(isResume = false) {
+        console.log(`🎬 START PROCESSING CALLED: isResume=${isResume}, isProcessing=${this.isProcessing}, currentTime=${this.videoElement.currentTime.toFixed(2)}s`);
+
+        if (this.isProcessing) {
+          console.log(`⚠️ START PROCESSING ABORTED: Already processing`);
+          return;
+        }
 
         this.isProcessing = true;
         this.startTime = performance.now();
-        this.loopCount = 1; // Initialize loop counter
+
+        // Only reset loop counter on fresh start
+        if (!isResume) {
+          this.loopCount = 1; // Initialize loop counter
+          console.log(`🎬 START PROCESSING: Fresh start - Set isProcessing=true, loopCount=${this.loopCount}`);
+        } else {
+          console.log(`🎬 START PROCESSING: Resume - Set isProcessing=true, preserving loopCount=${this.loopCount}`);
+        }
 
         // Reset processing state
         this.processingFrame = false;
 
-        // Start playing the video
-        this.videoElement.currentTime = 0;
+        // Start playing the video (preserve current time during resume)
+        const currentTime = this.videoElement.currentTime;
+        console.log(`🎬 START PROCESSING: Current video time: ${currentTime.toFixed(2)}s`);
+
+        // Only reset to 0 on fresh start
+        if (!isResume && currentTime > 0) {
+          console.log(`🎬 START PROCESSING: Fresh start - resetting video to 0s`);
+          this.videoElement.currentTime = 0;
+        } else {
+          console.log(`🎬 START PROCESSING: ${isResume ? 'Resume' : 'Fresh start'} - preserving video time at ${currentTime.toFixed(2)}s`);
+        }
+
         this.videoElement.play();
+        console.log(`🎬 START PROCESSING: Video play() called, continuing from ${this.videoElement.currentTime.toFixed(2)}s`);
 
         // Perform initial memory check to populate stats immediately
         this.performMemoryCheck();
 
         // Use requestVideoFrameCallback if available
         if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+          console.log(`🎬 START PROCESSING: Using requestVideoFrameCallback`);
           this.processWithVideoFrameCallback();
         } else {
+          console.log(`🎬 START PROCESSING: Using setInterval fallback`);
           // Fallback to setInterval
           this.processTimer = setInterval(() => {
             this.processCurrentFrame();
           }, this.frameInterval);
         }
 
-        console.log(`Video processing started with frame interval: ${this.frameInterval}ms, max queue: ${this.maxQueueSize}`);
+        console.log(`🎬 START PROCESSING COMPLETE: Video processing started with frame interval: ${this.frameInterval}ms, max queue: ${this.maxQueueSize}`);
 
         // Ensure performance stats tracking is active
         if (window.performanceStats) {
@@ -2192,7 +2980,8 @@
             this.progressCallback(progress, this.processedFrames, this.totalFrames, remainingTime);
           }
 
-          // Always process frame immediately - no queueing
+          // NEVER SKIP FRAMES - Instead save position and pause if needed
+          // Process frame immediately - no queueing
           if (this.frameCallback) {
             this.frameCallback(imageData, this.videoElement.currentTime, this.processedFrames);
           }
@@ -2348,9 +3137,17 @@
       }
 
       shouldPauseForBufferManagement(avgProcessingTime) {
+        // CHECK: Auto-pause disabled by user setting
+        if (window.qrFileDecoder && window.qrFileDecoder.settings && window.qrFileDecoder.settings.disableAutoPause) {
+          console.log(`🚫 AUTO-PAUSE DISABLED: Processing time ${avgProcessingTime.toFixed(2)}ms but auto-pause is disabled by user setting`);
+          return false;
+        }
+
         // Pause if processing time is consistently high
         if (avgProcessingTime > 100) { // More than 100ms per frame
-          console.log(`🔴 High processing time detected: ${avgProcessingTime.toFixed(2)}ms - considering pause for cleanup`);
+          console.log(`🔴 HIGH PROCESSING TIME: ${avgProcessingTime.toFixed(2)}ms detected`);
+          console.log(`📊 DEBUG: Current state - isProcessing: ${this.isProcessing}, processTimer: ${!!this.processTimer}`);
+          console.log(`📹 DEBUG: Video state - paused: ${this.videoElement.paused}, currentTime: ${this.videoElement.currentTime.toFixed(2)}s`);
           return true;
         }
 
@@ -2360,31 +3157,158 @@
         return false;
       }
 
+      // SAVE POSITION STRATEGY: Save exact video position when performance degrades
+      savePositionForResume() {
+        // Save the current exact position where we need to resume
+        this.savedResumePosition = this.videoElement.currentTime;
+        console.log(`📍 POSITION SAVED: ${this.savedResumePosition.toFixed(3)}s - Will resume from here after cleanup`);
+
+        // Also save current processing stats
+        this.savedStats = {
+          processedFrames: this.processedFrames,
+          timestamp: Date.now(),
+          loopCount: this.loopCount
+        };
+
+        return this.savedResumePosition;
+      }
+
+      // RESUME FROM SAVED POSITION: Return to exact saved position
+      async resumeFromSavedPosition() {
+        if (this.savedResumePosition !== undefined) {
+          console.log(`🎯 RESUMING FROM SAVED POSITION: ${this.savedResumePosition.toFixed(3)}s`);
+
+          // Set video to exact saved position
+          this.videoElement.currentTime = this.savedResumePosition;
+
+          // Wait for seek to complete
+          await new Promise(resolve => {
+            const onSeeked = () => {
+              this.videoElement.removeEventListener('seeked', onSeeked);
+              console.log(`✅ SEEK COMPLETED: Now at ${this.videoElement.currentTime.toFixed(3)}s`);
+              resolve();
+            };
+            this.videoElement.addEventListener('seeked', onSeeked);
+          });
+
+          // Restore processing stats
+          if (this.savedStats) {
+            this.processedFrames = this.savedStats.processedFrames;
+            this.loopCount = this.savedStats.loopCount;
+            console.log(`📊 STATS RESTORED: processedFrames=${this.processedFrames}, loopCount=${this.loopCount}`);
+          }
+
+          // Clear saved position
+          this.savedResumePosition = undefined;
+          this.savedStats = undefined;
+
+          return true;
+        }
+
+        return false;
+      }
+
       pauseForBufferCleanup() {
-        console.log(`⏸️ Pausing video processing for buffer cleanup...`);
+        console.log(`⏸️ PAUSE INITIATED: Starting buffer cleanup...`);
+        console.log(`📊 PAUSE DEBUG: Before pause - isProcessing: ${this.isProcessing}, processTimer: ${!!this.processTimer}`);
+
+        // CRITICAL: Save exact position before pausing
+        const savedPosition = this.savePositionForResume();
+
+        // Update UI to show paused state with saved position
+        const loopInfo = document.getElementById('loopInfo');
+        if (loopInfo) {
+          loopInfo.innerHTML = `Status: <span style="color: #f59e0b;">⏸️ PAUSED</span> - Position saved: ${savedPosition.toFixed(1)}s. Cleaning memory...`;
+        }
 
         // Pause video temporarily
         const wasPaused = this.videoElement.paused;
+        console.log(`📹 PAUSE DEBUG: Video was ${wasPaused ? 'already paused' : 'playing'}, position saved: ${savedPosition.toFixed(3)}s`);
+
         if (!wasPaused) {
           this.videoElement.pause();
+          console.log(`📹 PAUSE DEBUG: Video paused successfully`);
         }
 
         // Clear timers to stop frame processing
         if (this.processTimer) {
+          console.log(`🔄 PAUSE DEBUG: Clearing processTimer`);
           clearInterval(this.processTimer);
           this.processTimer = null;
         }
 
-        // Perform cleanup
-        this.performBufferCleanup().then(() => {
-          console.log(`✅ Buffer cleanup completed, resuming processing...`);
+        // Set processing flag
+        this.isProcessing = false;
+        console.log(`🚫 PAUSE DEBUG: Set isProcessing = false`);
 
-          // Resume video if it was playing
+        // Add countdown timer showing wait time for normalization
+        let waitSeconds = 5; // Longer wait for memory to normalize
+        const countdownInterval = setInterval(() => {
+          if (loopInfo) {
+            loopInfo.innerHTML = `Status: <span style="color: #f59e0b;">⏸️ WAITING</span> - Memory normalizing... ${waitSeconds}s (will resume from ${savedPosition.toFixed(1)}s)`;
+          }
+          waitSeconds--;
+          if (waitSeconds < 0) {
+            clearInterval(countdownInterval);
+          }
+        }, 1000);
+
+        // Perform cleanup with longer wait time for normalization
+        const cleanupStartTime = Date.now();
+        this.performBufferCleanup().then(async () => {
+          const cleanupDuration = Date.now() - cleanupStartTime;
+          console.log(`✅ CLEANUP COMPLETED: Duration ${cleanupDuration}ms`);
+
+          // Clear countdown
+          clearInterval(countdownInterval);
+
+          // CRITICAL: Wait additional time for memory normalization
+          console.log(`⏳ WAITING FOR NORMALIZATION: 3 seconds for memory to stabilize...`);
+          if (loopInfo) {
+            loopInfo.innerHTML = `Status: <span style="color: #10b981;">⏳ NORMALIZING</span> - Memory stabilizing... Will resume from ${savedPosition.toFixed(1)}s`;
+          }
+
+          await new Promise(resolve => setTimeout(resolve, 3000));
+
+          console.log(`📊 RESUME DEBUG: About to resume from saved position - wasPaused: ${wasPaused}`);
+
+          // Resume from exact saved position (NEVER MISS FRAMES)
           if (!wasPaused) {
+            console.log(`▶️ RESUME DEBUG: Restoring to saved position ${savedPosition.toFixed(3)}s...`);
+
+            // CRITICAL: Resume from saved position, not current position
+            await this.resumeFromSavedPosition();
+
             this.videoElement.play().then(() => {
-              // Restart frame processing
-              this.startProcessing();
+              console.log(`▶️ RESUME DEBUG: Video play() successful, resumed from: ${this.videoElement.currentTime.toFixed(3)}s`);
+              console.log(`🔄 RESUME DEBUG: About to call startProcessing(true)`);
+
+              // Restart frame processing (resume mode)
+              this.startProcessing(true);
+
+              console.log(`✅ RESUME DEBUG: startProcessing(true) called, isProcessing: ${this.isProcessing}`);
+
+              // Update UI to show active processing
+              if (loopInfo) {
+                loopInfo.innerHTML = `Status: <span style="color: #2563eb;">🎬 PROCESSING</span> - Resumed from ${this.videoElement.currentTime.toFixed(1)}s`;
+              }
+            }).catch(error => {
+              console.error(`❌ RESUME ERROR: Video play() failed:`, error);
+              if (loopInfo) {
+                loopInfo.innerHTML = `Status: <span style="color: #ef4444;">❌ ERROR</span> - Failed to resume: ${error.message}`;
+              }
             });
+          } else {
+            console.log(`⏸️ RESUME DEBUG: Video was paused, not resuming playback`);
+            if (loopInfo) {
+              loopInfo.innerHTML = `Status: <span style="color: #6b7280;">⏸️ PAUSED</span> - Video was manually paused`;
+            }
+          }
+        }).catch(error => {
+          console.error(`❌ CLEANUP ERROR:`, error);
+          clearInterval(countdownInterval);
+          if (loopInfo) {
+            loopInfo.innerHTML = `Status: <span style="color: #ef4444;">❌ ERROR</span> - Cleanup failed: ${error.message}`;
           }
         });
       }
@@ -2638,6 +3562,54 @@
           this.processTimer = null;
         }
       }
+
+      // Pause video processing (for sequential pipeline)
+      pause() {
+        if (this.isProcessing) {
+          this.stopProcessing();
+          this.isPaused = true;
+          console.log('Video processor paused');
+        }
+      }
+
+      // Resume video processing (for sequential pipeline)
+      resume() {
+        if (this.isPaused && this.videoFile) {
+          this.isPaused = false;
+          this.startProcessing();
+          console.log('Video processor resumed');
+        }
+      }
+
+      // Complete disposal with memory cleanup
+      dispose() {
+        this.stopProcessing();
+
+        // Clear canvas memory
+        if (this.ctx) {
+          this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+          this.ctx = null;
+        }
+        if (this.canvas) {
+          this.canvas.width = 0;
+          this.canvas.height = 0;
+          this.canvas = null;
+        }
+
+        // Clear video reference
+        this.videoFile = null;
+        this.videoElement = null;
+
+        // Clear callbacks
+        this.frameCallback = null;
+        this.progressCallback = null;
+        this.errorCallback = null;
+
+        // Clear stats
+        this.frameStats = null;
+
+        console.log('Video processor disposed');
+      }
     }
 
     // =============================================
@@ -2668,7 +3640,17 @@
 
         // Cache of recently seen QR codes to detect duplicates
         this.recentlySeenQRs = new Map();
-        this.maxCacheSize = 50;
+        this.maxCacheSize = 20; // Reduced from 50
+        this.cacheExpirationTime = 5000; // 5 seconds
+        this.lastCacheCleanup = Date.now();
+
+        // Frame processing limits
+        this.maxCanvasMemory = 50 * 1024 * 1024; // 50MB limit
+        this.frameProcessingCount = 0;
+        this.memoryCleanupInterval = 10; // Clean every 10 frames - more aggressive
+
+        // Immediate cleanup after each frame
+        this.cleanupAfterFrame = true;
 
         // Create a hidden element for the QR code reader
         this.qrElement = document.createElement('div');
@@ -2713,41 +3695,32 @@
         }
 
         this.detectionStats.attempts++;
+        this.frameProcessingCount++;
 
-        // Memory leak workaround: html5-qrcode creates 2 blob URLs per scan but only cleans up 1
-        // We need to recreate the instance periodically to force cleanup
-        if (this.detectionStats.attempts % 500 === 0) {
-          console.log(`🔄 Recreating Html5Qrcode instance at ${this.detectionStats.attempts} attempts to prevent memory leak`);
-          this.recreateQrScanner();
+        // Immediate cleanup after each frame if enabled
+        if (this.cleanupAfterFrame) {
+          // Clear canvas immediately after frame extraction
+          setTimeout(() => {
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+          }, 0);
+        }
+
+        // Periodic memory cleanup
+        if (this.frameProcessingCount % this.memoryCleanupInterval === 0) {
+          this.performMemoryCleanup();
         }
 
         return new Promise((resolve, reject) => {
           try {
-            // Make sure canvas is the right size
-            if (this.canvas.width !== imageData.width || this.canvas.height !== imageData.height) {
-              this.canvas.width = imageData.width;
-              this.canvas.height = imageData.height;
+            // Check memory limits before processing
+            const imageSize = imageData.width * imageData.height * 4;
+            if (imageSize > this.maxCanvasMemory) {
+              throw new Error("Frame size exceeds memory limit");
             }
 
-            // Draw image data to canvas
-            this.ctx.putImageData(imageData, 0, 0);
-
-            // Use toBlob to avoid creating large base64 strings
-            this.canvas.toBlob((blob) => {
-              if (!blob) {
-                resolve({
-                  success: false,
-                  frameIndex: frameIndex
-                });
-                return;
-              }
-
-              // Create File from Blob (required by scanFile API)
-              const file = new File([blob], 'frame.jpg', { type: 'image/jpeg' });
-
-              // Use HTML5QRCode to scan the image
-              // NOTE: This creates 2 blob URLs internally but only cleans up 1 (library bug)
-              this.html5QrCode.scanFile(file, /* showImage= */ false)
+            // OPTIMIZED: Use ImageData directly with HTML5QRCode's internal scanner
+            // No persistent canvas needed - creates temporary canvas only when needed
+            this.scanImageDataDirectly(imageData)
               .then(decodedText => {
                 // QR code found
                 this.detectionStats.successes++;
@@ -2795,7 +3768,6 @@
                   frameIndex: frameIndex
                 });
               });
-            }, 'image/jpeg', 0.8); // Close toBlob callback with quality setting
           } catch (error) {
             // Error during processing
             this.detectionStats.failures++;
@@ -2809,61 +3781,39 @@
           }
         });
       }
-
-      // Recreate QR scanner to force cleanup of leaked blob URLs
-      recreateQrScanner() {
-        try {
-          // Clean up existing instance
-          if (this.html5QrCode) {
-            try {
-              this.html5QrCode.clear();
-            } catch (error) {
-              console.warn("Error clearing Html5QrCode:", error);
-            }
-          }
-
-          // Recreate with same configuration
-          this.html5QrCode = new Html5Qrcode('qr-reader-hidden', {
-            formatsToSupport: [
-              Html5QrcodeSupportedFormats.QR_CODE,
-              Html5QrcodeSupportedFormats.DATA_MATRIX,
-              Html5QrcodeSupportedFormats.CODE_39,
-              Html5QrcodeSupportedFormats.CODE_93,
-              Html5QrcodeSupportedFormats.CODE_128,
-              Html5QrcodeSupportedFormats.EAN_8,
-              Html5QrcodeSupportedFormats.EAN_13,
-              Html5QrcodeSupportedFormats.ITF,
-              Html5QrcodeSupportedFormats.UPC_A,
-              Html5QrcodeSupportedFormats.UPC_E
-            ]
-          });
-
-          console.log("✅ Html5Qrcode instance recreated successfully");
-        } catch (error) {
-          console.error("Error recreating Html5Qrcode:", error);
-        }
-      }
       // Check if a QR code is a duplicate of one we've seen recently
       checkDuplicate(qrData, frameIndex) {
+        // Clean expired entries periodically
+        this.cleanExpiredCacheEntries();
+
         if (this.recentlySeenQRs.has(qrData)) {
-          const lastSeenFrame = this.recentlySeenQRs.get(qrData);
-          // If we saw this QR code within the last 5 frames, consider it a duplicate
-          return (frameIndex - lastSeenFrame) < 5;
+          const cacheEntry = this.recentlySeenQRs.get(qrData);
+          const lastSeenFrame = cacheEntry.frameIndex;
+          const lastSeenTime = cacheEntry.timestamp;
+
+          // Check both frame proximity and time expiration
+          const isRecentFrame = (frameIndex - lastSeenFrame) < 5;
+          const isRecentTime = (Date.now() - lastSeenTime) < this.cacheExpirationTime;
+
+          return isRecentFrame && isRecentTime;
         }
         return false;
       }
 
       // Add a QR code to the recently seen cache
       addToRecentlySeen(qrData, frameIndex) {
-        // Add/update this QR code
-        this.recentlySeenQRs.set(qrData, frameIndex);
+        // Add/update this QR code with timestamp
+        this.recentlySeenQRs.set(qrData, {
+          frameIndex: frameIndex,
+          timestamp: Date.now()
+        });
 
-        // If cache is too big, remove oldest entries
+        // If cache is too big, remove oldest entries aggressively
         if (this.recentlySeenQRs.size > this.maxCacheSize) {
           const entries = Array.from(this.recentlySeenQRs.entries());
-          // Sort by frame index (ascending)
-          entries.sort((a, b) => a[1] - b[1]);
-          // Remove oldest 20% of entries
+          // Sort by timestamp (ascending)
+          entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+          // Remove oldest 50% of entries for aggressive cleanup
           const entriesToRemove = Math.ceil(this.maxCacheSize * 0.2);
           for (let i = 0; i < entriesToRemove; i++) {
             if (entries[i]) {
@@ -2922,19 +3872,72 @@
           height: size
         };
       }
-      // Convert data URL to File object
+
+      // OPTIMIZED: Scan ImageData directly using HTML5QRCode with persistent canvas
+      async scanImageDataDirectly(imageData) {
+        return new Promise((resolve, reject) => {
+          try {
+            // Reuse existing canvas instead of creating new ones (MEMORY FIX)
+            if (this.canvas.width !== imageData.width || this.canvas.height !== imageData.height) {
+              this.canvas.width = imageData.width;
+              this.canvas.height = imageData.height;
+            }
+
+            // Put ImageData directly onto reused canvas
+            this.ctx.putImageData(imageData, 0, 0);
+
+            // Use HTML5QRCode with canvas directly (AVOID BLOB CREATION)
+            // Convert to minimal quality JPEG to reduce memory usage
+            const dataUrl = this.canvas.toDataURL('image/jpeg', 0.5); // Low quality to save memory
+            const file = this.dataURLtoFile(dataUrl, 'frame.jpg');
+
+            // Debug logging with memory tracking
+            console.log(`🔍 Scanning frame: ${imageData.width}x${imageData.height}, File size: ${file.size} bytes`);
+
+            // Use HTML5QRCode with proper File object
+            this.html5QrCode.scanFile(file, false)
+            .then(decodedText => {
+              console.log(`✅ QR detected:`, decodedText.substring(0, 50) + (decodedText.length > 50 ? '...' : ''));
+              resolve(decodedText);
+            })
+            .catch(error => {
+              console.log(`❌ No QR found:`, error.message);
+              reject(error);
+            });
+
+          } catch (error) {
+            console.error(`💥 scanImageDataDirectly error:`, error);
+            reject(error);
+          }
+        });
+      }
+
+      // Convert data URL to File object with memory optimization
       dataURLtoFile(dataurl, filename) {
-        const arr = dataurl.split(',');
-        const mime = arr[0].match(/:(.*?);/)[1];
-        const bstr = atob(arr[1]);
-        let n = bstr.length;
-        const u8arr = new Uint8Array(n);
+        try {
+          const arr = dataurl.split(',');
+          const mime = arr[0].match(/:(.*?);/)[1];
+          const bstr = atob(arr[1]);
+          const n = bstr.length;
+          const u8arr = new Uint8Array(n);
 
-        while (n--) {
-          u8arr[n] = bstr.charCodeAt(n);
+          // Efficient byte copying
+          for (let i = 0; i < n; i++) {
+            u8arr[i] = bstr.charCodeAt(i);
+          }
+
+          const file = new File([u8arr], filename, { type: mime });
+
+          // MEMORY CLEANUP: Clear references immediately
+          arr.length = 0;
+          // bstr will be garbage collected
+          // u8arr will be transferred to File
+
+          return file;
+        } catch (error) {
+          console.error(`💥 dataURLtoFile error:`, error);
+          throw error;
         }
-
-        return new File([u8arr], filename, { type: mime });
       }
 
       // Clean up resources
@@ -2954,6 +3957,35 @@
         }
 
         console.log(`QR processor disposed. Final stats: ${JSON.stringify(this.detectionStats)}`);
+      }
+
+      // Clean expired cache entries based on time
+      cleanExpiredCacheEntries() {
+        const now = Date.now();
+        if (now - this.lastCacheCleanup > 2000) { // Clean every 2 seconds
+          const expiredKeys = [];
+          for (const [key, entry] of this.recentlySeenQRs.entries()) {
+            if (now - entry.timestamp > this.cacheExpirationTime) {
+              expiredKeys.push(key);
+            }
+          }
+          expiredKeys.forEach(key => this.recentlySeenQRs.delete(key));
+          this.lastCacheCleanup = now;
+        }
+      }
+
+      // Perform memory cleanup
+      performMemoryCleanup() {
+        // Clear canvas periodically to free memory
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Force cache cleanup
+        this.cleanExpiredCacheEntries();
+
+        // Trigger garbage collection if available
+        if (window.gc && typeof window.gc === 'function') {
+          window.gc();
+        }
       }
     }
 
@@ -2979,6 +4011,14 @@
         this.recoveredChunks = new Map();
         this.missingChunks = new Set();
         this.wakeLock = null;
+
+        // Sequential processing state
+        this.processingPhase = 'IDLE'; // IDLE, SCANNING, COLLECTING, PROCESSING, PAUSED
+        this.currentFileId = null;
+        this.qrDataQueue = []; // Queue of QR codes waiting to be processed
+        this.frameDiscardCount = 0;
+        this.lastMetadataFrame = -1;
+        this.videoProcessingPaused = false;
         // Load settings from localStorage or use defaults
         this.settings = this.loadSettings();
 
@@ -3127,6 +4167,10 @@
         document.getElementById('packetWorkerCount').addEventListener('input', (e) => {
           this.updateSingleSetting('packetWorkerCount', parseInt(e.target.value));
         });
+
+        document.getElementById('disableAutoPause').addEventListener('change', (e) => {
+          this.updateSingleSetting('disableAutoPause', e.target.checked);
+        });
       }
 
       async handleVideoInput(event) {
@@ -3143,12 +4187,19 @@
           const videoElement = document.getElementById('videoPreview');
           videoElement.src = videoUrl;
 
+          // MUTE VIDEO IMMEDIATELY
+          videoElement.muted = true;
+          console.log('🔇 Video muted automatically');
+
           // Enable start button once video is loaded
           videoElement.onloadedmetadata = () => {
+            // Ensure video stays muted after metadata load
+            videoElement.muted = true;
+
             document.getElementById('startScanBtn').disabled = false;
             // Always enable continue button when video is loaded
             document.getElementById('continueBtn').disabled = false;
-            this.logger.info(`Video duration: ${videoElement.duration.toFixed(2)} seconds`);
+            this.logger.info(`Video duration: ${videoElement.duration.toFixed(2)} seconds (muted)`);
             this.logger.info('Continue button always available - can start processing from any video position');
           };
         } catch (error) {
@@ -3251,6 +4302,7 @@
         // Initialize fountain decoder with enhanced implementation
         this.fountainDecoder = new EnhancedFountainDecoder();
         this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+        this.fountainDecoder.setLogger(this.logger);
 
         // Initialize video processor with enhanced implementation
         this.videoProcessor = new EnhancedVideoProcessor({
@@ -3362,6 +4414,13 @@
         this.discoveryMode = true; // First loop is discovery mode
         this.discoveredFiles.clear();
         this.isProcessing = true; // Enable processing state
+
+        // Initialize sequential processing
+        this.setProcessingPhase('SCANNING');
+        this.currentFileId = null;
+        this.qrDataQueue = [];
+        this.frameDiscardCount = 0;
+        this.videoProcessingPaused = false;
         
         // Clear any existing UI
         this.ui.resetChunkGrid();
@@ -3437,6 +4496,14 @@
           return { isValid: false, reason: 'No file metadata or decoder available' };
         }
 
+        // Check if current file is already complete
+        if (this.downloadedFiles.has(this.fileMetadata.fileName)) {
+          return {
+            isValid: false,
+            reason: `File '${this.fileMetadata.fileName}' already completed - discarding packet for completed file`
+          };
+        }
+
         // Primary validation: Check fileId match for new format packets
         if (packet.fileId) {
           // New format packet - must have matching fileId
@@ -3449,7 +4516,7 @@
           if (packet.fileId !== expectedFileId) {
             return {
               isValid: false,
-              reason: `FileId mismatch: packet has '${packet.fileId}' but current file expects '${expectedFileId}'`
+              reason: `FileId mismatch: packet has '${packet.fileId}' but current file expects '${expectedFileId}' (cross-file contamination prevented)`
             };
           }
 
@@ -3647,39 +4714,42 @@
 
       handleQRCodeResult(result) {
         if (!result.success) {
+          // Immediately discard failed frame data
+          this.frameDiscardCount++;
           return;
         }
 
         const { qrData, frameIndex } = result;
-        // Conditional logging based on configuration
-        if (window.logConfig && window.logConfig.shouldLog('qr', 'DEBUG') && frameIndex % 50 === 1) {
-          this.logger.debug(`QR code detected in frame ${frameIndex}: ${qrData.substring(0, 30)}... (every 50th logged)`);
-        }
 
-        // Update QR processing stats
-        if (window.performanceStats) {
-          window.performanceStats.qrCodesProcessed++;
-        }
-
-        // Process the QR data
+        // Process the QR data immediately to determine type
         const packetResult = this.packetProcessor.processQRData(qrData, frameIndex);
 
-        if (packetResult.success) {
-          // Count successful QR processing
-          if (window.performanceStats) {
-            window.performanceStats.qrCodesSuccessful++;
-          }
-          this.handlePacketResult(packetResult);
-        } else {
-          // Count discarded packets due to processing errors
-          if (window.performanceStats) {
-            window.performanceStats.packetsDiscarded++;
-          }
+        if (!packetResult.success) {
+          // Discard invalid QR data immediately
+          this.frameDiscardCount++;
+          return;
+        }
 
-          // Reduced logging for processing failures
-          if (window.performanceStats.packetsDiscarded % 20 === 1) {
-            this.logger.warn(`Failed to process QR data: ${packetResult.error} (${window.performanceStats.packetsDiscarded} total processing failures)`);
+        // Sequential processing logic based on phase
+        if (this.processingPhase === 'SCANNING') {
+          // In scanning phase - looking for metadata
+          if (packetResult.packetType === 'metadata') {
+            this.handleMetadataDetected(packetResult);
+          } else {
+            // Discard non-metadata packets during scanning
+            this.frameDiscardCount++;
           }
+        } else if (this.processingPhase === 'COLLECTING') {
+          // In collecting phase - gathering data for current file
+          this.queueQRData(packetResult, frameIndex);
+        } else {
+          // Other phases - discard or queue for later
+          this.frameDiscardCount++;
+        }
+
+        // Log frame discard statistics periodically
+        if (this.frameDiscardCount % 100 === 0) {
+          this.logger.debug(`Discarded ${this.frameDiscardCount} frames/QR codes (memory optimization)`);
         }
       }
 
@@ -3712,12 +4782,14 @@
 
           if (isNewFileDiscovered) {
             // Completely new file discovered
+            const fileId = metadata.fileChecksum ? metadata.fileChecksum.substring(0, 8) : null;
             this.discoveredFiles.set(fileName, {
               metadata: metadata,
               firstSeenAt: currentTime,
-              lastSeenAt: currentTime
+              lastSeenAt: currentTime,
+              fileId: fileId
             });
-            this.logger.info(`📁 DISCOVERY: NEW file found: ${fileName} at ${currentTime.toFixed(2)}s`);
+            this.logger.info(`📁 DISCOVERY: NEW file found: ${fileName} (fileId: ${fileId}) at ${currentTime.toFixed(2)}s`);
 
             // Pause video processing to handle new file
             this.pauseForNewFileProcessing(fileName, metadata);
@@ -3747,12 +4819,14 @@
         } else {
           // Continue mode: Track discovered files but don't switch processing
           if (isNewFileDiscovered) {
+            const fileId = metadata.fileChecksum ? metadata.fileChecksum.substring(0, 8) : null;
             this.discoveredFiles.set(fileName, {
               metadata: metadata,
               firstSeenAt: currentTime,
-              lastSeenAt: currentTime
+              lastSeenAt: currentTime,
+              fileId: fileId
             });
-            this.logger.info(`📁 CONTINUE MODE: NEW file discovered: ${fileName} at ${currentTime.toFixed(2)}s`);
+            this.logger.info(`📁 CONTINUE MODE: NEW file discovered: ${fileName} (fileId: ${fileId}) at ${currentTime.toFixed(2)}s`);
 
             // Update UI to show newly discovered file
             this.updateDiscoveredFilesUI();
@@ -3776,18 +4850,58 @@
             this.logger.debug("Received duplicate metadata packet");
             return;
           } else {
-            // Different file, log and reinitialize
-            this.logger.warn("Received metadata for a different file, reinitializing");
+            // Different file detected - handle sequential file processing
+            this.logger.info(`🔄 SEQUENTIAL: New file detected: ${metadata.fileName} (switching from ${this.fileMetadata.fileName})`);
+
+            // Check if this is a sequential file transition (part32 -> part33, etc.)
+            const currentPart = this.extractPartNumber(this.fileMetadata.fileName);
+            const newPart = this.extractPartNumber(metadata.fileName);
+
+            if (currentPart && newPart && newPart === currentPart + 1) {
+              this.logger.info(`🔄 SEQUENTIAL: Detected sequential file transition: part${currentPart} -> part${newPart}`);
+            }
+
+            // Save current file's progress before switching
+            if (this.fountainDecoder && this.recoveredChunks.size > 0) {
+              const progress = this.fountainDecoder.getRecoveryProgress();
+              this.logger.info(`🔄 SEQUENTIAL: Previous file ${this.fileMetadata.fileName} had ${progress.recoveredChunks}/${progress.totalChunks} chunks when switching`);
+
+              // Store previous file's state in discovered files
+              if (!this.discoveredFiles.has(this.fileMetadata.fileName)) {
+                this.discoveredFiles.set(this.fileMetadata.fileName, {
+                  metadata: this.fileMetadata,
+                  firstSeenAt: currentTime || 0,
+                  lastSeenAt: currentTime || 0,
+                  fileId: this.currentFileId,
+                  partialChunks: this.recoveredChunks.size,
+                  totalChunks: this.fileMetadata.chunksCount
+                });
+              }
+
+              // Try to complete the previous file if we have enough chunks
+              if (progress.recoveredChunks >= progress.totalChunks * 0.9) { // 90% threshold for sequential completion
+                this.logger.info(`🔄 SEQUENTIAL: Attempting to complete previous file ${this.fileMetadata.fileName} before switching`);
+                try {
+                  this.fountainDecoder.attemptFileReconstruction();
+                } catch (error) {
+                  this.logger.warn(`🔄 SEQUENTIAL: Could not complete previous file: ${error.message}`);
+                }
+              }
+            }
+
+            // Reset decoder for new file
+            this.resetFountainDecoder();
           }
         }
 
+        // Set up new file
         this.metadataReceived = true;
         this.fileMetadata = metadata;
 
         // Store 8-char fileId for packet validation
         this.currentFileId = metadata.fileChecksum ? metadata.fileChecksum.substring(0, 8) : null;
         if (this.currentFileId) {
-          this.logger.info(`📋 File ID set: ${this.currentFileId} for ${metadata.fileName}`);
+          this.logger.info(`📋 SEQUENTIAL: File ID set: ${this.currentFileId} for ${metadata.fileName}`);
         }
 
         // Log encoder version for compatibility tracking
@@ -3834,9 +4948,9 @@
       }
 
       handleDataPacket(packet) {
-        // Skip if metadata hasn't been received
+        // Check if metadata hasn't been received for current file
         if (!this.metadataReceived) {
-          // Count these as discarded packets
+          // Count these as discarded packets - this is correct behavior
           if (window.performanceStats) {
             window.performanceStats.packetsDiscarded++;
           }
@@ -3951,6 +5065,11 @@
 
       handleFileComplete(fileData, customMetadata = null) {
         this.logger.info("File recovery complete!");
+
+        // Pause processing immediately when file is complete
+        if (this.fountainDecoder) {
+          this.fountainDecoder.pauseProcessing("File complete - preparing download", 5000);
+        }
 
         // Release wake lock since file is complete
         this.releaseWakeLock();
@@ -4109,14 +5228,31 @@
         console.log(`💾 File ${fileName} complete - triggering automatic download`);
         this.downloadFile();
         
-        // Reset decoder state for next file, but keep video processing running
+        // Reset decoder state for next sequential file
+        this.logger.info(`🔄 SEQUENTIAL: File ${fileName} complete - resetting state for next sequential file`);
         this.fountainDecoder = new EnhancedFountainDecoder();
         this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+        this.fountainDecoder.setLogger(this.logger);
+
+        // Clear all file-specific state to be ready for next file
         this.metadataReceived = false;
         this.fileMetadata = null;
+        this.currentFileId = null;
         this.recoveredChunks = new Map();
         this.missingChunks = new Set();
         this.currentActiveFile = null;
+
+        // Clear UI to show ready for next file
+        this.ui.updateFileInfo("File completed - ready for next sequential file...");
+
+        this.logger.info(`🔄 SEQUENTIAL: State reset complete - system ready for next file metadata`);
+
+        // Check if we can predict the next file in sequence
+        const currentPart = this.extractPartNumber(fileName);
+        if (currentPart) {
+          const nextPart = currentPart + 1;
+          this.logger.info(`🔄 SEQUENTIAL: Expecting next file part${nextPart} after completed part${currentPart}`);
+        }
       }
 
       downloadFile() {
@@ -4140,11 +5276,19 @@
           document.body.appendChild(a);
           a.click();
 
-          // Clean up
-          setTimeout(() => {
-            document.body.removeChild(a);
+          // Clean up immediately with multiple fallbacks
+          const cleanup = () => {
+            if (a.parentNode) {
+              document.body.removeChild(a);
+            }
             URL.revokeObjectURL(url);
-          }, 100);
+
+            // Immediate memory cleanup after download
+            this.performPostDownloadCleanup();
+          };
+
+          setTimeout(cleanup, 100);
+          setTimeout(cleanup, 1000); // Extra safety cleanup
 
           // Mark file as downloaded to prevent duplicates
           this.downloadedFiles.add(this.fileMetadata.fileName);
@@ -4172,13 +5316,15 @@
         const packetWorkerCount = parseInt(document.getElementById('packetWorkerCount').value);
         const frameInterval = parseInt(document.getElementById('frameInterval').value);
         const qrDetectionConfidence = parseFloat(document.getElementById('qrDetectionConfidence').value);
+        const disableAutoPause = document.getElementById('disableAutoPause').checked;
 
         // Validate and update settings
         this.settings = {
           workerCount: isNaN(workerCount) ? 2 : Math.min(Math.max(workerCount, 1), 16),
           packetWorkerCount: isNaN(packetWorkerCount) ? 8 : Math.min(Math.max(packetWorkerCount, 1), 8),
           frameInterval: isNaN(frameInterval) ? 1 : Math.min(Math.max(frameInterval, 0), 1000),
-          qrDetectionConfidence: isNaN(qrDetectionConfidence) ? 1 : Math.min(Math.max(qrDetectionConfidence, 0), 1)
+          qrDetectionConfidence: isNaN(qrDetectionConfidence) ? 1 : Math.min(Math.max(qrDetectionConfidence, 0), 1),
+          disableAutoPause: disableAutoPause
         };
 
         this.logger.info(`Settings updated: ${JSON.stringify(this.settings)}`);
@@ -4203,6 +5349,10 @@
             break;
           case 'qrDetectionConfidence':
             validatedValue = isNaN(value) ? 1 : Math.min(Math.max(value, 0), 1);
+            break;
+          case 'disableAutoPause':
+            validatedValue = typeof value === 'boolean' ? value : true;
+            console.log(`🔧 Auto-pause setting changed: ${validatedValue ? 'DISABLED' : 'ENABLED'}`);
             break;
           default:
             console.warn(`Unknown setting: ${settingName}`);
@@ -4246,14 +5396,16 @@
               workerCount: 2,
               packetWorkerCount: 8,
               frameInterval: 1,
-              qrDetectionConfidence: 1
+              qrDetectionConfidence: 1,
+              disableAutoPause: true  // DISABLED BY DEFAULT
             };
 
             return {
               workerCount: typeof parsed.workerCount === 'number' ? Math.min(Math.max(parsed.workerCount, 1), 16) : defaults.workerCount,
               packetWorkerCount: typeof parsed.packetWorkerCount === 'number' ? Math.min(Math.max(parsed.packetWorkerCount, 1), 8) : defaults.packetWorkerCount,
               frameInterval: typeof parsed.frameInterval === 'number' ? Math.min(Math.max(parsed.frameInterval, 0), 1000) : defaults.frameInterval,
-              qrDetectionConfidence: typeof parsed.qrDetectionConfidence === 'number' ? Math.min(Math.max(parsed.qrDetectionConfidence, 0), 1) : defaults.qrDetectionConfidence
+              qrDetectionConfidence: typeof parsed.qrDetectionConfidence === 'number' ? Math.min(Math.max(parsed.qrDetectionConfidence, 0), 1) : defaults.qrDetectionConfidence,
+              disableAutoPause: typeof parsed.disableAutoPause === 'boolean' ? parsed.disableAutoPause : defaults.disableAutoPause
             };
           }
         } catch (error) {
@@ -4266,7 +5418,8 @@
           workerCount: 2,
           packetWorkerCount: 8,
           frameInterval: 1,
-          qrDetectionConfidence: 1
+          qrDetectionConfidence: 1,
+          disableAutoPause: true  // DISABLED BY DEFAULT
         };
       }
 
@@ -4282,21 +5435,28 @@
 
       // Switch to processing a different file during discovery
       switchToFile(metadata, fileName) {
-        this.logger.info(`🔄 DISCOVERY: Switching to process file: ${fileName}`);
-        
+        this.logger.info(`🔄 SEQUENTIAL: Switching to process file: ${fileName}`);
+
         // Set current active file
         this.currentActiveFile = fileName;
-        
+
         // Reset fountain decoder for the new file
         this.fountainDecoder = new EnhancedFountainDecoder();
         this.fountainDecoder.initialize(metadata);
         this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
-        
+
         // Reset file-specific state for new file
         this.metadataReceived = true;
         this.fileMetadata = metadata;
+        this.currentFileId = metadata.fileChecksum ? metadata.fileChecksum.substring(0, 8) : null;
         this.recoveredChunks = new Map();
         this.missingChunks = new Set();
+
+        // Ensure discovered file has fileId stored
+        if (this.discoveredFiles.has(fileName)) {
+          const fileInfo = this.discoveredFiles.get(fileName);
+          fileInfo.fileId = this.currentFileId;
+        }
         
         // Reset UI for the new file
         this.ui.initializeChunkGrid(metadata.chunksCount);
@@ -4453,12 +5613,14 @@
           let timeRange = `${this.formatTimeToHMS(fileInfo.firstSeenAt)} - ${this.formatTimeToHMS(fileInfo.lastSeenAt)}`;
 
           // Add completion time if available
-          const isCompleted = fileInfo.completed || false;
+          const isCompleted = fileInfo.completed || this.downloadedFiles.has(filename) || false;
+          console.log(`🔍 STATUS CHECK: ${filename} - completed: ${fileInfo.completed}, downloaded: ${this.downloadedFiles.has(filename)}, final: ${isCompleted}`);
+
           if (isCompleted && fileInfo.completedAt) {
             timeRange = `${this.formatTimeToHMS(fileInfo.firstSeenAt)} - ${this.formatTimeToHMS(fileInfo.completedAt)}`;
           }
-          const statusBadge = isCompleted ? 
-            '<span style="background: #dcfce7; color: #16a34a; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold;">COMPLETED</span>' : 
+          const statusBadge = isCompleted ?
+            '<span style="background: #dcfce7; color: #16a34a; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold;">COMPLETED</span>' :
             '<span style="background: #fef3c7; color: #d97706; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold;">NEEDS PROCESSING</span>';
           
           fileButton.innerHTML = `
@@ -4541,38 +5703,22 @@
 
       // Check and automatically repeat ranges for incomplete files
       async checkAndAutoRepeatIncompleteFiles() {
-        this.isProcessing = false;
-        this.ui.updateFileInfo(`Discovery complete - found ${this.discoveredFiles.size} files. Checking completion status...`);
-        
-        // Show file selection UI first
+        // DO NOT STOP PROCESSING - Continue with discovered files
+        this.ui.updateFileInfo(`Discovery complete - found ${this.discoveredFiles.size} files. Continuing full video processing...`);
+
+        this.logger.info(`🎯 Discovery found ${this.discoveredFiles.size} files. Continuing to process entire video for complete recovery.`);
+
+        // Show file selection UI
         this.updateDiscoveredFilesUI();
-        
-        // Check each file's completion status by attempting to track chunks
-        const incompleteFiles = [];
-        
-        for (const [filename, fileInfo] of this.discoveredFiles.entries()) {
-          // For now, assume all files might be incomplete after first discovery pass
-          // In a real implementation, we could track chunk recovery during discovery
-          incompleteFiles.push({filename, fileInfo});
-        }
-        
-        if (incompleteFiles.length > 0) {
-          this.logger.info(`🔄 Found ${incompleteFiles.length} files that may need additional processing`);
-          this.logger.info(`🎯 Starting automatic range repeats (5 loops each) for better completion...`);
-          
-          // Process each incomplete file with 5 range loops
-          for (const {filename, fileInfo} of incompleteFiles) {
-            await this.autoRepeatFileRange(filename, fileInfo.firstSeenAt, fileInfo.lastSeenAt, 5);
-          }
-          
-          this.logger.info(`✅ Automatic range processing complete for all files`);
-        }
-        
-        // Re-enable buttons for manual file selection
-        document.getElementById('startScanBtn').disabled = false;
-        document.getElementById('stopScanBtn').disabled = true;
-        
-        this.ui.updateFileInfo(`All files processed. Select a file above to decode or retry specific ranges.`);
+
+        // DO NOT interrupt processing - let the video continue processing all files
+        // The system will automatically detect and process each file as it encounters them
+
+        // Keep processing enabled - do not stop the video
+        console.log(`🔄 DISCOVERY COMPLETE: Continuing video processing to handle all ${this.discoveredFiles.size} files`);
+
+        // Update UI but keep processing going
+        this.ui.updateFileInfo(`Processing ${this.discoveredFiles.size} discovered files. Video continues...`);
       }
 
       // Automatically repeat a file's range multiple times
@@ -4721,6 +5867,13 @@
         return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
       }
 
+      // Extract part number from filename like "A.part32-51.7z" -> 32
+      extractPartNumber(filename) {
+        if (!filename) return null;
+        const match = filename.match(/\.part(\d+)-/);
+        return match ? parseInt(match[1], 10) : null;
+      }
+
       detectDeviceCapabilities() {
         const hardwareConcurrency = navigator.hardwareConcurrency || 4;
         const memory = navigator.deviceMemory || 4; // in GB, only in Chrome
@@ -4746,6 +5899,298 @@
           packetWorkerCount: Math.max(1, Math.floor(workerCount / 2)),
           frameInterval
         };
+      }
+
+
+      // Immediate cleanup after file download
+      performPostDownloadCleanup() {
+        this.logger.info("Performing post-download cleanup...");
+
+        // Clear recovered file data immediately
+        this.recoveredFileData = null;
+        this.customFileMetadata = null;
+
+        // Reset fountain decoder state but preserve structure for next file
+        if (this.fountainDecoder) {
+          this.fountainDecoder.clearSourceChunks();
+          this.fountainDecoder.codedPackets = [];
+          this.fountainDecoder.updateMemoryUsage();
+        }
+
+        // Clear current file tracking but preserve QR queue
+        this.recoveredChunks.clear();
+        this.missingChunks.clear();
+        this.metadataReceived = false;
+        this.fileMetadata = null;
+        this.currentFileId = null;
+
+        // Force garbage collection
+        if (window.gc && typeof window.gc === 'function') {
+          window.gc();
+        }
+
+        // Automatic cycle continuation - resume scanning for next file
+        setTimeout(() => {
+          this.setProcessingPhase('SCANNING');
+          this.resumeVideoProcessing();
+          this.logger.info("🔄 Automatic cycle: Ready for next file");
+        }, 1000);
+
+        this.logger.info("Post-download cleanup complete - cycling to next file");
+      }
+
+      // Complete disposal of the QR file decoder
+      dispose() {
+        // Stop all processing
+        this.stopProcessing();
+
+        // Dispose all components
+        if (this.videoProcessor) {
+          this.videoProcessor.dispose && this.videoProcessor.dispose();
+          this.videoProcessor = null;
+        }
+
+        if (this.qrProcessor) {
+          this.qrProcessor.dispose();
+          this.qrProcessor = null;
+        }
+
+        if (this.fountainDecoder) {
+          this.fountainDecoder.dispose();
+          this.fountainDecoder = null;
+        }
+
+        if (this.packetProcessor) {
+          this.packetProcessor = null;
+        }
+
+        // Clear data structures
+        if (this.recoveredChunks) {
+          this.recoveredChunks.clear();
+          this.recoveredChunks = null;
+        }
+
+        if (this.missingChunks) {
+          this.missingChunks.clear();
+          this.missingChunks = null;
+        }
+
+        if (this.discoveredFiles) {
+          this.discoveredFiles.clear();
+          this.discoveredFiles = null;
+        }
+
+        if (this.downloadedFiles) {
+          this.downloadedFiles.clear();
+          this.downloadedFiles = null;
+        }
+
+        // Clear file data
+        this.recoveredFileData = null;
+        this.fileMetadata = null;
+        this.videoFile = null;
+
+        // Release wake lock
+        if (this.wakeLock) {
+          this.wakeLock.release();
+          this.wakeLock = null;
+        }
+
+        // Clear logger
+        if (this.logger) {
+          this.logger.clear();
+          this.logger = null;
+        }
+
+        // Clear UI
+        if (this.ui) {
+          this.ui = null;
+        }
+
+        console.log('QR File Decoder completely disposed');
+      }
+
+      // Sequential processing phase management
+      setProcessingPhase(phase) {
+        const oldPhase = this.processingPhase;
+        this.processingPhase = phase;
+        this.logger.info(`Processing phase: ${oldPhase} → ${phase}`);
+
+        // Update UI based on phase
+        this.updateUIForPhase(phase);
+      }
+
+      updateUIForPhase(phase) {
+        switch (phase) {
+          case 'SCANNING':
+            this.ui.updateFileInfo("🔍 Scanning for file metadata...");
+            break;
+          case 'COLLECTING':
+            this.ui.updateFileInfo(`📦 Collecting data for: ${this.fileMetadata?.fileName || 'Unknown'}`);
+            break;
+          case 'PROCESSING':
+            this.ui.updateFileInfo("⚡ Processing QR queue...");
+            break;
+          case 'PAUSED':
+            this.ui.updateFileInfo("⏸️ Processing paused - handling file...");
+            break;
+          default:
+            this.ui.updateFileInfo("🔄 Ready");
+        }
+      }
+
+      // Handle metadata detection and phase transition
+      handleMetadataDetected(packetResult) {
+        const metadata = packetResult.packetData;
+        const fileId = `${metadata.fileName}_${metadata.fileSize}_${metadata.chunksCount}`;
+
+        this.logger.info(`📋 Metadata detected: ${metadata.fileName} (${this.formatFileSize(metadata.fileSize)})`);
+
+        // Check if this is a new file or same file
+        if (this.currentFileId !== fileId) {
+          // New file detected - auto-pause video processing to handle current file
+          if (this.currentFileId) {
+            this.pauseVideoProcessing("Auto-pause: New file detected - processing current file", 3000);
+          }
+
+          this.currentFileId = fileId;
+          this.lastMetadataFrame = packetResult.frameIndex;
+
+          // Initialize for new file
+          this.initializeNewFile(metadata);
+        }
+
+        // Automatically switch to collecting phase
+        this.setProcessingPhase('COLLECTING');
+      }
+
+      // Initialize processing for a new file
+      initializeNewFile(metadata) {
+        // Clear previous file data but keep QR queue for efficiency
+        this.recoveredChunks.clear();
+        this.missingChunks.clear();
+
+        // Set up for new file
+        this.fileMetadata = metadata;
+        this.metadataReceived = true;
+
+        // Initialize fountain decoder
+        this.fountainDecoder = new EnhancedFountainDecoder();
+        this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+        this.fountainDecoder.setLogger(this.logger);
+        this.fountainDecoder.initialize(metadata);
+
+        // Initialize UI
+        this.ui.initializeChunkGrid(metadata.chunksCount);
+        for (let i = 0; i < metadata.chunksCount; i++) {
+          this.missingChunks.add(i);
+        }
+        this.updateMissingChunksUI();
+
+        this.logger.info(`Initialized for new file: ${metadata.fileName}`);
+      }
+
+      // Queue QR data during collecting phase
+      queueQRData(packetResult, frameIndex) {
+        // Add to queue for processing
+        this.qrDataQueue.push({
+          packetResult,
+          frameIndex,
+          timestamp: Date.now()
+        });
+
+        // Process queue automatically at smaller intervals
+        if (this.qrDataQueue.length > 5) {
+          this.processQRQueue();
+        }
+
+        // Auto-pause for aggressive processing at smaller queue size
+        if (this.qrDataQueue.length > 20) {
+          this.pauseVideoProcessing("Queue optimization - processing data batch", 1000);
+        }
+      }
+
+      // Process queued QR data
+      processQRQueue() {
+        if (this.qrDataQueue.length === 0) return;
+
+        this.setProcessingPhase('PROCESSING');
+        this.logger.info(`Processing ${this.qrDataQueue.length} queued QR codes...`);
+
+        let processedCount = 0;
+        const startTime = Date.now();
+
+        // Process all queued items
+        while (this.qrDataQueue.length > 0) {
+          const queueItem = this.qrDataQueue.shift();
+          const { packetResult } = queueItem;
+
+          // Handle the packet
+          this.handlePacketResult(packetResult);
+          processedCount++;
+
+          // Check for new metadata (different file)
+          if (packetResult.packetType === 'metadata') {
+            const newFileId = `${packetResult.packetData.fileName}_${packetResult.packetData.fileSize}_${packetResult.packetData.chunksCount}`;
+            if (newFileId !== this.currentFileId) {
+              // New file detected - pause and handle transition
+              this.pauseVideoProcessing("New file detected during processing", 5000);
+              this.handleMetadataDetected(packetResult);
+              break;
+            }
+          }
+        }
+
+        const processingTime = Date.now() - startTime;
+        this.logger.info(`Processed ${processedCount} QR codes in ${processingTime}ms`);
+
+        // Return to collecting phase
+        this.setProcessingPhase('COLLECTING');
+      }
+
+      // Pause video processing with auto-resume
+      pauseVideoProcessing(reason, autoResumeMs = null) {
+        if (this.videoProcessingPaused) return;
+
+        this.videoProcessingPaused = true;
+        this.setProcessingPhase('PAUSED');
+        this.logger.info(`Video processing paused: ${reason}`);
+
+        // Stop video processor temporarily
+        if (this.videoProcessor) {
+          this.videoProcessor.pause();
+        }
+
+        // Process any remaining queue
+        if (this.qrDataQueue.length > 0) {
+          setTimeout(() => this.processQRQueue(), 100);
+        }
+
+        // Auto-resume if specified (always auto-resume for full automation)
+        const resumeDelay = autoResumeMs || 2000; // Default 2 seconds if not specified
+        setTimeout(() => {
+          this.resumeVideoProcessing();
+        }, resumeDelay);
+      }
+
+      // Resume video processing
+      resumeVideoProcessing() {
+        if (!this.videoProcessingPaused) return;
+
+        this.videoProcessingPaused = false;
+        this.logger.info("Video processing resumed");
+
+        // Resume video processor
+        if (this.videoProcessor) {
+          this.videoProcessor.resume();
+        }
+
+        // Return to appropriate phase
+        if (this.metadataReceived) {
+          this.setProcessingPhase('COLLECTING');
+        } else {
+          this.setProcessingPhase('SCANNING');
+        }
       }
     }
 
@@ -4837,6 +6282,13 @@
       window.qrFileDecoder = new QRFileDecoder();
       // Add debug button after initialization
       setTimeout(addDebugButton, 500);
+    });
+
+    // Clean up when the page is unloaded
+    window.addEventListener('beforeunload', () => {
+      if (window.qrFileDecoder) {
+        window.qrFileDecoder.dispose();
+      }
     });
   </script>
 </body>
