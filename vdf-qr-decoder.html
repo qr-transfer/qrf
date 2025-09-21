@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.9.9</title>
+  <title>QR Code File Decoder (Optimized) v1.10.0</title>
   <style>
     /* Base styles */
     :root {
@@ -626,7 +626,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.9.9</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.10.0</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -4501,6 +4501,11 @@
           // Start processing - first loop will be discovery AND chunk capture
           await this.videoProcessor.initialize(this.videoFile);
           this.videoProcessor.discoveryMode = true; // Enable discovery tracking
+
+          // Reset video to start for discovery (like v1.8.1 behavior)
+          this.videoProcessor.videoElement.currentTime = 0;
+          console.log(`🎯 Start Scan: Reset video to start (0s) for discovery`);
+
           this.videoProcessor.startProcessing();
           
           this.logger.info("First loop started - discovering files and capturing chunks simultaneously");
