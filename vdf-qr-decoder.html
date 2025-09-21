@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.9.6</title>
+  <title>QR Code File Decoder (Optimized) v1.9.7</title>
   <style>
     /* Base styles */
     :root {
@@ -626,7 +626,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.9.6</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.9.7</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -3950,8 +3950,16 @@
             // Use HTML5QRCode with proper File object
             this.html5QrCode.scanFile(file, false)
             .then(decodedText => {
-              // Temporarily enable full QR logging to debug metadata detection
-              console.log(`✅ QR detected:`, decodedText.substring(0, 50) + (decodedText.length > 50 ? '...' : ''));
+              // Show unique QR codes only (track what we've seen)
+              if (!this.seenQRCodes) this.seenQRCodes = new Set();
+
+              const qrPreview = decodedText.substring(0, 80);
+              if (!this.seenQRCodes.has(qrPreview)) {
+                this.seenQRCodes.add(qrPreview);
+                console.log(`🆕 NEW QR detected:`, qrPreview + (decodedText.length > 80 ? '...' : ''));
+                console.log(`   Type: ${decodedText.startsWith('M:') ? 'METADATA' : decodedText.startsWith('D:') ? 'DATA' : decodedText.startsWith('F:') ? 'FOUNTAIN' : 'UNKNOWN'}`);
+              }
+
               resolve(decodedText);
             })
             .catch(error => {
