@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.8.8</title>
+  <title>QR Code File Decoder (Optimized) v1.8.9</title>
   <style>
     /* Base styles */
     :root {
@@ -626,7 +626,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.8.8</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.8.9</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -4420,31 +4420,14 @@
 
           console.log(`🔄 Continue: Reset metadata and decoder state to read M: packets first`);
 
-          this.isProcessing = true;
-
           // Clear performance overwhelmed flag
           if (window.performanceStats) {
             window.performanceStats.systemOverwhelmed = false;
           }
 
-          // Continue from where we left off, increment loop count
-          this.videoProcessor.loopCount = (this.videoProcessor.loopCount || 1) + 1;
-          this.videoProcessor.isProcessing = true;
-
-          // Increase frame rate for better detection (faster processing)
-          this.videoProcessor.frameInterval = Math.max(this.videoProcessor.frameInterval / 2, 1);
-
-          console.log(`🔄 Manual continue: Starting loop ${this.videoProcessor.loopCount} from position ${currentPosition.toFixed(2)}s with ${this.videoProcessor.frameInterval}ms interval`);
-          
-          // Update status
-          const loopInfo = document.getElementById('loopInfo');
-          if (loopInfo) {
-            loopInfo.textContent = `Status: Manual continue - loop ${this.videoProcessor.loopCount} from ${currentPosition.toFixed(1)}s...`;
-          }
-          
-          // Use the same startProcessing method as Start Scan (but as resume to preserve position)
+          // Use the same startProcessing method as Start Scan (let it handle all flags and setup)
           console.log(`🎯 Continue: Using proper startProcessing() method from current position: ${currentPosition.toFixed(2)}s`);
-          this.videoProcessor.startProcessing(true); // isResume = true to preserve current position
+          this.videoProcessor.startProcessing(true); // isResume = true, handles all setup internally
           
           // Update UI
           document.getElementById('startScanBtn').disabled = true;
