@@ -4413,8 +4413,9 @@
           this.videoProcessor.discoveryMode = true; // Enable discovery tracking
 
           // Set video to specified position (0 for Start Scan, current for Continue)
-          this.videoProcessor.videoElement.currentTime = videoPosition;
-          console.log(`🎯 Set video position to ${videoPosition.toFixed(2)}s (Start=0, Continue=current)`);
+          const validPosition = isFinite(videoPosition) && videoPosition >= 0 ? videoPosition : 0;
+          this.videoProcessor.videoElement.currentTime = validPosition;
+          console.log(`🎯 Set video position to ${validPosition.toFixed(2)}s (Start=0, Continue=current)`);
 
           this.videoProcessor.startProcessing();
           
