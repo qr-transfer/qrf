@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.10.4</title>
+  <title>QR Code File Decoder (Optimized) v1.10.5</title>
   <style>
     /* Base styles */
     :root {
@@ -627,7 +627,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.10.4</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.10.5</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -5788,6 +5788,13 @@
           videoElement.currentTime = adjustedStartTime;
           console.log(`🎯 Set video position to ${adjustedStartTime.toFixed(2)}s (${metadataOffset}s before ${filename} to catch metadata)`);
           console.log(`📍 Use Continue button to start processing from this position`);
+
+          // Auto-scroll to video element
+          videoElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+          });
+          console.log(`📺 Auto-scrolled to video element`);
         }
       }
 
