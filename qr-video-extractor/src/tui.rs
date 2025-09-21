@@ -340,8 +340,9 @@ impl TuiManager {
             .constraints([
                 Constraint::Length(3),          // Title
                 Constraint::Length(6),          // Phases
-                Constraint::Min(8),             // Chunk tracking
-                Constraint::Length(8),          // Messages
+                Constraint::Min(6),             // Chunk tracking
+                Constraint::Length(6),          // Messages
+                Constraint::Length(3),          // Status bar
             ])
             .split(f.size());
 
@@ -438,13 +439,30 @@ impl TuiManager {
             .messages
             .iter()
             .rev()
-            .take(8)
+            .take(5)
             .map(|m| ListItem::new(m.as_str()))
             .collect();
 
         let messages_list = List::new(messages)
             .block(Block::default().borders(Borders::ALL).title("Recent Messages"));
         f.render_widget(messages_list, chunks[3]);
+
+        // Status bar with controls and system info
+        let total_qr_codes: usize = state.chunks.iter().map(|c| c.qr_codes_found).sum();
+        let completed_chunks = state.chunks.iter().filter(|c| c.status == ChunkStatus::Completed).count();
+        let total_chunks = state.chunks.len();
+
+        let status_text = if total_chunks > 0 {
+            format!("Chunks: {}/{} | QR Codes: {} | Press 'q' or 'Esc' to quit | Press '?' for help",
+                   completed_chunks, total_chunks, total_qr_codes)
+        } else {
+            "Press 'q' or 'Esc' to quit | Press '?' for help".to_string()
+        };
+
+        let status_bar = Paragraph::new(status_text)
+            .block(Block::default().borders(Borders::ALL).title("Controls"))
+            .style(Style::default().fg(Color::Green));
+        f.render_widget(status_bar, chunks[4]);
     }
 }
 

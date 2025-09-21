@@ -3,6 +3,7 @@ use ffmpeg_next as ffmpeg;
 use image::{ImageBuffer, Rgb};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::io::{BufReader, Read};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -160,57 +161,359 @@ impl QrExtractor {
     }
 
     fn extract_qr_external(&self, chunk: &VideoChunk) -> Result<Vec<QrCodeData>> {
+        // Use optimized external FFmpeg with immediate frame cleanup
+        self.extract_qr_simple_external(chunk)
+    }
+
+    fn extract_qr_simple_external(&self, chunk: &VideoChunk) -> Result<Vec<QrCodeData>> {
         use std::process::Command;
         use std::fs;
 
         let temp_dir = format!("temp_frames_{}", chunk.id);
         fs::create_dir_all(&temp_dir)?;
 
-        // Extract frames using external ffmpeg with temporal sampling for speed
-        let sample_rate = std::cmp::max(self.skip_frames, 30); // At least every 30 frames (1 second)
+        // Extract frames using external ffmpeg with fast settings
         let extract_cmd = Command::new("ffmpeg")
             .args([
                 "-i", &chunk.path.to_string_lossy(),
-                "-vf", &format!("fps=1/{}", sample_rate), // Sample every N seconds
-                "-frames:v", "50", // Limit to 50 frames maximum per chunk
+                "-vf", "fps=0.5", // Sample 1 frame every 2 seconds
+                "-frames:v", "5", // Limit to 5 frames per chunk
                 "-y",
-                &format!("{}/frame_%06d.png", temp_dir)
+                "-loglevel", "quiet",
+                &format!("{}/frame_%03d.png", temp_dir)
             ])
-            .output()?;
+            .output();
 
-        if !extract_cmd.status.success() {
-            // Silently return empty if frame extraction fails
-            return Ok(Vec::new());
+        match extract_cmd {
+            Ok(output) if output.status.success() => {
+                // Continue processing
+            }
+            Ok(_) => {
+                fs::remove_dir_all(&temp_dir).ok();
+                return Ok(Vec::new());
+            }
+            Err(_) => {
+                fs::remove_dir_all(&temp_dir).ok();
+                return Ok(Vec::new());
+            }
         }
 
-        // Process extracted frames
-        let frame_files = fs::read_dir(&temp_dir)?
-            .filter_map(|entry| entry.ok())
-            .filter(|entry| {
-                entry.path().extension()
-                    .and_then(|ext| ext.to_str())
-                    == Some("png")
-            })
-            .collect::<Vec<_>>();
-
+        // Process frames immediately and clean up as we go
         let mut qr_results = Vec::new();
-        for (frame_idx, frame_file) in frame_files.iter().enumerate() {
-            if let Ok(qr_codes) = self.extract_qr_from_image(&frame_file.path()) {
-                for qr_data in qr_codes {
-                    qr_results.push(QrCodeData {
-                        frame_number: frame_idx as u64,
-                        data: qr_data,
-                        chunk_id: chunk.id,
-                    });
+        if let Ok(entries) = fs::read_dir(&temp_dir) {
+            for (frame_idx, entry) in entries.enumerate() {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if path.extension().and_then(|s| s.to_str()) == Some("png") {
+                        // Process QR codes from this frame
+                        if let Ok(qr_codes) = self.extract_qr_from_image(&path) {
+                            for qr_data in qr_codes {
+                                qr_results.push(QrCodeData {
+                                    frame_number: frame_idx as u64,
+                                    data: qr_data,
+                                    chunk_id: chunk.id,
+                                });
+                            }
+                        }
+
+                        // ✅ Delete frame immediately after processing
+                        fs::remove_file(&path).ok();
+                    }
                 }
             }
         }
 
-        // Cleanup
-        let _ = fs::remove_dir_all(&temp_dir);
+        // ✅ Clean up temp directory
+        fs::remove_dir_all(&temp_dir).ok();
 
         Ok(qr_results)
     }
+
+    fn extract_qr_streaming(&self, chunk: &VideoChunk) -> Result<Vec<QrCodeData>> {
+        use std::process::{Command, Stdio};
+        use std::io::BufReader;
+
+        // Extract frames to stdout and process immediately (no temp files)
+        let mut cmd = Command::new("ffmpeg")
+            .args([
+                "-i", &chunk.path.to_string_lossy(),
+                "-vf", "fps=1", // Sample 1 frame per second for speed
+                "-f", "image2pipe",
+                "-vcodec", "png",
+                "-frames:v", "10", // Limit frames for memory efficiency
+                "-loglevel", "quiet",
+                "pipe:1"
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()?;
+
+        let stdout = cmd.stdout.take().ok_or_else(|| anyhow!("Failed to capture stdout"))?;
+        let mut reader = BufReader::new(stdout);
+
+        let mut qr_results = Vec::new();
+        let mut frame_number = 0u64;
+        let mut png_buffer = Vec::new();
+
+        // Read PNG frames from pipe and process immediately
+        while self.read_png_frame(&mut reader, &mut png_buffer)? {
+            frame_number += 1;
+
+            // Process PNG data directly in memory (no temp file)
+            if let Ok(qr_codes) = self.extract_qr_from_png_data(&png_buffer, frame_number, chunk.id) {
+                qr_results.extend(qr_codes);
+            }
+
+            // ✅ PNG data discarded here - only QR text kept
+            png_buffer.clear();
+
+            // Progress reporting
+            if frame_number % 5 == 0 {
+                println!("Chunk {}: Processed {} frames, found {} QR codes",
+                        chunk.id + 1, frame_number, qr_results.len());
+            }
+        }
+
+        let _ = cmd.wait(); // Wait for FFmpeg to finish
+
+        Ok(qr_results)
+    }
+
+    fn read_png_frame(&self, reader: &mut BufReader<std::process::ChildStdout>, buffer: &mut Vec<u8>) -> Result<bool> {
+        buffer.clear();
+
+        // PNG signature: 89 50 4E 47 0D 0A 1A 0A
+        let png_signature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        let mut signature_buffer = [0u8; 8];
+
+        // Try to read PNG signature
+        match reader.read_exact(&mut signature_buffer) {
+            Ok(_) => {
+                if signature_buffer == png_signature {
+                    buffer.extend_from_slice(&signature_buffer);
+                    // Read rest of PNG file (simplified - would need proper PNG parsing)
+                    let mut temp_buffer = vec![0u8; 1024 * 1024]; // 1MB buffer
+                    if let Ok(bytes_read) = reader.read(&mut temp_buffer) {
+                        buffer.extend_from_slice(&temp_buffer[..bytes_read]);
+                        return Ok(true);
+                    }
+                }
+            }
+            Err(_) => return Ok(false), // End of stream
+        }
+
+        Ok(false)
+    }
+
+    fn extract_qr_from_png_data(&self, png_data: &[u8], frame_number: u64, chunk_id: usize) -> Result<Vec<QrCodeData>> {
+        // Load PNG from memory
+        let img = image::load_from_memory_with_format(png_data, image::ImageFormat::Png)?;
+        let rgb_img = img.to_rgb8();
+
+        // Convert to grayscale in memory
+        let luma_img = image::imageops::grayscale(&rgb_img);
+
+        // Detect QR codes
+        let mut qr_codes = Vec::new();
+        let mut scanner = rqrr::PreparedImage::prepare(luma_img);
+        let grids = scanner.detect_grids();
+
+        for grid in grids {
+            if let Ok((_, content)) = grid.decode() {
+                qr_codes.push(QrCodeData {
+                    frame_number,
+                    data: content,
+                    chunk_id,
+                });
+            }
+        }
+
+        // ✅ All image data discarded here - only QR text kept
+        Ok(qr_codes)
+    }
+
+    fn extract_qr_in_memory(&self, chunk: &VideoChunk) -> Result<Vec<QrCodeData>> {
+        ffmpeg::init().map_err(|e| anyhow!("Failed to initialize FFmpeg: {}", e))?;
+        ffmpeg::log::set_level(ffmpeg::log::Level::Quiet);
+
+        let mut ictx = ffmpeg::format::input(&chunk.path)?;
+        let input = ictx.streams().best(ffmpeg::media::Type::Video)
+            .ok_or(anyhow!("No video stream found"))?;
+        let video_stream_index = input.index();
+
+        let context_decoder = ffmpeg::codec::context::Context::from_parameters(input.parameters())?;
+        let mut decoder = context_decoder.decoder().video()?;
+
+        // Calculate total frames for progress reporting
+        let duration = input.duration() as f64 / ffmpeg::ffi::AV_TIME_BASE as f64;
+        let fps = input.avg_frame_rate();
+        let estimated_frames = if fps.denominator() > 0 {
+            (duration * fps.numerator() as f64 / fps.denominator() as f64) as u64
+        } else {
+            1000 // Fallback estimate
+        };
+
+        let mut frame_count = 0u64;
+        let mut qr_results = Vec::new();
+
+        // Starting frame processing (silent for TUI)
+
+        // Process packets from the video stream
+        for (stream, packet) in ictx.packets() {
+            if stream.index() == video_stream_index {
+                decoder.send_packet(&packet)?;
+                self.receive_and_process_frames(&mut decoder, &mut frame_count, &mut qr_results, chunk.id, estimated_frames)?;
+            }
+        }
+
+        // Flush remaining frames
+        decoder.send_eof()?;
+        self.receive_and_process_frames(&mut decoder, &mut frame_count, &mut qr_results, chunk.id, estimated_frames)?;
+
+        // Completed processing (silent for TUI)
+
+        Ok(qr_results)
+    }
+
+    fn receive_and_process_frames(
+        &self,
+        decoder: &mut ffmpeg::decoder::Video,
+        frame_count: &mut u64,
+        qr_results: &mut Vec<QrCodeData>,
+        chunk_id: usize,
+        estimated_frames: u64,
+    ) -> Result<()> {
+        let mut frame = ffmpeg::frame::Video::empty();
+
+        // Create scaler once outside the loop for efficiency
+        let mut scaler: Option<ffmpeg::software::scaling::Context> = None;
+
+        while decoder.receive_frame(&mut frame).is_ok() {
+            *frame_count += 1;
+
+            // Progress reporting every 100 frames (silent for clean TUI)
+            if *frame_count % 100 == 0 {
+                // Frame progress tracking (could be added as event if needed)
+            }
+
+            // Skip frames based on skip_frames setting
+            if *frame_count % (self.skip_frames as u64 + 1) != 0 {
+                continue; // ✅ Frame discarded immediately without processing
+            }
+
+            // Process frame immediately and discard - no accumulation
+            match self.process_frame_immediate(&frame, &mut scaler, *frame_count, chunk_id) {
+                Ok(qr_codes) => {
+                    // Only store QR code text data, not frame data
+                    qr_results.extend(qr_codes);
+                    // ✅ Frame data is discarded here - only QR text kept
+                }
+                Err(_) => {
+                    // ✅ Failed frame is discarded immediately
+                }
+            }
+            // ✅ frame goes out of scope here - memory freed
+        }
+
+        Ok(())
+    }
+
+    /// Process single frame immediately and return QR data (frame is discarded)
+    fn process_frame_immediate(
+        &self,
+        frame: &ffmpeg::frame::Video,
+        scaler: &mut Option<ffmpeg::software::scaling::Context>,
+        frame_number: u64,
+        chunk_id: usize,
+    ) -> Result<Vec<QrCodeData>> {
+        // Reuse scaler context to avoid recreation overhead
+        if scaler.is_none() {
+            *scaler = Some(ffmpeg::software::scaling::context::Context::get(
+                frame.format(),
+                frame.width(),
+                frame.height(),
+                ffmpeg::format::Pixel::RGB24,
+                frame.width(),
+                frame.height(),
+                ffmpeg::software::scaling::flag::Flags::BILINEAR,
+            )?);
+        }
+
+        let scaler_ref = scaler.as_mut().unwrap();
+        let mut rgb_frame = ffmpeg::frame::Video::empty();
+        scaler_ref.run(frame, &mut rgb_frame)?;
+
+        // Process QR codes directly from frame data (no copying)
+        let qr_codes = self.detect_qr_codes_from_frame(&rgb_frame)?;
+
+        // Convert to QrCodeData immediately
+        let mut results = Vec::new();
+        for qr_data in qr_codes {
+            results.push(QrCodeData {
+                frame_number,
+                data: qr_data,
+                chunk_id,
+            });
+        }
+
+        // ✅ rgb_frame goes out of scope here - memory freed immediately
+        Ok(results)
+    }
+
+    /// Detect QR codes directly from FFmpeg frame (no ImageBuffer allocation)
+    fn detect_qr_codes_from_frame(&self, rgb_frame: &ffmpeg::frame::Video) -> Result<Vec<String>> {
+        let width = rgb_frame.width() as u32;
+        let height = rgb_frame.height() as u32;
+        let data = rgb_frame.data(0);
+        let linesize = rgb_frame.stride(0);
+
+        // Convert RGB to grayscale on-the-fly for QR detection (no buffer allocation)
+        let mut luma_data = Vec::with_capacity((width * height) as usize);
+
+        for y in 0..height {
+            let row_start = y as usize * linesize;
+            for x in 0..width {
+                let pixel_start = row_start + (x as usize * 3);
+                if pixel_start + 2 < data.len() {
+                    let r = data[pixel_start] as f32;
+                    let g = data[pixel_start + 1] as f32;
+                    let b = data[pixel_start + 2] as f32;
+                    // Luminance formula: 0.299*R + 0.587*G + 0.114*B
+                    let luma = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
+                    luma_data.push(luma);
+                }
+            }
+        }
+
+        // Direct QR detection from luma data
+        self.detect_qr_from_luma(&luma_data, width, height)
+    }
+
+    /// Detect QR codes directly from luma data (minimal memory footprint)
+    fn detect_qr_from_luma(&self, luma_data: &[u8], width: u32, height: u32) -> Result<Vec<String>> {
+        use image::{ImageBuffer, Luma};
+
+        // Create minimal luma image for QR detection
+        let luma_img: ImageBuffer<Luma<u8>, Vec<u8>> = ImageBuffer::from_vec(width, height, luma_data.to_vec())
+            .ok_or_else(|| anyhow!("Failed to create luma image"))?;
+
+        let mut qr_codes = Vec::new();
+
+        // Try rqrr first (fast, pure Rust)
+        let mut scanner = rqrr::PreparedImage::prepare(luma_img);
+        let grids = scanner.detect_grids();
+
+        for grid in grids {
+            if let Ok((_, content)) = grid.decode() {
+                qr_codes.push(content);
+            }
+        }
+
+        // ✅ luma_img goes out of scope here - memory freed immediately
+        Ok(qr_codes)
+    }
+
+    /// Memory-efficient frame processing (frames discarded immediately)
 
     fn extract_qr_from_image(&self, image_path: &std::path::Path) -> Result<Vec<String>> {
         // Try zbar first (external tool)

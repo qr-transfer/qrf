@@ -103,7 +103,7 @@ impl VideoProcessor {
         Ok(video_info)
     }
 
-    pub fn split_by_count(&self, chunk_count: usize, callback: &EventCallback) -> Result<Vec<VideoChunk>> {
+    pub fn split_by_count(&self, chunk_count: usize, output_dir: &PathBuf, callback: &EventCallback) -> Result<Vec<VideoChunk>> {
         let video_info = self.video_info.as_ref()
             .ok_or_else(|| anyhow!("Video info not available. Call get_video_info first."))?;
 
@@ -125,7 +125,7 @@ impl VideoProcessor {
                 (i + 1) as f64 * chunk_duration
             };
 
-            let chunk_path = PathBuf::from(format!("chunk_{:03}.mp4", i + 1));
+            let chunk_path = output_dir.join(format!("chunk_{:03}.mp4", i + 1));
 
             chunks.push(VideoChunk {
                 id: i,
@@ -148,7 +148,7 @@ impl VideoProcessor {
         Ok(chunks)
     }
 
-    pub fn split_by_duration(&self, duration_per_chunk: f64, callback: &EventCallback) -> Result<Vec<VideoChunk>> {
+    pub fn split_by_duration(&self, duration_per_chunk: f64, output_dir: &PathBuf, callback: &EventCallback) -> Result<Vec<VideoChunk>> {
         let video_info = self.video_info.as_ref()
             .ok_or_else(|| anyhow!("Video info not available. Call get_video_info first."))?;
 
@@ -168,7 +168,7 @@ impl VideoProcessor {
             let start_time = i as f64 * duration_per_chunk;
             let end_time = ((i + 1) as f64 * duration_per_chunk).min(video_info.duration);
 
-            let chunk_path = PathBuf::from(format!("chunk_{:03}.mp4", i + 1));
+            let chunk_path = output_dir.join(format!("chunk_{:03}.mp4", i + 1));
 
             chunks.push(VideoChunk {
                 id: i,
