@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.9.3</title>
+  <title>QR Code File Decoder (Optimized) v1.9.4</title>
   <style>
     /* Base styles */
     :root {
@@ -626,7 +626,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.9.3</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.9.4</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -4478,13 +4478,20 @@
         // Stop button always enabled
         
         try {
-          // Initialize components
-          await this.initializeComponents();
-          
+          // Ensure components are initialized (should already be done on page load)
+          if (!this.qrProcessor || !this.packetProcessor || !this.videoProcessor) {
+            console.log('🔧 Initializing missing components for Start Scan...');
+            await this.initializeComponents();
+          }
+
           // Start processing - first loop will be discovery AND chunk capture
-          await this.videoProcessor.initialize(this.videoFile);
-          this.videoProcessor.discoveryMode = true; // Enable discovery tracking
-          this.videoProcessor.startProcessing();
+          if (this.videoProcessor) {
+            await this.videoProcessor.initialize(this.videoFile);
+            this.videoProcessor.discoveryMode = true; // Enable discovery tracking
+            this.videoProcessor.startProcessing();
+          } else {
+            throw new Error('Video processor not available');
+          }
           
           this.logger.info("First loop started - discovering files and capturing chunks simultaneously");
         } catch (error) {
