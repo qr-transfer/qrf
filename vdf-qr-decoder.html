@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.9.8</title>
+  <title>QR Code File Decoder (Optimized) v1.9.9</title>
   <style>
     /* Base styles */
     :root {
@@ -626,7 +626,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.9.8</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.9.9</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -4239,8 +4239,8 @@
             // Ensure video stays muted after metadata load
             videoElement.muted = true;
 
-            // Reinitialize system state for new video file
-            await this.initializeSystemState();
+            // Skip system initialization on video load (like v1.8.1 - initialize only in Start Scan)
+            // await this.initializeSystemState();
 
             document.getElementById('startScanBtn').disabled = false;
             // Continue button is always enabled (no longer disabled)
@@ -6628,8 +6628,8 @@
     document.addEventListener('DOMContentLoaded', async () => {
       window.qrFileDecoder = new QRFileDecoder();
 
-      // Complete system initialization on page load
-      await window.qrFileDecoder.initializeSystemState();
+      // Skip system initialization on page load (like v1.8.1 - initialize only in Start Scan)
+      // await window.qrFileDecoder.initializeSystemState();
 
       // Add debug button after initialization
       setTimeout(addDebugButton, 500);
