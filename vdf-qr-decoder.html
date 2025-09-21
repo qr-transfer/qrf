@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.8.5</title>
+  <title>QR Code File Decoder (Optimized) v1.8.6</title>
   <style>
     /* Base styles */
     :root {
@@ -626,7 +626,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.8.5</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.8.6</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -5843,16 +5843,19 @@
 
         this.logger.info(`Repeating range for ${filename}: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s`);
 
-        // Set video to file's start time
+        // Set video to slightly before file's start time to catch metadata packet
+        const metadataOffset = 3.0; // Go 3 seconds earlier to catch M: metadata packet
+        const adjustedStartTime = Math.max(0, startTime - metadataOffset);
+
         if (this.videoProcessor) {
-          this.videoProcessor.videoElement.currentTime = startTime;
-          console.log(`🎯 Set video position to ${startTime.toFixed(2)}s for ${filename}`);
+          this.videoProcessor.videoElement.currentTime = adjustedStartTime;
+          console.log(`🎯 Set video position to ${adjustedStartTime.toFixed(2)}s (${metadataOffset}s before ${filename} to catch metadata)`);
         } else {
           // If no video processor, set the preview video element
           const videoElement = document.getElementById('videoPreview');
           if (videoElement) {
-            videoElement.currentTime = startTime;
-            console.log(`🎯 Set video position to ${startTime.toFixed(2)}s for ${filename}`);
+            videoElement.currentTime = adjustedStartTime;
+            console.log(`🎯 Set video position to ${adjustedStartTime.toFixed(2)}s (${metadataOffset}s before ${filename} to catch metadata)`);
           }
         }
 
