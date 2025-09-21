@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.10.1</title>
+  <title>QR Code File Decoder (Optimized) v1.10.2</title>
   <style>
     /* Base styles */
     :root {
@@ -22,6 +22,7 @@
     * {
       box-sizing: border-box;
       margin: 0;
+      font-size: 0.8em; /* 20% smaller globally */
       padding: 0;
     }
 
@@ -626,7 +627,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.10.1</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.10.2</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -4400,86 +4401,16 @@
       }
 
       async continueProcessing() {
-        // Stop any existing processing and clean memory while preserving file state
-        if (this.isProcessing) {
-          this.stopProcessing();
-          await this.cleanMemoryPreserveState();
-        }
+        // Get current video position before any processing
+        const videoElement = this.videoProcessor?.videoElement || document.getElementById('videoPreview');
+        const currentPosition = videoElement ? videoElement.currentTime : 0;
 
-        this.logger.info("Continuing video processing with additional loops...");
-
-        // Ensure components are initialized (should be done on page load)
-        if (!this.qrProcessor || !this.packetProcessor || !this.videoProcessor) {
-          console.log('🔧 Initializing missing components...');
-
-          // Save current video position before initialization
-          const videoElement = document.getElementById('videoPreview');
-          const savedPosition = videoElement ? videoElement.currentTime : 0;
-          console.log(`💾 Saving video position: ${savedPosition.toFixed(2)}s before initialization`);
-
-          await this.initializeComponents();
-
-          if (this.videoFile && this.videoProcessor) {
-            await this.videoProcessor.initialize(this.videoFile);
-
-            // Restore saved video position after initialization
-            this.videoProcessor.videoElement.currentTime = savedPosition;
-            console.log(`🔄 Restored video position to: ${savedPosition.toFixed(2)}s after initialization`);
-          }
-        }
-
-        // Continue from current video position
-        if (this.videoProcessor && this.videoFile) {
-          const currentPosition = this.videoProcessor.videoElement.currentTime;
-          console.log(`🔄 Continue: Processing from current position (${currentPosition.toFixed(2)}s)`);
-
-          // Always keep discovery mode true (as suggested)
-          this.discoveryMode = true;
-
-          // Reset chunk grid for new file processing
-          this.ui.resetChunkGrid();
-
-          // Reset metadata state so it reads M: packets when encountered
-          this.metadataReceived = false;
-          this.fileMetadata = null;
-          this.currentActiveFile = null;
-
-          // Clear fountain decoder so it reinitializes with new metadata
-          if (this.fountainDecoder) {
-            this.fountainDecoder = null;
-          }
-
-          console.log(`🔄 Continue: Reset metadata and decoder state to read M: packets first`);
-
-          // Set processing phase like Start Scan does
-          this.setProcessingPhase('SCANNING');
-
-          // Initialize processing queues and state like Start Scan does
-          this.currentFileId = null;
-          this.currentFileChecksum = null;
-          this.qrDataQueue = [];
-          this.frameDiscardCount = 0;
-          this.videoProcessingPaused = false;
-
-          // Clear performance overwhelmed flag
-          if (window.performanceStats) {
-            window.performanceStats.systemOverwhelmed = false;
-          }
-
-          // Use the same startProcessing method as Start Scan (let it handle all flags and setup)
-          console.log(`🎯 Continue: Using proper startProcessing() method from current position: ${currentPosition.toFixed(2)}s`);
-          await this.videoProcessor.startProcessing(true); // isResume = true, handles all setup internally
-          
-          // Update UI
-          document.getElementById('startScanBtn').disabled = true;
-            // Stop button always enabled
-        } else {
-          this.logger.error("Cannot continue - video processor or file not available");
-        }
+        // Use the same logic as Start Scan but with current position
+        await this.startScanAndDiscover(currentPosition);
       }
 
       // Start scan with automatic discovery (first loop is always discovery)
-      async startScanAndDiscover() {
+      async startScanAndDiscover(videoPosition = 0) {
         if (this.isProcessing) return;
         
         this.logger.info("Starting scan with automatic file discovery...");
@@ -4512,9 +4443,9 @@
           await this.videoProcessor.initialize(this.videoFile);
           this.videoProcessor.discoveryMode = true; // Enable discovery tracking
 
-          // Reset video to start for discovery (like v1.8.1 behavior)
-          this.videoProcessor.videoElement.currentTime = 0;
-          console.log(`🎯 Start Scan: Reset video to start (0s) for discovery`);
+          // Set video to specified position (0 for Start Scan, current for Continue)
+          this.videoProcessor.videoElement.currentTime = videoPosition;
+          console.log(`🎯 Set video position to ${videoPosition.toFixed(2)}s (Start=0, Continue=current)`);
 
           this.videoProcessor.startProcessing();
           
