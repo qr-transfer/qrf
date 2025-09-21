@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.9.1</title>
+  <title>QR Code File Decoder (Optimized) v1.9.2</title>
   <style>
     /* Base styles */
     :root {
@@ -626,12 +626,12 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.9.1</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.9.2</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
       <button id="continueBtn" style="background-color: #10b981; padding: 8px 12px; font-size: 0.9em;">Continue</button>
-      <button id="stopScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Stop</button>
+      <button id="stopScanBtn" style="padding: 8px 12px; font-size: 0.9em;">Stop</button>
       <button id="resetBtn" style="padding: 8px 12px; font-size: 0.9em;">Reset</button>
       <button id="exportStateBtn" style="background-color: #f59e0b; padding: 8px 12px; font-size: 0.9em;">Export</button>
       <button id="importStateBtn" style="background-color: #8b5cf6; padding: 8px 12px; font-size: 0.9em;">Import</button>
@@ -3056,7 +3056,7 @@
           if (this.frameStats.processed % 30 === 0) {
             const avgTime = this.frameStats.processingTimes.reduce((sum, time) => sum + time, 0) /
               this.frameStats.processingTimes.length;
-            console.log(`Avg frame processing time: ${avgTime.toFixed(2)}ms over last ${this.frameStats.processingTimes.length} frames`);
+            // Average frame time logging disabled for normal operation
 
             // Check if we need to pause processing for buffer management
             if (this.shouldPauseForBufferManagement(avgTime)) {
@@ -3170,8 +3170,7 @@
       shouldPauseForBufferManagement(avgProcessingTime) {
         // CHECK: Auto-pause disabled by user setting
         if (window.qrFileDecoder && window.qrFileDecoder.settings && window.qrFileDecoder.settings.disableAutoPause) {
-          console.log(`🚫 AUTO-PAUSE DISABLED: Processing time ${avgProcessingTime.toFixed(2)}ms but auto-pause is disabled by user setting`);
-          return false;
+          return false; // Auto-pause disabled, skip verbose logging
         }
 
         // Pause if processing time is consistently high
@@ -4291,7 +4290,7 @@
 
         // Update UI
         document.getElementById('startScanBtn').disabled = true;
-        document.getElementById('stopScanBtn').disabled = false;
+        // Stop button always enabled
         document.getElementById('downloadContainer').style.display = 'none';
         this.ui.resetChunkGrid();
         this.ui.updateFileInfo("Processing video...");
@@ -4436,7 +4435,7 @@
           
           // Update UI
           document.getElementById('startScanBtn').disabled = true;
-            document.getElementById('stopScanBtn').disabled = false;
+            // Stop button always enabled
         } else {
           this.logger.error("Cannot continue - video processor or file not available");
         }
@@ -4466,7 +4465,7 @@
         
         // Update UI
         document.getElementById('startScanBtn').disabled = true;
-        document.getElementById('stopScanBtn').disabled = false;
+        // Stop button always enabled
         
         try {
           // Initialize components
@@ -4647,7 +4646,7 @@
           // Update UI
           document.getElementById('startScanBtn').disabled = true;
           document.getElementById('discoverBtn').disabled = true;
-            document.getElementById('stopScanBtn').disabled = false;
+            // Stop button always enabled
           
           this.ui.updateFileInfo(`Processing file: ${filename}`);
           this.ui.resetChunkGrid();
@@ -4684,7 +4683,7 @@
 
         // Update UI
         document.getElementById('startScanBtn').disabled = false;
-        document.getElementById('stopScanBtn').disabled = true;
+        // Stop button always enabled
         
         // Continue button is always enabled (no state management needed)
         
