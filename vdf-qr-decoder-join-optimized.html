@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.8.0</title>
+  <title>QR Code File Decoder (Optimized) v1.8.1</title>
   <style>
     /* Base styles */
     :root {
@@ -595,13 +595,16 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1>QR Code File Decoder (Optimized) <span style="font-size: 0.6em; color: #666;">v1.8.0</span></h1>
+    <h1>QR Code File Decoder (Optimized) <span style="font-size: 0.6em; color: #666;">v1.8.1</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled>Start Scan & Discover</button>
       <button id="continueBtn" disabled style="background-color: #10b981;">Continue</button>
       <button id="stopScanBtn" disabled>Stop Scan</button>
       <button id="resetBtn">Reset Contents</button>
+      <button id="exportStateBtn" style="background-color: #f59e0b;">Export State</button>
+      <button id="importStateBtn" style="background-color: #8b5cf6;">Import State</button>
+      <input type="file" id="stateFileInput" accept=".json" style="display: none;">
       <button id="settingsBtn">Advanced Settings</button>
     </div>
   </header>
@@ -4165,6 +4168,9 @@
         document.querySelector('.modal .close').addEventListener('click', this.ui.hideSettingsModal.bind(this.ui));
 
         document.getElementById('resetBtn').addEventListener('click', this.resetContents.bind(this));
+        document.getElementById('exportStateBtn').addEventListener('click', this.exportState.bind(this));
+        document.getElementById('importStateBtn').addEventListener('click', this.importState.bind(this));
+        document.getElementById('stateFileInput').addEventListener('change', this.handleStateFileImport.bind(this));
         
         // Advanced settings real-time updates
         document.getElementById('frameInterval').addEventListener('input', (e) => {
@@ -4337,9 +4343,9 @@
 
       async continueProcessing() {
         if (this.isProcessing) return;
-        
+
         this.logger.info("Continuing video processing with additional loops...");
-        
+
         // Check if we need to reinitialize QR processor (in case it was disposed)
         if (!this.qrProcessor) {
           this.logger.info("Reinitializing QR processor for continue...");
@@ -4350,23 +4356,24 @@
           });
           await this.qrProcessor.initialize();
         }
-        
-        // Initialize video processor if it doesn't exist (but preserve video position)
+
+        // Initialize video processor if it doesn't exist
         if (!this.videoProcessor && this.videoFile) {
           console.log('🔧 No video processor found, initializing new one...');
-          const videoElement = document.getElementById('videoPreview');
-          const savedPosition = videoElement.currentTime; // Save current position
-          
+
           await this.initializeComponents();
           await this.videoProcessor.initialize(this.videoFile);
-          
-          // Restore the video position after initialization
-          this.videoProcessor.videoElement.currentTime = savedPosition;
-          console.log(`🎯 Restored video position to ${savedPosition.toFixed(2)}s after initialization`);
+
+          // Reset to start to capture systematic data packets first
+          this.videoProcessor.videoElement.currentTime = 0;
+          console.log(`🎯 Reset video to start (0s) to capture systematic data packets`);
         }
         
-        // Re-enable processing and force additional loops
+        // Reset to start to capture metadata and systematic packets
         if (this.videoProcessor && this.videoFile) {
+          this.videoProcessor.videoElement.currentTime = 0;
+          console.log(`🔄 Continue: Reset to start (0s) to read metadata and systematic packets first`);
+
           this.isProcessing = true;
 
           // Clear performance overwhelmed flag
@@ -6137,6 +6144,104 @@
         }
 
         console.log('QR File Decoder completely disposed');
+      }
+
+      // Export discovered files state to JSON
+      exportState() {
+        const stateData = {
+          version: "1.8.0",
+          timestamp: new Date().toISOString(),
+          discoveredFiles: Array.from(this.discoveredFiles.entries()).map(([filename, info]) => ({
+            filename,
+            metadata: info.metadata,
+            firstSeenAt: info.firstSeenAt,
+            lastSeenAt: info.lastSeenAt,
+            completed: info.completed || false,
+            downloaded: this.downloadedFiles.has(filename),
+            partialChunks: info.partialChunks || 0,
+            totalChunks: info.totalChunks || 0
+          })),
+          downloadedFiles: Array.from(this.downloadedFiles),
+          videoPosition: this.videoProcessor?.videoElement?.currentTime || 0
+        };
+
+        const blob = new Blob([JSON.stringify(stateData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `qr-decoder-state-${new Date().getTime()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        console.log(`📥 Exported state: ${this.discoveredFiles.size} files, ${this.downloadedFiles.size} downloaded`);
+      }
+
+      // Import state from JSON file
+      importState() {
+        document.getElementById('stateFileInput').click();
+      }
+
+      // Handle state file import
+      handleStateFileImport(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const stateData = JSON.parse(e.target.result);
+
+            // Restore discovered files
+            this.discoveredFiles.clear();
+            stateData.discoveredFiles.forEach(fileInfo => {
+              this.discoveredFiles.set(fileInfo.filename, {
+                metadata: fileInfo.metadata,
+                firstSeenAt: fileInfo.firstSeenAt,
+                lastSeenAt: fileInfo.lastSeenAt,
+                completed: fileInfo.completed,
+                partialChunks: fileInfo.partialChunks,
+                totalChunks: fileInfo.totalChunks
+              });
+            });
+
+            // Restore downloaded files
+            this.downloadedFiles.clear();
+            stateData.downloadedFiles.forEach(filename => {
+              this.downloadedFiles.add(filename);
+            });
+
+            // Update UI
+            this.updateDiscoveredFilesUI();
+
+            console.log(`📤 Imported state: ${this.discoveredFiles.size} files, ${this.downloadedFiles.size} downloaded`);
+
+            // Reset file input
+            event.target.value = '';
+
+          } catch (error) {
+            console.error('Failed to import state:', error);
+            alert('Failed to import state file. Please check the file format.');
+          }
+        };
+        reader.readAsText(file);
+      }
+
+      // Get list of incomplete files for targeted processing
+      getIncompleteFiles() {
+        const incomplete = [];
+        this.discoveredFiles.forEach((fileInfo, filename) => {
+          const isCompleted = fileInfo.completed || this.downloadedFiles.has(filename);
+          if (!isCompleted) {
+            incomplete.push({
+              filename,
+              progress: `${fileInfo.partialChunks || 0}/${fileInfo.totalChunks || 0}`,
+              timeRange: `${this.formatTimeToHMS(fileInfo.firstSeenAt)} - ${this.formatTimeToHMS(fileInfo.lastSeenAt)}`
+            });
+          }
+        });
+        return incomplete;
       }
 
       // Sequential processing phase management
