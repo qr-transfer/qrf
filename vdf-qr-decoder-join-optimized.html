@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.5.1</title>
+  <title>QR Code File Decoder (Optimized) v1.8.0</title>
   <style>
     /* Base styles */
     :root {
@@ -37,7 +37,7 @@
 
     h1,
     h2 {
-      margin-bottom: 1rem;
+      margin-bottom: 0.5rem;
     }
 
     button {
@@ -106,7 +106,7 @@
     }
 
     .progress-container {
-      margin-top: 10px;
+      margin-top: 5px;
     }
 
     .progress-bar {
@@ -174,37 +174,37 @@
     .recovery-stats {
       background: rgba(255, 255, 255, 0.8);
       border-radius: 8px;
-      padding: 15px;
-      margin-bottom: 15px;
+      padding: 8px;
+      margin-bottom: 8px;
       border: 1px solid var(--border-color);
     }
 
     .stat-group {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 15px;
-      margin-bottom: 15px;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 6px;
+      margin-bottom: 6px;
     }
 
     .stat-item {
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 10px;
+      padding: 5px;
       background: rgba(249, 250, 251, 0.8);
       border-radius: 6px;
       border: 1px solid rgba(229, 231, 235, 0.5);
     }
 
     .stat-label {
-      font-size: 12px;
+      font-size: 11px;
       color: #6b7280;
       font-weight: 500;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
 
     .stat-value {
-      font-size: 18px;
+      font-size: 16px;
       font-weight: bold;
       color: var(--text-color);
     }
@@ -218,20 +218,20 @@
     }
 
     .stat-total {
-      font-size: 14px;
+      font-size: 12px;
       color: #6b7280;
     }
 
     /* Enhanced Progress Bar */
     .progress-bar-container {
-      margin-top: 15px;
+      margin-top: 8px;
     }
 
     .progress-bar {
       width: 100%;
-      height: 24px;
+      height: 18px;
       background: #f3f4f6;
-      border-radius: 12px;
+      border-radius: 9px;
       position: relative;
       overflow: hidden;
       border: 1px solid #e5e7eb;
@@ -271,12 +271,12 @@
       background: rgba(248, 250, 252, 0.9);
       border: 1px solid #e2e8f0;
       border-radius: 8px;
-      padding: 15px;
-      margin-top: 15px;
+      padding: 10px;
+      margin-top: 10px;
     }
 
     .validation-panel h3 {
-      margin: 0 0 15px 0;
+      margin: 0 0 8px 0;
       color: #374151;
       font-size: 16px;
     }
@@ -284,8 +284,8 @@
     .validation-stats {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 10px;
-      margin-bottom: 15px;
+      gap: 8px;
+      margin-bottom: 10px;
     }
 
     .validation-item {
@@ -393,10 +393,10 @@
     /* File information */
     .file-info-container {
       background-color: var(--panel-bg);
-      padding: 15px;
+      padding: 10px;
       border-radius: 8px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-      margin-bottom: 20px;
+      margin-bottom: 15px;
     }
 
     #downloadContainer {
@@ -595,7 +595,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1>QR Code File Decoder (Optimized) <span style="font-size: 0.6em; color: #666;">v1.4.0</span></h1>
+    <h1>QR Code File Decoder (Optimized) <span style="font-size: 0.6em; color: #666;">v1.8.0</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled>Start Scan & Discover</button>
@@ -607,7 +607,7 @@
   </header>
 
   <!-- File Information and Stats Container -->
-  <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 20px;">
+  <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;">
     <!-- File Information -->
     <div class="file-info-container" style="flex: 1; min-width: 400px;">
       <h2>File Information</h2>
@@ -834,7 +834,7 @@
     class Logger {
       constructor(logElementId) {
         this.logElement = document.getElementById(logElementId);
-        this.filter = 'all';
+        this.filter = 'warn'; // Start with warnings only for less verbose logging
         this.maxEntries = 500;
         this.entries = [];
       }
@@ -1046,8 +1046,9 @@
         document.getElementById('missingCount').textContent = missing;
         document.getElementById('verifiedCount').textContent = verified;
 
-        // Calculate and update percentage
-        const recoveryPercentage = totalChunks > 0 ? Math.round((recovered / totalChunks) * 100) : 0;
+        // Calculate and update percentage (more precise for near-completion)
+        const recoveryPercentage = totalChunks > 0 ?
+          (recovered === totalChunks ? 100 : Math.floor((recovered / totalChunks) * 100)) : 0;
         const verificationPercentage = totalChunks > 0 ? Math.round((verified / totalChunks) * 100) : 0;
 
         document.getElementById('recoveryPercentage').textContent = `${recoveryPercentage}%`;
@@ -1200,42 +1201,9 @@
         }
       }
 
-      // Verify All Recovered Chunks (Data Integrity Check)
-      async verifyAllChunks() {
-        const recoveredChunks = document.querySelectorAll('.chunk.received:not(.verified)');
-        let verifiedCount = 0;
-        let invalidCount = 0;
+      // verifyAllChunks() removed - fountain decoder checksum validation is authoritative
 
-        for (const chunk of recoveredChunks) {
-          const chunkIndex = parseInt(chunk.dataset.index);
-
-          // Simulate data integrity check (replace with actual validation logic)
-          const isValid = await this.verifyChunkIntegrity(chunkIndex);
-
-          if (isValid) {
-            this.markChunkAsVerified(chunkIndex);
-            verifiedCount++;
-          } else {
-            this.markChunkAsInvalid(chunkIndex, 'Checksum validation failed');
-            invalidCount++;
-          }
-        }
-
-        this.logger.info(`Chunk verification complete: ${verifiedCount} verified, ${invalidCount} invalid`);
-        return { verified: verifiedCount, invalid: invalidCount };
-      }
-
-      // Individual Chunk Integrity Verification
-      async verifyChunkIntegrity(chunkIndex) {
-        // This would connect to your actual chunk data validation logic
-        // For now, simulate verification with random success (replace with real validation)
-        return new Promise(resolve => {
-          setTimeout(() => {
-            // Simulate 95% success rate for demo
-            resolve(Math.random() > 0.05);
-          }, 50);
-        });
-      }
+      // verifyChunkIntegrity() removed - unused after disabling verifyAllChunks()
 
       showSettingsModal() {
         // Populate form with current settings
@@ -1679,7 +1647,6 @@
               if (chunkIndex >= 0 && chunkIndex < numChunks) {
                 sourceChunks.push(chunkIndex);
                 systematicDataChunks.push({ chunkIndex: chunkIndex, chunkData: chunkData });
-                console.debug(`  Record ${i+1}: chunk ${chunkIndex} (${chunkData.length} base64 chars)`);
               } else {
                 console.warn(`  Invalid chunk index ${chunkIndex} in record ${i+1}`);
               }
@@ -1783,10 +1750,12 @@
         }
       }
 
-      // Add base64 decoder for XOR data
+      // Add base64 decoder for XOR data with validation and padding fix
       base64ToUint8Array(base64) {
         try {
-          const binaryString = atob(base64);
+          // Fix base64 padding if needed
+          const fixedBase64 = this.fixBase64Padding(base64);
+          const binaryString = atob(fixedBase64);
           const bytes = new Uint8Array(binaryString.length);
           for (let i = 0; i < binaryString.length; i++) {
             bytes[i] = binaryString.charCodeAt(i);
@@ -1796,6 +1765,19 @@
           console.error("Error decoding base64:", e);
           return new Uint8Array(0);
         }
+      }
+
+      // Fix base64 padding issues
+      fixBase64Padding(base64) {
+        // Remove any whitespace
+        let cleaned = base64.replace(/\s/g, '');
+
+        // Add padding if needed
+        while (cleaned.length % 4 !== 0) {
+          cleaned += '=';
+        }
+
+        return cleaned;
       }
 
       // Check if string is valid base64
@@ -1945,18 +1927,11 @@
                   }
                 }
               } catch (e) {
-                // Fallback to string conversion for legacy packets
-                console.warn(`❌ Failed to decode base64 for chunk ${chunkIndex}: ${e.message}`);
-                if (debugMode) {
-                  console.warn(`  Error details: ${e.stack}`);
-                  console.warn(`  Base64 data: ${chunk.chunkData.substring(0, 50)}...`);
-                }
-                console.warn(`  Using string conversion fallback`);
-                chunkData = this.stringToUint8Array(chunk.chunkData);
-                
-                if (debugMode) {
-                  console.warn(`  String conversion result: ${chunkData.length} bytes, first 4: [${Array.from(chunkData.slice(0, 4)).join(', ')}]`);
-                }
+                // Base64 decoding failed - reject this chunk to prevent data corruption
+                console.error(`❌ Base64 decoding failed for chunk ${chunkIndex}: ${e.message}`);
+                console.error(`  Base64 data: ${chunk.chunkData.substring(0, 50)}...`);
+                console.error(`  Rejecting corrupted chunk data`);
+                return; // Skip this corrupted chunk
               }
               this.storeSourceChunk(chunkIndex, chunkData);
               this.newlyRecoveredChunks.push(chunkIndex);
@@ -2039,7 +2014,10 @@
           let iterationsThisPass = 0;
           const maxIterationsPerPass = 100; // Prevent infinite loops
 
-          console.log(`🔄 Starting decoding pass ${pass}/${maxPasses}, recovered: ${this.recoveredChunkCount}/${this.totalChunks}`);
+          // Reduced verbosity - only log first and final passes
+          if (pass === 1 || pass === maxPasses || this.recoveredChunkCount === this.totalChunks) {
+            console.log(`🔄 Starting decoding pass ${pass}/${maxPasses}, recovered: ${this.recoveredChunkCount}/${this.totalChunks}`);
+          }
 
           // Continue iterating within this pass until no more progress
           do {
@@ -2099,7 +2077,10 @@
 
           } while (passProgress && this.recoveredChunkCount < this.totalChunks);
 
-          console.log(`📊 Pass ${pass} completed: ${iterationsThisPass} iterations, progress: ${passProgress}`);
+          // Reduced verbosity - only log passes with progress or warnings
+          if (passProgress || pass === maxPasses || this.recoveredChunkCount === this.totalChunks) {
+            console.log(`📊 Pass ${pass} completed: ${iterationsThisPass} iterations, progress: ${passProgress}`);
+          }
 
           // If we recovered all chunks, stop
           if (this.recoveredChunkCount === this.totalChunks) {
@@ -2109,7 +2090,7 @@
 
           // If no progress in this pass, try one more pass (maybe packets can help each other)
           if (!passProgress && pass < maxPasses) {
-            console.log(`⚠️ No progress in pass ${pass}, continuing to pass ${pass + 1}`);
+            // No progress logging disabled
           }
         }
 
@@ -2120,7 +2101,7 @@
         } else {
           const remainingPackets = this.codedPackets.length;
           const recoveryRate = ((this.recoveredChunkCount / this.totalChunks) * 100).toFixed(1);
-          console.log(`📈 Decoding complete: ${this.recoveredChunkCount}/${this.totalChunks} chunks (${recoveryRate}%), ${remainingPackets} packets remaining`);
+          // Decoding complete logging disabled
         }
         
       }
@@ -2136,7 +2117,6 @@
 
           this.sourceChunks[index] = data;
           this.recoveredChunkCount++;
-          console.debug(`Stored chunk ${index}, now have ${this.recoveredChunkCount}/${this.totalChunks} chunks`);
 
           // Track progress for debugging
           if (index > this.lastProcessedChunk) {
@@ -2184,7 +2164,9 @@
       // Base64 decoder for chunk data (added to fountain decoder class)
       base64ToUint8Array(base64) {
         try {
-          const binaryString = atob(base64);
+          // Fix base64 padding if needed
+          const fixedBase64 = this.fixBase64Padding(base64);
+          const binaryString = atob(fixedBase64);
           const bytes = new Uint8Array(binaryString.length);
           for (let i = 0; i < binaryString.length; i++) {
             bytes[i] = binaryString.charCodeAt(i);
@@ -2193,6 +2175,19 @@
         } catch (e) {
           throw new Error(`Base64 decode failed: ${e.message}`);
         }
+      }
+
+      // Fix base64 padding issues
+      fixBase64Padding(base64) {
+        // Remove any whitespace
+        let cleaned = base64.replace(/\s/g, '');
+
+        // Add padding if needed
+        while (cleaned.length % 4 !== 0) {
+          cleaned += '=';
+        }
+
+        return cleaned;
       }
 
       // Get the list of newly recovered chunks since the last check
@@ -2620,19 +2615,17 @@
         }
       }
 
-      // Clean up source chunks that are no longer needed (keep only recent ones)
+      // Clean up source chunks from previous completed files (smart cleanup)
       cleanupUnusedSourceChunks() {
-        // Keep only the most recently processed chunks
-        const maxChunksToKeep = Math.min(this.totalChunks, 100);
-        const chunkIndices = Object.keys(this.sourceChunks).map(k => parseInt(k)).sort((a, b) => b - a);
-
-        if (chunkIndices.length > maxChunksToKeep) {
-          const chunksToRemove = chunkIndices.slice(maxChunksToKeep);
-          chunksToRemove.forEach(index => {
-            delete this.sourceChunks[index];
-            this.recoveredChunkCount--;
-          });
+        // Only cleanup if we're not currently processing a file
+        if (!this.fileCompleted || !this.metaData) {
+          console.log("🧹 Smart cleanup: File still processing, skipping cleanup to preserve data");
+          return;
         }
+
+        // Only cleanup old coded packets, not source chunks during active reconstruction
+        this.removeProcessedPackets();
+        console.log("🧹 Smart cleanup: Cleaned coded packets only, preserved source chunks for current file");
       }
     }
 
@@ -2803,23 +2796,28 @@
 
         try {
           // Create video URL and set video element source
-          const videoUrl = URL.createObjectURL(videoFile);
-          this.videoElement.src = videoUrl;
+          this.videoUrl = URL.createObjectURL(videoFile);
+          this.videoElement.src = this.videoUrl;
 
           // Wait for video metadata to load
           await new Promise((resolve) => {
-            this.videoElement.onloadedmetadata = () => resolve();
+            const onLoadedMetadata = () => {
+              this.videoElement.removeEventListener('loadedmetadata', onLoadedMetadata);
+              resolve();
+            };
+            this.videoElement.addEventListener('loadedmetadata', onLoadedMetadata);
           });
 
           // Add event listener for when video ends
-          this.videoElement.addEventListener('ended', () => {
+          this.videoEndHandler = () => {
             console.log('🎬 Video ended event fired');
             console.log(`🔄 Processing status: ${this.isProcessing}, Loop count: ${this.loopCount || 0}`);
             if (this.isProcessing) {
               // Prevent multiple end events
               setTimeout(() => this.handleVideoEnd(), 100);
             }
-          });
+          };
+          this.videoElement.addEventListener('ended', this.videoEndHandler);
 
           // Get video metadata
           this.totalFrames = Math.ceil(this.videoElement.duration * 30); // Estimate 30 fps
@@ -2865,13 +2863,8 @@
         const currentTime = this.videoElement.currentTime;
         console.log(`🎬 START PROCESSING: Current video time: ${currentTime.toFixed(2)}s`);
 
-        // Only reset to 0 on fresh start
-        if (!isResume && currentTime > 0) {
-          console.log(`🎬 START PROCESSING: Fresh start - resetting video to 0s`);
-          this.videoElement.currentTime = 0;
-        } else {
-          console.log(`🎬 START PROCESSING: ${isResume ? 'Resume' : 'Fresh start'} - preserving video time at ${currentTime.toFixed(2)}s`);
-        }
+        // Always preserve current video position - never reset to 0
+        console.log(`🎬 START PROCESSING: Preserving video time at ${currentTime.toFixed(2)}s (no reset)`);
 
         this.videoElement.play();
         console.log(`🎬 START PROCESSING: Video play() called, continuing from ${this.videoElement.currentTime.toFixed(2)}s`);
@@ -2885,6 +2878,10 @@
           this.processWithVideoFrameCallback();
         } else {
           console.log(`🎬 START PROCESSING: Using setInterval fallback`);
+          // Clear any existing timer before setting new one
+          if (this.processTimer) {
+            clearInterval(this.processTimer);
+          }
           // Fallback to setInterval
           this.processTimer = setInterval(() => {
             this.processCurrentFrame();
@@ -3420,9 +3417,8 @@
             console.log(`⚡ Increased frame rate: interval now ${this.frameInterval}ms (was ${this.frameInterval * 2}ms)`);
           }
           
-          // Restart video from beginning
-          console.log(`🎬 Restarting video from beginning...`);
-          this.videoElement.currentTime = 0;
+          // Continue video from current position (NO RESTART)
+          console.log(`🎬 Continuing video from current position (${this.videoElement.currentTime.toFixed(2)}s) - no restart`);
           
           // Directly restart video and continue processing
           this.videoElement.play().then(() => {
@@ -3433,6 +3429,7 @@
               this.processWithVideoFrameCallback();
             } else {
               // Update interval timer
+              // Clear existing timer before setting new one
               if (this.processTimer) {
                 clearInterval(this.processTimer);
               }
@@ -3594,6 +3591,18 @@
           this.canvas.width = 0;
           this.canvas.height = 0;
           this.canvas = null;
+        }
+
+        // Clean up video resources
+        if (this.videoElement && this.videoEndHandler) {
+          this.videoElement.removeEventListener('ended', this.videoEndHandler);
+          this.videoEndHandler = null;
+        }
+
+        // Revoke video blob URL
+        if (this.videoUrl) {
+          URL.revokeObjectURL(this.videoUrl);
+          this.videoUrl = null;
         }
 
         // Clear video reference
@@ -3891,13 +3900,18 @@
             const dataUrl = this.canvas.toDataURL('image/jpeg', 0.5); // Low quality to save memory
             const file = this.dataURLtoFile(dataUrl, 'frame.jpg');
 
-            // Debug logging with memory tracking
-            console.log(`🔍 Scanning frame: ${imageData.width}x${imageData.height}, File size: ${file.size} bytes`);
+            // Debug logging with memory tracking (reduced verbosity)
+            if (this.frameCount % 100 === 0 || this.frameCount <= 5) {
+              console.log(`🔍 Scanning frame: ${imageData.width}x${imageData.height}, File size: ${file.size} bytes`);
+            }
 
             // Use HTML5QRCode with proper File object
             this.html5QrCode.scanFile(file, false)
             .then(decodedText => {
-              console.log(`✅ QR detected:`, decodedText.substring(0, 50) + (decodedText.length > 50 ? '...' : ''));
+              // Reduced verbosity - only log significant QR detections
+              if (this.frameCount % 50 === 0 || this.frameCount <= 10) {
+                console.log(`✅ QR detected:`, decodedText.substring(0, 50) + (decodedText.length > 50 ? '...' : ''));
+              }
               resolve(decodedText);
             })
             .catch(error => {
@@ -4014,7 +4028,8 @@
 
         // Sequential processing state
         this.processingPhase = 'IDLE'; // IDLE, SCANNING, COLLECTING, PROCESSING, PAUSED
-        this.currentFileId = null;
+        this.currentFileId = null; // For file transition detection: fileName_size_chunks
+        this.currentFileChecksum = null; // For packet validation: 8-char checksum
         this.qrDataQueue = []; // Queue of QR codes waiting to be processed
         this.frameDiscardCount = 0;
         this.lastMetadataFrame = -1;
@@ -4418,6 +4433,7 @@
         // Initialize sequential processing
         this.setProcessingPhase('SCANNING');
         this.currentFileId = null;
+        this.currentFileChecksum = null;
         this.qrDataQueue = [];
         this.frameDiscardCount = 0;
         this.videoProcessingPaused = false;
@@ -4507,13 +4523,15 @@
         // Primary validation: Check fileId match for new format packets
         if (packet.fileId) {
           // New format packet - must have matching fileId
-          const expectedFileId = this.currentFileId || (this.fileMetadata.fileChecksum ? this.fileMetadata.fileChecksum.substring(0, 8) : null);
+          const expectedFileId = this.currentFileChecksum || (this.fileMetadata.fileChecksum ? this.fileMetadata.fileChecksum.substring(0, 8) : null);
 
           if (!expectedFileId) {
             return { isValid: false, reason: 'New format packet received but current file has no fileChecksum for validation' };
           }
 
           if (packet.fileId !== expectedFileId) {
+            // Log contamination detection for debugging
+            console.log(`🚨 CONTAMINATION DETECTED: Packet fileId '${packet.fileId}' != expected '${expectedFileId}' for file '${this.fileMetadata?.fileName || 'unknown'}'`);
             return {
               isValid: false,
               reason: `FileId mismatch: packet has '${packet.fileId}' but current file expects '${expectedFileId}' (cross-file contamination prevented)`
@@ -4525,7 +4543,7 @@
         }
 
         // Legacy packet (no fileId) - use legacy validation methods
-        console.log(`🔄 LEGACY PACKET VALIDATION: packetId=${packet.packetId}, no fileId to check`);
+        // Legacy packet validation logging disabled
 
         // For legacy packets, always allow if we're processing a legacy file (no fileChecksum in metadata)
         if (!this.fileMetadata.fileChecksum) {
@@ -4535,10 +4553,10 @@
         }
 
         // If file has fileChecksum but packet doesn't have fileId, still allow for backward compatibility
-        console.log(`⚠️ MIXED FORMAT: File has fileChecksum but packet has no fileId - allowing for backward compatibility`);
-        console.log(`   File checksum exists: ${this.fileMetadata.fileChecksum ? 'YES' : 'NO'}`);
-        console.log(`   Packet fileId: ${packet.fileId || 'NONE'}`);
-        console.log(`   Decision: ACCEPTING CHUNK for backward compatibility`);
+        // Mixed format logging disabled
+        // File checksum status logging disabled
+        // Packet fileId logging disabled
+        // Decision logging disabled
         return { isValid: true, reason: 'Legacy packet with new file format - backward compatibility mode' };
       }
 
@@ -4762,6 +4780,12 @@
         this.packetsProcessed++;
         const { packetType, packetData } = result;
 
+        // Skip processing data packets for completed files (optimization)
+        if (packetType === 'data' && this.metadataReceived && this.recoveredChunks.size >= this.fileMetadata.chunksCount) {
+          this.logger.debug(`⏭️ OPTIMIZATION: Skipping data packet for completed file ${this.fileMetadata.fileName}`);
+          return;
+        }
+
         if (packetType === 'metadata') {
           // Pass current video time for discovery mode
           const currentTime = this.videoProcessor ? this.videoProcessor.videoElement.currentTime : 0;
@@ -4778,7 +4802,7 @@
         const isNewFileDiscovered = !this.discoveredFiles.has(fileName);
 
         if (this.discoveryMode) {
-          console.log(`🔍 DISCOVERY: Processing metadata for ${fileName} at ${currentTime.toFixed(2)}s`);
+          // Discovery metadata logging disabled
 
           if (isNewFileDiscovered) {
             // Completely new file discovered
@@ -4791,10 +4815,10 @@
             });
             this.logger.info(`📁 DISCOVERY: NEW file found: ${fileName} (fileId: ${fileId}) at ${currentTime.toFixed(2)}s`);
 
-            // Pause video processing to handle new file
-            this.pauseForNewFileProcessing(fileName, metadata);
+            // Switch to processing new file without pausing to prevent restart loops
+            this.logger.info(`🔄 DISCOVERY: Switching to new file ${fileName} without pause to prevent video restart`);
 
-            // Switch to processing this new file
+            // Switch to processing this new file seamlessly
             this.switchToFile(metadata, fileName);
           } else {
             // Existing file - update timing and check if we need to switch to it
@@ -4850,6 +4874,12 @@
             this.logger.debug("Received duplicate metadata packet");
             return;
           } else {
+            // Check if this is a file we've already completed - don't switch back to it
+            if (this.downloadedFiles && this.downloadedFiles.has(metadata.fileName)) {
+              this.logger.info(`⏭️ SEQUENTIAL: Ignoring metadata for already-completed file: ${metadata.fileName} - staying with current file: ${this.fileMetadata.fileName}`);
+              return;
+            }
+
             // Different file detected - handle sequential file processing
             this.logger.info(`🔄 SEQUENTIAL: New file detected: ${metadata.fileName} (switching from ${this.fileMetadata.fileName})`);
 
@@ -4889,8 +4919,22 @@
               }
             }
 
-            // Reset decoder for new file
-            this.resetFountainDecoder();
+            // Reset decoder for new file - prevent chunk contamination
+            this.logger.info(`🔄 RESET: Creating new fountain decoder for ${metadata.fileName} to prevent chunk contamination`);
+            this.logger.info(`🧹 CLEANUP: Clearing state from previous file: ${this.fileMetadata.fileName}`);
+            this.logger.info(`🧹 CLEANUP: Previous file had ${this.recoveredChunks.size} recovered chunks, ${this.missingChunks.size} missing chunks`);
+
+            // Create completely new fountain decoder instance
+            this.fountainDecoder = new EnhancedFountainDecoder();
+            this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+            this.fountainDecoder.setLogger(this.logger);
+
+            // Clear all file-specific state to prevent contamination
+            this.recoveredChunks = new Map();
+            this.missingChunks = new Set();
+            this.currentFileChecksum = null;
+
+            this.logger.info(`✅ CLEANUP: State cleared - ready for ${metadata.fileName}`);
           }
         }
 
@@ -4898,10 +4942,10 @@
         this.metadataReceived = true;
         this.fileMetadata = metadata;
 
-        // Store 8-char fileId for packet validation
-        this.currentFileId = metadata.fileChecksum ? metadata.fileChecksum.substring(0, 8) : null;
-        if (this.currentFileId) {
-          this.logger.info(`📋 SEQUENTIAL: File ID set: ${this.currentFileId} for ${metadata.fileName}`);
+        // Store 8-char fileChecksum for packet validation
+        this.currentFileChecksum = metadata.fileChecksum ? metadata.fileChecksum.substring(0, 8) : null;
+        if (this.currentFileChecksum) {
+          this.logger.info(`📋 SEQUENTIAL: File checksum set: ${this.currentFileChecksum} for ${metadata.fileName}`);
         }
 
         // Log encoder version for compatibility tracking
@@ -4962,11 +5006,17 @@
           return;
         }
 
+        // Check if current file is already completed - skip redundant processing
+        if (this.recoveredChunks.size >= this.fileMetadata.chunksCount) {
+          this.logger.debug(`⏭️ EFFICIENCY: Skipping data packet for completed file ${this.fileMetadata.fileName} (${this.recoveredChunks.size}/${this.fileMetadata.chunksCount})`);
+          return;
+        }
+
         // File correlation validation to prevent cross-file contamination
         const validation = this.validateDataPacketForCurrentFile(packet);
         // Reduced validation logging (only log failures and every 50th success)
         if (!validation.isValid || packet.packetId % 50 === 1 || packet.packetId <= 5) {
-          console.log(`🔍 VALIDATION RESULT: packetId=${packet.packetId}, isValid=${validation.isValid}, reason=${validation.reason}`);
+          // Validation result logging disabled
         }
 
         if (!validation.isValid) {
@@ -5002,18 +5052,15 @@
 
         // Add packet to fountain decoder (reduced logging)
         if (packet.packetId % 50 === 1 || packet.packetId <= 5) {
-          console.log(`🔍 ADDING PACKET TO DECODER: packetId=${packet.packetId}, chunkCount=${packet.chunkCount}`);
         }
         const wasAdded = this.fountainDecoder.addPacket(packet);
 
         if (packet.packetId % 50 === 1 || packet.packetId <= 5 || !wasAdded) {
-          console.log(`📦 Packet ${packet.packetId} result: wasAdded=${wasAdded}`);
         }
 
         if (wasAdded) {
           // Update recovered chunks
           const newlyRecovered = this.fountainDecoder.getNewlyRecoveredChunks();
-          console.log(`✅ Newly recovered chunks: ${newlyRecovered.length}`);
           if (newlyRecovered.length > 0) {
             newlyRecovered.forEach(chunkIndex => {
               this.recoveredChunks.set(chunkIndex, true);
@@ -5040,6 +5087,12 @@
 
                   // Update discovered files UI to show completion immediately
                   this.updateDiscoveredFilesUI();
+
+                  // CRITICAL FIX: Trigger fountain decoder completion to start download process
+                  this.logger.info(`🔥 COMPLETION TRIGGER: Forcing fountain decoder completion for immediate download`);
+                  if (this.fountainDecoder && this.fountainDecoder.attemptFileReconstruction) {
+                    this.fountainDecoder.attemptFileReconstruction();
+                  }
                 }
               }
             }
@@ -5089,10 +5142,45 @@
             <div>Recovered chunks: ${totalChunks}/${totalChunks} (100%)</div>
             <div>Missing chunks: 0</div>
           `;
+
+          // Update recovery statistics UI immediately
+          this.ui.updateRecoveryStats();
         }
+
+        // Always perform verification and set UI status (whether corrupted or not)
+        this.logger.info("🔍 Performing file integrity verification...");
+
+        const dataIntegrityStatus = document.getElementById('dataIntegrityStatus');
+
+        // Check if file passed fountain decoder's checksum validation
+        if (customMetadata && customMetadata.corrupted) {
+          // File failed fountain decoder's checksum validation
+          this.logger.warn(`❌ File integrity check FAILED: Expected ${customMetadata.expectedChecksum}, Got ${customMetadata.actualChecksum}`);
+          dataIntegrityStatus.textContent = 'Checksum Failed';
+          dataIntegrityStatus.className = 'validation-status invalid';
+        } else {
+          // File passed fountain decoder's checksum validation
+          this.logger.info("✅ File integrity verified: Fountain decoder checksum validation passed");
+          dataIntegrityStatus.textContent = 'Checksum Valid';
+          dataIntegrityStatus.className = 'validation-status valid';
+
+          // Skip additional chunk verification - fountain decoder checksum is authoritative
+          // this.ui.verifyAllChunks() disabled to prevent false invalid markings
+        }
+
+        // Refresh recovery stats after verification
+        this.ui.updateRecoveryStats();
 
         // Show download button
         document.getElementById('downloadContainer').style.display = 'block';
+
+        // Trigger automatic download immediately (enterprise efficiency)
+        this.logger.info("📥 AUTO-DOWNLOAD: Triggering automatic download for completed file...");
+        setTimeout(() => {
+          this.downloadFile();
+        }, 500); // Small delay to ensure UI updates
+
+        // Cleanup handled by performPostDownloadCleanup() after download completes
 
         // Update file info with success/failure message
         const fileInfo = document.getElementById('fileInfo').innerHTML;
@@ -5129,9 +5217,20 @@
             // Check if file was already downloaded during discovery
             if (!this.downloadedFiles.has(fileName)) {
               // Auto-download completed file during discovery (enterprise efficiency)
-              console.log(`📥 Auto-downloading completed file during discovery: ${fileName}`);
+              this.logger.info(`📥 AUTO-DOWNLOAD: Starting download for completed file: ${fileName}`);
               this.downloadCompletedFile(fileName);
-              
+              this.logger.info(`📥 AUTO-DOWNLOAD: Download initiated for ${fileName}`);
+
+              // After download, skip ahead to find next file efficiently
+              setTimeout(() => {
+                if (this.videoProcessor && this.videoProcessor.videoElement) {
+                  const currentTime = this.videoProcessor.videoElement.currentTime;
+                  const skipAheadTime = currentTime + 30; // Skip 30 seconds ahead
+                  this.logger.info(`⏭️ POST-DOWNLOAD: Skipping ahead ${30}s after download to find next file`);
+                  this.videoProcessor.videoElement.currentTime = skipAheadTime;
+                }
+              }, 2000); // Wait for download to complete
+
               // DON'T check for completion during discovery - must finish entire video first
               console.log(`🔍 DISCOVERY: File ${fileName} downloaded but continuing discovery to find all files in video`);
             } else {
@@ -5165,6 +5264,8 @@
           this.logger.info(`🔄 DISCOVERY: Resetting state after ${fileName} completion - ready for next file`);
           this.fountainDecoder = new EnhancedFountainDecoder();
           this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
+
+          // Skip-ahead optimization removed from here - handled after download completion
 
           // Only reset metadata state in discovery mode - in continue mode, keep processing current file
           if (this.discoveryMode) {
@@ -5227,7 +5328,17 @@
         // Trigger automatic download for new file (enterprise efficiency)
         console.log(`💾 File ${fileName} complete - triggering automatic download`);
         this.downloadFile();
-        
+
+        // Cleanup completed file data before processing next file
+        this.logger.info(`🧹 CLEANUP: Removing completed file data for ${fileName} to free memory`);
+        if (this.fountainDecoder && this.fountainDecoder.sourceChunks) {
+          // Only clear after successful download
+          Object.keys(this.fountainDecoder.sourceChunks).forEach(chunkIndex => {
+            delete this.fountainDecoder.sourceChunks[chunkIndex];
+          });
+          this.logger.info(`🧹 CLEANUP: Cleared ${Object.keys(this.fountainDecoder.sourceChunks).length} source chunks from completed file`);
+        }
+
         // Reset decoder state for next sequential file
         this.logger.info(`🔄 SEQUENTIAL: File ${fileName} complete - resetting state for next sequential file`);
         this.fountainDecoder = new EnhancedFountainDecoder();
@@ -5237,7 +5348,7 @@
         // Clear all file-specific state to be ready for next file
         this.metadataReceived = false;
         this.fileMetadata = null;
-        this.currentFileId = null;
+        this.currentFileChecksum = null;
         this.recoveredChunks = new Map();
         this.missingChunks = new Set();
         this.currentActiveFile = null;
@@ -5448,7 +5559,7 @@
         // Reset file-specific state for new file
         this.metadataReceived = true;
         this.fileMetadata = metadata;
-        this.currentFileId = metadata.fileChecksum ? metadata.fileChecksum.substring(0, 8) : null;
+        this.currentFileChecksum = metadata.fileChecksum ? metadata.fileChecksum.substring(0, 8) : null;
         this.recoveredChunks = new Map();
         this.missingChunks = new Set();
 
@@ -5619,9 +5730,25 @@
           if (isCompleted && fileInfo.completedAt) {
             timeRange = `${this.formatTimeToHMS(fileInfo.firstSeenAt)} - ${this.formatTimeToHMS(fileInfo.completedAt)}`;
           }
-          const statusBadge = isCompleted ?
-            '<span style="background: #dcfce7; color: #16a34a; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold;">COMPLETED</span>' :
-            '<span style="background: #fef3c7; color: #d97706; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold;">NEEDS PROCESSING</span>';
+
+          // Determine integrity status
+          let integrityBadge = '';
+          let statusBadge = '';
+
+          if (isCompleted) {
+            // Check if file was saved as .failed (corrupted)
+            const isCorrupted = filename.includes('.failed') || (fileInfo.metadata && fileInfo.metadata.corrupted);
+
+            if (isCorrupted) {
+              statusBadge = '<span style="background: #fecaca; color: #dc2626; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold;">COMPLETED</span>';
+              integrityBadge = '<span style="background: #fecaca; color: #dc2626; padding: 2px 6px; border-radius: 8px; font-size: 9px; font-weight: bold;">CHECKSUM FAILED</span>';
+            } else {
+              statusBadge = '<span style="background: #dcfce7; color: #16a34a; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold;">COMPLETED</span>';
+              integrityBadge = '<span style="background: #dcfce7; color: #16a34a; padding: 2px 6px; border-radius: 8px; font-size: 9px; font-weight: bold;">CHECKSUM VALID</span>';
+            }
+          } else {
+            statusBadge = '<span style="background: #fef3c7; color: #d97706; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold;">NEEDS PROCESSING</span>';
+          }
           
           fileButton.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -5629,6 +5756,7 @@
                 <div style="display: flex; align-items: center; gap: 8px;">
                   <span style="font-weight: bold; color: #1f2937;">${filename}</span>
                   ${statusBadge}
+                  ${integrityBadge}
                 </div>
                 <div style="font-size: 12px; color: #6b7280;">
                   Size: ${fileSize} | Chunks: ${fileInfo.metadata.chunksCount} | Time: ${timeRange}
@@ -5788,9 +5916,10 @@
 
       // Download a specific completed file
       downloadCompletedFile(filename) {
+        this.logger.info(`📥 DOWNLOAD: Attempting to download completed file: ${filename}`);
         const fileInfo = this.discoveredFiles.get(filename);
         if (!fileInfo || !fileInfo.completed || !fileInfo.recoveredData) {
-          this.logger.warn(`File ${filename} is not available for download`);
+          this.logger.warn(`❌ DOWNLOAD FAILED: File ${filename} is not available for download - fileInfo: ${!!fileInfo}, completed: ${fileInfo?.completed}, recoveredData: ${!!fileInfo?.recoveredData}`);
           return;
         }
 
@@ -5922,18 +6051,18 @@
         this.missingChunks.clear();
         this.metadataReceived = false;
         this.fileMetadata = null;
-        this.currentFileId = null;
+        this.currentFileChecksum = null;
 
         // Force garbage collection
         if (window.gc && typeof window.gc === 'function') {
           window.gc();
         }
 
-        // Automatic cycle continuation - resume scanning for next file
+        // Automatic cycle continuation - stay in collecting mode for next file
         setTimeout(() => {
-          this.setProcessingPhase('SCANNING');
+          this.setProcessingPhase('COLLECTING');
           this.resumeVideoProcessing();
-          this.logger.info("🔄 Automatic cycle: Ready for next file");
+          this.logger.info("🔄 Automatic cycle: Ready for next file - staying in COLLECTING mode");
         }, 1000);
 
         this.logger.info("Post-download cleanup complete - cycling to next file");
@@ -6046,11 +6175,17 @@
 
         this.logger.info(`📋 Metadata detected: ${metadata.fileName} (${this.formatFileSize(metadata.fileSize)})`);
 
+        // Check if this is a file we've already completed - don't switch to it
+        if (this.downloadedFiles && this.downloadedFiles.has(metadata.fileName)) {
+          this.logger.info(`⏭️ METADATA: Ignoring metadata for already-completed file: ${metadata.fileName} - continuing with current processing`);
+          return;
+        }
+
         // Check if this is a new file or same file
         if (this.currentFileId !== fileId) {
-          // New file detected - auto-pause video processing to handle current file
+          // New file detected - continue without pausing to prevent restart loops
           if (this.currentFileId) {
-            this.pauseVideoProcessing("Auto-pause: New file detected - processing current file", 3000);
+            this.logger.info(`🔄 NEW FILE: Detected ${metadata.fileName} - continuing without pause to prevent restart`);
           }
 
           this.currentFileId = fileId;
@@ -6066,15 +6201,31 @@
 
       // Initialize processing for a new file
       initializeNewFile(metadata) {
+        this.logger.info(`🔄 FILE TRANSITION: Initializing new file: ${metadata.fileName}`);
+
         // Clear previous file data but keep QR queue for efficiency
+        const prevChunksRecovered = this.recoveredChunks.size;
+        const prevChunksMissing = this.missingChunks.size;
         this.recoveredChunks.clear();
         this.missingChunks.clear();
+
+        if (prevChunksRecovered > 0 || prevChunksMissing > 0) {
+          this.logger.info(`🧹 FILE TRANSITION: Cleared ${prevChunksRecovered} recovered chunks, ${prevChunksMissing} missing chunks from previous file`);
+        }
 
         // Set up for new file
         this.fileMetadata = metadata;
         this.metadataReceived = true;
 
-        // Initialize fountain decoder
+        // Set file checksum for packet validation
+        this.currentFileChecksum = metadata.fileChecksum ? metadata.fileChecksum.substring(0, 8) : null;
+        if (this.currentFileChecksum) {
+          this.logger.info(`🔒 FILE TRANSITION: File checksum set to ${this.currentFileChecksum} for packet validation`);
+        } else {
+          this.logger.warn(`⚠️ FILE TRANSITION: No file checksum available - using legacy validation mode`);
+        }
+
+        // Initialize fountain decoder with complete state reset
         this.fountainDecoder = new EnhancedFountainDecoder();
         this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
         this.fountainDecoder.setLogger(this.logger);
@@ -6087,7 +6238,8 @@
         }
         this.updateMissingChunksUI();
 
-        this.logger.info(`Initialized for new file: ${metadata.fileName}`);
+        this.logger.info(`✅ FILE TRANSITION: Successfully initialized for new file: ${metadata.fileName} (${metadata.chunksCount} chunks expected)`);
+        this.logger.info(`🎯 FILE TRANSITION: Ready to process packets with fileId validation: ${this.currentFileChecksum || 'LEGACY_MODE'}`);
       }
 
       // Queue QR data during collecting phase
@@ -6132,9 +6284,17 @@
           // Check for new metadata (different file)
           if (packetResult.packetType === 'metadata') {
             const newFileId = `${packetResult.packetData.fileName}_${packetResult.packetData.fileSize}_${packetResult.packetData.chunksCount}`;
+
+            // Don't switch to already-completed files
+            if (this.downloadedFiles && this.downloadedFiles.has(packetResult.packetData.fileName)) {
+              this.logger.info(`⏭️ QUEUE: Skipping metadata for already-completed file: ${packetResult.packetData.fileName}`);
+              processedCount++;
+              continue;
+            }
+
             if (newFileId !== this.currentFileId) {
-              // New file detected - pause and handle transition
-              this.pauseVideoProcessing("New file detected during processing", 5000);
+              // New file detected - handle transition without pausing to prevent restart
+              this.logger.info(`🔄 QUEUE: New file ${packetResult.packetData.fileName} detected - handling transition without pause`);
               this.handleMetadataDetected(packetResult);
               break;
             }
@@ -6185,11 +6345,13 @@
           this.videoProcessor.resume();
         }
 
-        // Return to appropriate phase
+        // Return to appropriate phase - prefer COLLECTING for sequential processing
         if (this.metadataReceived) {
           this.setProcessingPhase('COLLECTING');
         } else {
-          this.setProcessingPhase('SCANNING');
+          // In discovery mode or after file completion, use COLLECTING to detect next files
+          this.setProcessingPhase('COLLECTING');
+          this.logger.info("📹 RESUME: Using COLLECTING mode to find next sequential files");
         }
       }
     }
