@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.8.1</title>
+  <title>QR Code File Decoder (Optimized) v1.8.2</title>
   <style>
     /* Base styles */
     :root {
@@ -70,15 +70,19 @@
       justify-content: space-between;
       align-items: center;
       background-color: var(--panel-bg);
-      padding: 15px;
+      padding: 10px 15px;
       border-radius: 8px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
       margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 10px;
     }
 
     .controls {
       display: flex;
-      gap: 10px;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
     }
 
     /* Video container */
@@ -562,17 +566,44 @@
     }
 
     /* Responsive adjustments */
-    @media (max-width: 768px) {
+    @media (max-width: 1024px) {
       .control-panel {
         flex-direction: column;
         align-items: flex-start;
+        padding: 8px 12px;
       }
 
       .controls {
-        margin-top: 10px;
+        margin-top: 8px;
         width: 100%;
         flex-wrap: wrap;
+        gap: 6px;
       }
+
+      .controls button {
+        padding: 6px 10px !important;
+        font-size: 0.85em !important;
+      }
+
+      h1 {
+        font-size: 1.3em !important;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .control-panel {
+        padding: 6px 10px;
+      }
+
+      .controls button {
+        padding: 5px 8px !important;
+        font-size: 0.8em !important;
+      }
+
+      h1 {
+        font-size: 1.2em !important;
+      }
+    }
 
       video {
         max-height: 300px;
@@ -595,17 +626,17 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1>QR Code File Decoder (Optimized) <span style="font-size: 0.6em; color: #666;">v1.8.1</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.8.2</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
-      <button id="startScanBtn" disabled>Start Scan & Discover</button>
-      <button id="continueBtn" disabled style="background-color: #10b981;">Continue</button>
-      <button id="stopScanBtn" disabled>Stop Scan</button>
-      <button id="resetBtn">Reset Contents</button>
-      <button id="exportStateBtn" style="background-color: #f59e0b;">Export State</button>
-      <button id="importStateBtn" style="background-color: #8b5cf6;">Import State</button>
+      <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
+      <button id="continueBtn" disabled style="background-color: #10b981; padding: 8px 12px; font-size: 0.9em;">Continue</button>
+      <button id="stopScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Stop</button>
+      <button id="resetBtn" style="padding: 8px 12px; font-size: 0.9em;">Reset</button>
+      <button id="exportStateBtn" style="background-color: #f59e0b; padding: 8px 12px; font-size: 0.9em;">Export</button>
+      <button id="importStateBtn" style="background-color: #8b5cf6; padding: 8px 12px; font-size: 0.9em;">Import</button>
       <input type="file" id="stateFileInput" accept=".json" style="display: none;">
-      <button id="settingsBtn">Advanced Settings</button>
+      <button id="settingsBtn" style="padding: 8px 12px; font-size: 0.9em;">Settings</button>
     </div>
   </header>
 
