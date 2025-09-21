@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.9.5</title>
+  <title>QR Code File Decoder (Optimized) v1.9.6</title>
   <style>
     /* Base styles */
     :root {
@@ -626,7 +626,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.9.5</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.9.6</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -2900,8 +2900,17 @@
         // Always preserve current video position - never reset to 0
         console.log(`🎬 START PROCESSING: Preserving video time at ${currentTime.toFixed(2)}s (no reset)`);
 
+        // Ensure QR processor is fully ready before starting video
+        if (!window.qrFileDecoder?.qrProcessor) {
+          console.log(`⚠️ QR processor not ready - delaying video start`);
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
         this.videoElement.play();
         console.log(`🎬 START PROCESSING: Video play() called, continuing from ${this.videoElement.currentTime.toFixed(2)}s`);
+
+        // Small delay to ensure video is actually playing before frame processing
+        await new Promise(resolve => setTimeout(resolve, 50));
 
         // Perform initial memory check to populate stats immediately
         this.performMemoryCheck();
@@ -4788,9 +4797,11 @@
         }
 
         // Sequential processing logic based on phase
+        console.log(`🔍 DEBUG: Processing QR in phase ${this.processingPhase}, type: ${packetResult.packetType}`);
         if (this.processingPhase === 'SCANNING') {
           // In scanning phase - looking for metadata
           if (packetResult.packetType === 'metadata') {
+            console.log(`🔍 DEBUG: Calling handleMetadataDetected for ${packetResult.packetData.fileName}`);
             this.handleMetadataDetected(packetResult);
           } else {
             // Discard non-metadata packets during scanning
@@ -6345,6 +6356,7 @@
         const metadata = packetResult.packetData;
         const fileId = `${metadata.fileName}_${metadata.fileSize}_${metadata.chunksCount}`;
 
+        console.log(`🔍 DEBUG: handleMetadataDetected() called for ${metadata.fileName}`);
         this.logger.info(`📋 Metadata detected: ${metadata.fileName} (${this.formatFileSize(metadata.fileSize)})`);
 
         // Check if this is a file we've already completed - don't switch to it
