@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.10.2</title>
+  <title>QR Code File Decoder (Optimized) v1.10.3</title>
   <style>
     /* Base styles */
     :root {
@@ -627,7 +627,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.10.2</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.10.3</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -4405,17 +4405,24 @@
         const videoElement = this.videoProcessor?.videoElement || document.getElementById('videoPreview');
         const currentPosition = videoElement ? videoElement.currentTime : 0;
 
-        // Use the same logic as Start Scan but with current position
-        await this.startScanAndDiscover(currentPosition);
+        // Use the same logic as Start Scan but with current position and preserve discovered files
+        await this.startScanAndDiscover(currentPosition, true); // preserveDiscoveredFiles = true
       }
 
       // Start scan with automatic discovery (first loop is always discovery)
-      async startScanAndDiscover(videoPosition = 0) {
+      async startScanAndDiscover(videoPosition = 0, preserveDiscoveredFiles = false) {
         if (this.isProcessing) return;
-        
+
         this.logger.info("Starting scan with automatic file discovery...");
         this.discoveryMode = true; // Always keep discovery mode true
-        this.discoveredFiles.clear();
+
+        // Only clear discovered files for fresh Start Scan, preserve for Continue
+        if (!preserveDiscoveredFiles) {
+          this.discoveredFiles.clear();
+          console.log(`🗂️ Cleared discovered files for fresh scan`);
+        } else {
+          console.log(`🗂️ Preserving ${this.discoveredFiles.size} discovered files for Continue`);
+        }
         this.isProcessing = true; // Enable processing state
 
         // Initialize sequential processing
