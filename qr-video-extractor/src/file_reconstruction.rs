@@ -75,17 +75,16 @@ struct FileDecoder {
 
 impl FileReconstructor {
     pub fn new(output_dir: &PathBuf) -> Self {
-        let log_path = output_dir.join("qr_processing.log");
+        let log_path = output_dir.join("processing.log"); // ✅ Use same log as main process
         let error_logger = Arc::new(
             ErrorLogger::new(&log_path.to_string_lossy())
                 .unwrap_or_else(|_| {
                     // Fallback to stdout logging if file creation fails
-                    ErrorLogger::new("/tmp/qr_processing.log").unwrap()
+                    ErrorLogger::new("/tmp/processing.log").unwrap()
                 })
         );
 
-        error_logger.log_info(&format!("FileReconstructor initialized with output_dir: {}",
-                                     output_dir.display()));
+        error_logger.log_info(&format!("FileReconstructor initialized - joining unified log"));
 
         Self {
             output_dir: output_dir.clone(),
