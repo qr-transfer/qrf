@@ -2871,7 +2871,7 @@
         }
       }
 
-      startProcessing(isResume = false) {
+      async startProcessing(isResume = false) {
         console.log(`🎬 START PROCESSING CALLED: isResume=${isResume}, isProcessing=${this.isProcessing}, currentTime=${this.videoElement.currentTime.toFixed(2)}s`);
 
         if (this.isProcessing) {
@@ -3323,7 +3323,7 @@
               console.log(`🔄 RESUME DEBUG: About to call startProcessing(true)`);
 
               // Restart frame processing (resume mode)
-              this.startProcessing(true);
+              await this.startProcessing(true);
 
               console.log(`✅ RESUME DEBUG: startProcessing(true) called, isProcessing: ${this.isProcessing}`);
 
@@ -3612,10 +3612,10 @@
       }
 
       // Resume video processing (for sequential pipeline)
-      resume() {
+      async resume() {
         if (this.isPaused && this.videoFile) {
           this.isPaused = false;
-          this.startProcessing();
+          await this.startProcessing();
           console.log('Video processor resumed');
         }
       }
@@ -4450,7 +4450,7 @@
 
           // Use the same startProcessing method as Start Scan (let it handle all flags and setup)
           console.log(`🎯 Continue: Using proper startProcessing() method from current position: ${currentPosition.toFixed(2)}s`);
-          this.videoProcessor.startProcessing(true); // isResume = true, handles all setup internally
+          await this.videoProcessor.startProcessing(true); // isResume = true, handles all setup internally
           
           // Update UI
           document.getElementById('startScanBtn').disabled = true;
@@ -4497,7 +4497,7 @@
           if (this.videoProcessor) {
             await this.videoProcessor.initialize(this.videoFile);
             this.videoProcessor.discoveryMode = true; // Enable discovery tracking
-            this.videoProcessor.startProcessing();
+            await this.videoProcessor.startProcessing();
           } else {
             throw new Error('Video processor not available');
           }
