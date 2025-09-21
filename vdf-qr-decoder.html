@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.10.7-ui</title>
+  <title>QR Code File Decoder (Optimized) v1.10.8</title>
   <style>
     /* Base styles */
     :root {
@@ -627,7 +627,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.10.7</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.10.8</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -643,40 +643,24 @@
 
   <!-- File Information and Stats Container -->
   <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;">
-    <!-- File Information -->
-    <div class="file-info-container" style="flex: 1; min-width: 400px;">
-      <h2>File Information</h2>
-      <div id="fileInfo">No file detected yet</div>
-      <div id="checksumInfo" style="display: none; margin-top: 10px; font-size: 14px; color: #6b7280;">
-        <div>File Checksum: <span id="fileChecksum">-</span></div>
-        <div>Meta Checksum: <span id="metaChecksum">-</span></div>
-      </div>
-      <div id="missingChunks">Waiting for metadata...</div>
-      <div id="downloadContainer" style="display: none;">
-        <button id="downloadBtn">Download Recovered File</button>
-      </div>
-    </div>
+    <!-- File Information moved to Chunk Recovery section -->
 
-    <!-- Performance Stats -->
-    <div class="file-info-container" style="flex: 1; min-width: 350px;">
-      <h2>Performance Stats</h2>
-      <div id="performanceStats">
-        <div class="stats-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px;">
-          <div><strong>Processing Queue:</strong> <span id="queueSize">0</span></div>
-          <div><strong>Frame Rate:</strong> <span id="frameRate">0</span> fps</div>
-          <div><strong>Memory Usage:</strong> <span id="memoryUsage">0</span> MB</div>
-          <div><strong>Avg Frame Time:</strong> <span id="avgFrameTime">0</span> ms</div>
-          <div><strong>Discarded Packets:</strong> <span id="discardedCount">0</span></div>
-          <div><strong>Success Rate:</strong> <span id="successRate">0</span>%</div>
-          <div><strong>Workers Busy:</strong> <span id="busyWorkers">0/0</span></div>
-          <div><strong>Buffer Health:</strong> <span id="bufferHealth" style="color: #10b981;">Good</span></div>
-          <div><strong>Coded Packets:</strong> <span id="codedPacketsCount">0</span></div>
-          <div><strong>Validation Fails:</strong> <span id="validationFails">0</span></div>
-        </div>
-        <div style="margin-top: 10px; padding: 8px; background: #f0f9ff; border-radius: 4px; border-left: 3px solid #2563eb;">
-          <div style="font-size: 12px; color: #1e40af;"><strong>Performance Status:</strong></div>
-          <div id="performanceIndicator" style="font-size: 11px; color: #6b7280;">System starting...</div>
-        </div>
+    <!-- Compact Performance Stats -->
+    <div class="file-info-container" style="flex: 1; min-width: 300px;">
+      <h3 style="font-size: 0.85em; margin-bottom: 3px;">Performance</h3>
+      <div id="performanceStats" style="font-size: 0.65em; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3px;">
+        <div><strong>Queue:</strong> <span id="queueSize">0</span></div>
+        <div><strong>FPS:</strong> <span id="frameRate">0</span></div>
+        <div><strong>Memory:</strong> <span id="memoryUsage">0</span>MB</div>
+        <div><strong>Frame:</strong> <span id="avgFrameTime">0</span>ms</div>
+        <div><strong>Success:</strong> <span id="successRate">0</span>%</div>
+        <div><strong>Buffer:</strong> <span id="bufferHealth" style="color: #10b981;">Good</span></div>
+      </div>
+
+      <!-- Missing Chunks and Download moved here -->
+      <div id="missingChunks" style="font-size: 0.7em; margin-top: 4px; color: #666;">Waiting for metadata...</div>
+      <div id="downloadContainer" style="display: none; margin-top: 4px;">
+        <button id="downloadBtn" style="padding: 4px 8px; font-size: 0.75em;">Download</button>
       </div>
     </div>
   </div>
@@ -696,7 +680,12 @@
 
   <!-- 3. Compact Chunk Recovery Progress -->
   <div class="chunks-container">
-    <h3 style="font-size: 1em; margin-bottom: 6px;">Chunk Recovery</h3>
+    <!-- Compact Header with File Info (One Line) -->
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.85em;">
+      <h3 style="margin: 0; font-size: 1em;">Chunk Recovery</h3>
+      <span style="color: #999;">|</span>
+      <div id="fileInfo" style="color: #666; flex: 1; font-size: 0.8em;">No file detected yet</div>
+    </div>
 
     <!-- Compact Recovery Stats (One Line) -->
     <div style="display: flex; align-items: center; gap: 12px; padding: 4px 8px; background: rgba(255,255,255,0.8); border-radius: 4px; margin-bottom: 8px; font-size: 0.75em;">
@@ -705,7 +694,7 @@
       <span><strong>Missing:</strong> <span id="missingCount" style="color: #f59e0b;">0</span></span>
       <span><strong>Verified:</strong> <span id="verifiedCount" style="color: #10b981;">0</span></span>
       <div style="flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; margin-left: 8px; position: relative;">
-        <div id="progressFill" style="height: 100%; background: #10b981; border-radius: 3px; width: 0%; transition: width 0.3s;"></div>
+        <div id="progressFill" style="height: 100%; background: linear-gradient(90deg, #ef4444, #10b981); border-radius: 3px; width: 0%; transition: width 0.3s;"></div>
       </div>
     </div>
 
