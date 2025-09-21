@@ -3318,7 +3318,7 @@
             // CRITICAL: Resume from saved position, not current position
             await this.resumeFromSavedPosition();
 
-            this.videoElement.play().then(() => {
+            this.videoElement.play().then(async () => {
               console.log(`▶️ RESUME DEBUG: Video play() successful, resumed from: ${this.videoElement.currentTime.toFixed(3)}s`);
               console.log(`🔄 RESUME DEBUG: About to call startProcessing(true)`);
 
