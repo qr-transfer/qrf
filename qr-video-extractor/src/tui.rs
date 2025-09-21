@@ -37,7 +37,7 @@ pub struct ChunkInfo {
     pub duration_ms: Option<u64>,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum ChunkStatus {
     Pending,
     Processing,
@@ -54,7 +54,7 @@ pub struct PhaseInfo {
     pub duration_ms: Option<u64>,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum PhaseStatus {
     Pending,
     InProgress,
@@ -187,6 +187,31 @@ impl TuiState {
             ProcessingEvent::ChecksumValidation { file_name, checksum_type, expected, actual, valid } => {
                 let status = if valid { "✅" } else { "❌" };
                 self.messages.push(format!("{} {}: {} (expected: {}, actual: {})", status, checksum_type, file_name, expected, actual));
+            }
+            ProcessingEvent::SystemError { context, error } => {
+                self.messages.push(format!("🚨 System Error in {}: {}", context, error));
+                if self.messages.len() > 100 {
+                    self.messages.remove(0);
+                }
+            }
+            ProcessingEvent::InitializationProgress { stage, message } => {
+                self.messages.push(format!("🔧 {}: {}", stage, message));
+                if self.messages.len() > 100 {
+                    self.messages.remove(0);
+                }
+            }
+            ProcessingEvent::FinalSummary { files_count, output_dir, total_duration_ms } => {
+                self.messages.push(format!("📊 Final Summary:"));
+                self.messages.push(format!("   Files extracted: {}", files_count));
+                self.messages.push(format!("   Output directory: {}", output_dir));
+                self.messages.push(format!("   Total duration: {}ms", total_duration_ms));
+                self.messages.push("Press 'q' to quit".to_string());
+            }
+            ProcessingEvent::ModeTransition { from, to, reason } => {
+                self.messages.push(format!("🔄 Mode transition: {} → {} ({})", from, to, reason));
+                if self.messages.len() > 100 {
+                    self.messages.remove(0);
+                }
             }
         }
     }

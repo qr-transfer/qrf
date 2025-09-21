@@ -53,9 +53,88 @@ pub enum ProcessingEvent {
         actual: String,
         valid: bool,
     },
+    // System events for UI/output management
+    SystemError {
+        context: String,
+        error: String,
+    },
+    InitializationProgress {
+        stage: String,
+        message: String,
+    },
+    FinalSummary {
+        files_count: usize,
+        output_dir: String,
+        total_duration_ms: u64,
+    },
+    ModeTransition {
+        from: String,
+        to: String,
+        reason: String,
+    },
 }
 
 pub type EventCallback = Box<dyn Fn(ProcessingEvent) + Send + Sync>;
+
+pub trait OutputHandler {
+    fn handle_event(&self, event: &ProcessingEvent);
+}
+
+pub struct ConsoleOutputHandler;
+
+impl OutputHandler for ConsoleOutputHandler {
+    fn handle_event(&self, event: &ProcessingEvent) {
+        match event {
+            ProcessingEvent::PhaseStarted { phase, description } => {
+                println!("Phase {}: {}", phase, description);
+            }
+            ProcessingEvent::Progress { phase, current, total, message } => {
+                println!("Phase {} [{}/{}]: {}", phase, current, total, message);
+            }
+            ProcessingEvent::PhaseCompleted { phase, duration_ms } => {
+                println!("Phase {} completed in {}ms", phase, duration_ms);
+            }
+            ProcessingEvent::Error { phase, error } => {
+                eprintln!("Phase {} error: {}", phase, error);
+            }
+            ProcessingEvent::AllCompleted { total_duration_ms, files_extracted } => {
+                println!("🎉 All processing completed! Extracted {} files in {}ms", files_extracted, total_duration_ms);
+            }
+            ProcessingEvent::ChunkStarted { chunk_id, chunk_name } => {
+                println!("▶️  Started chunk {}: {}", chunk_id + 1, chunk_name);
+            }
+            ProcessingEvent::ChunkProgress { chunk_id, frames_processed, qr_codes_found, status } => {
+                println!("⏳ Chunk {}: {} - {} frames, {} QR codes", chunk_id + 1, status, frames_processed, qr_codes_found);
+            }
+            ProcessingEvent::ChunkCompleted { chunk_id, qr_codes_found, jsonl_file, duration_ms } => {
+                println!("✅ Chunk {} completed: {} QR codes → {} ({}ms)", chunk_id + 1, qr_codes_found, jsonl_file, duration_ms);
+            }
+            ProcessingEvent::FileReconstructed { file_name, file_size, checksum_valid, output_path } => {
+                let status = if *checksum_valid { "✅" } else { "⚠️" };
+                println!("{} File reconstructed: {} ({} bytes) → {}", status, file_name, file_size, output_path);
+            }
+            ProcessingEvent::ChecksumValidation { file_name, checksum_type, expected, actual, valid } => {
+                let status = if *valid { "✅" } else { "❌" };
+                println!("{} {}: {} (expected: {}, actual: {})", status, checksum_type, file_name, expected, actual);
+            }
+            ProcessingEvent::SystemError { context, error } => {
+                eprintln!("Error in {}: {}", context, error);
+            }
+            ProcessingEvent::InitializationProgress { stage, message } => {
+                println!("{}: {}", stage, message);
+            }
+            ProcessingEvent::FinalSummary { files_count, output_dir, total_duration_ms } => {
+                println!("\nProcessing completed successfully!");
+                println!("Files extracted: {}", files_count);
+                println!("Output directory: {}", output_dir);
+                println!("Total duration: {}ms", total_duration_ms);
+            }
+            ProcessingEvent::ModeTransition { from, to, reason } => {
+                eprintln!("{} ({}), switching from {} to {} mode...", reason, reason, from, to);
+            }
+        }
+    }
+}
 
 pub struct EventBus {
     callbacks: Vec<EventCallback>,

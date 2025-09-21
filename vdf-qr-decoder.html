@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.8.2</title>
+  <title>QR Code File Decoder (Optimized) v1.8.3</title>
   <style>
     /* Base styles */
     :root {
@@ -626,7 +626,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.8.2</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.8.3</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -4391,19 +4391,21 @@
         // Initialize video processor if it doesn't exist
         if (!this.videoProcessor && this.videoFile) {
           console.log('🔧 No video processor found, initializing new one...');
+          const videoElement = document.getElementById('videoPreview');
+          const currentPosition = videoElement.currentTime; // Preserve current position
 
           await this.initializeComponents();
           await this.videoProcessor.initialize(this.videoFile);
 
-          // Reset to start to capture systematic data packets first
-          this.videoProcessor.videoElement.currentTime = 0;
-          console.log(`🎯 Reset video to start (0s) to capture systematic data packets`);
+          // Restore to current position instead of resetting
+          this.videoProcessor.videoElement.currentTime = currentPosition;
+          console.log(`🎯 Restored video to current position (${currentPosition.toFixed(2)}s)`);
         }
-        
-        // Reset to start to capture metadata and systematic packets
+
+        // Continue from current video position
         if (this.videoProcessor && this.videoFile) {
-          this.videoProcessor.videoElement.currentTime = 0;
-          console.log(`🔄 Continue: Reset to start (0s) to read metadata and systematic packets first`);
+          const currentPosition = this.videoProcessor.videoElement.currentTime;
+          console.log(`🔄 Continue: Processing from current position (${currentPosition.toFixed(2)}s)`);
 
           this.isProcessing = true;
 
@@ -5824,47 +5826,24 @@
       // Repeat processing for a specific file's time range
       repeatFileRange(filename, startTime, endTime) {
         if (this.isProcessing) return;
-        
+
         this.logger.info(`Repeating range for ${filename}: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s`);
-        
-        // Set the active file and reset state for this file
-        this.currentActiveFile = filename;
-        this.discoveryMode = false;
-        
-        // Get existing file metadata if available
-        const fileInfo = this.discoveredFiles.get(filename);
-        if (fileInfo && fileInfo.metadata) {
-          this.fileMetadata = fileInfo.metadata;
-          this.metadataReceived = true;
-          
-          // Initialize fountain decoder with existing metadata
-          this.fountainDecoder = new EnhancedFountainDecoder();
-          this.fountainDecoder.initialize(fileInfo.metadata);
-          this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
-          
-          // Initialize chunk grid
-          this.ui.initializeChunkGrid(fileInfo.metadata.chunksCount);
-        }
-        
-        // Set video processor for range processing
+
+        // Set video to file's start time
         if (this.videoProcessor) {
           this.videoProcessor.videoElement.currentTime = startTime;
-          this.videoProcessor.discoveryMode = false;
-          this.videoProcessor.rangeMode = true;
-          this.videoProcessor.endTime = endTime;
-          this.isProcessing = true;
-          this.videoProcessor.isProcessing = true;
-          this.videoProcessor.loopCount = 1;
-          
-          // Update UI
-          document.getElementById('startScanBtn').disabled = true;
-            document.getElementById('stopScanBtn').disabled = false;
-          
-          this.ui.updateFileInfo(`Repeating range for: ${filename} (${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s)`);
-          
-          // Start processing from the specified time
-          this.videoProcessor.videoElement.play();
+          console.log(`🎯 Set video position to ${startTime.toFixed(2)}s for ${filename}`);
+        } else {
+          // If no video processor, set the preview video element
+          const videoElement = document.getElementById('videoPreview');
+          if (videoElement) {
+            videoElement.currentTime = startTime;
+            console.log(`🎯 Set video position to ${startTime.toFixed(2)}s for ${filename}`);
+          }
         }
+
+        // Use the same continue processing logic
+        this.continueProcessing();
       }
 
       // Check and automatically repeat ranges for incomplete files
