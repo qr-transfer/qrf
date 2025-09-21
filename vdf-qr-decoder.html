@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.10.10</title>
+  <title>QR Code File Decoder (Optimized) v1.10.11</title>
   <style>
     /* Base styles */
     :root {
@@ -627,7 +627,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.10.10</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.10.11</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -669,12 +669,13 @@
   <div class="video-container">
     <video id="videoPreview" controls muted></video>
     <canvas id="overlayCanvas"></canvas>
-    <div class="progress-container">
-      <div class="progress-bar" id="scanProgressBar"></div>
-      <div class="progress-text" id="scanProgressText">Frames: 0/0 | Time Remaining: --:-- | Loop: 1</div>
-      <div class="loop-info" id="loopInfo" style="font-size: 12px; margin-top: 5px; color: #666;">
-        Status: Processing video...
+    <!-- Single-Line Video Progress with Blue Bar -->
+    <div style="display: flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 0.55em;">
+      <span id="scanProgressText" style="white-space: nowrap; min-width: 50px;">0/0</span>
+      <div style="flex: 1; height: 3px; background: #e5e7eb; border-radius: 2px; position: relative;">
+        <div id="scanProgressBar" style="height: 100%; background: #2563eb; border-radius: 2px; width: 0%; transition: width 0.3s;"></div>
       </div>
+      <span id="loopInfo" style="white-space: nowrap; color: #666; min-width: 70px;">Ready</span>
     </div>
   </div>
 
