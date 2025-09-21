@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.10.11</title>
+  <title>QR Code File Decoder (Optimized) v1.10.12</title>
   <style>
     /* Base styles */
     :root {
@@ -627,7 +627,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.10.11</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.10.12</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -680,16 +680,16 @@
   </div>
 
   <!-- 3. Compact Chunk Recovery Progress -->
-  <div class="chunks-container">
+  <div class="chunks-container" style="margin-top: 2px;">
     <!-- Compact Header with File Info (One Line) -->
-    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.85em;">
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 3px; font-size: 0.85em;">
       <h3 style="margin: 0; font-size: 1em;">Chunk Recovery</h3>
       <span style="color: #999;">|</span>
       <div id="fileInfo" style="color: #666; flex: 1; font-size: 0.8em;">No file detected yet</div>
     </div>
 
     <!-- Compact Recovery Stats (One Line) -->
-    <div style="display: flex; align-items: center; gap: 12px; padding: 4px 8px; background: rgba(255,255,255,0.8); border-radius: 4px; margin-bottom: 8px; font-size: 0.75em;">
+    <div style="display: flex; align-items: center; gap: 12px; padding: 3px 6px; background: rgba(255,255,255,0.8); border-radius: 3px; margin-bottom: 4px; font-size: 0.75em;">
       <span><strong>Recovered:</strong> <span id="recoveredCount">0</span>/<span id="totalChunks">0</span></span>
       <span><strong>Progress:</strong> <span id="recoveryPercentage">0%</span></span>
       <span><strong>Missing:</strong> <span id="missingCount" style="color: #f59e0b;">0</span></span>
@@ -703,8 +703,8 @@
     <div class="chunks-grid" id="chunksGrid"></div>
 
     <!-- Compact Recovery Validation (One Line) -->
-    <div id="validationPanel" style="display: none; margin-top: 8px;">
-      <div style="display: flex; align-items: center; gap: 15px; padding: 4px 8px; background: rgba(248,250,252,0.9); border-radius: 4px; font-size: 0.75em;">
+    <div id="validationPanel" style="display: none; margin-top: 3px;">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 2px 6px; background: rgba(248,250,252,0.9); border-radius: 3px; font-size: 0.7em;">
         <span><strong>Data Integrity:</strong> <span class="validation-status" id="dataIntegrityStatus" style="padding: 2px 6px; border-radius: 3px; font-size: 0.7em;">Pending</span></span>
         <span><strong>Sequence:</strong> <span class="validation-status" id="sequenceStatus" style="padding: 2px 6px; border-radius: 3px; font-size: 0.7em;">Pending</span></span>
         <span><strong>Completeness:</strong> <span class="validation-status" id="completenessStatus" style="padding: 2px 6px; border-radius: 3px; font-size: 0.7em;">Pending</span></span>
@@ -714,19 +714,19 @@
 
   
   <!-- 5. Discovered Files -->
-  <div id="discoveredFilesContainer" class="file-info-container" style="display: none;">
-    <h2>Discovered Files in Video</h2>
+  <div id="discoveredFilesContainer" class="file-info-container" style="display: none; margin-top: 2px;">
+    <h3 style="font-size: 0.9em; margin-bottom: 2px;">Discovered Files in Video</h3>
     <div id="discoveredFilesList">
       <!-- File selection buttons will appear here -->
     </div>
-    <div style="margin-top: 10px; font-size: 12px; color: #666;">
-      Click a file button to start decoding from that file's position in the video
+    <div style="margin-top: 3px; font-size: 0.6em; color: #666;">
+      Click a file button to start decoding from that file's position
     </div>
   </div>
 
   <!-- 5. Debug log window -->
-  <div class="debug-container">
-    <h2>Debug Log</h2>
+  <div class="debug-container" style="margin-top: 2px;">
+    <h3 style="font-size: 0.9em; margin-bottom: 2px;">Debug Log</h3>
     <div class="log-controls">
       <button class="log-filter active" data-level="all">All</button>
       <button class="log-filter" data-level="debug">Debug</button>
