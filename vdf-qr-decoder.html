@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.8.3</title>
+  <title>QR Code File Decoder (Optimized) v1.8.4</title>
   <style>
     /* Base styles */
     :root {
@@ -626,11 +626,11 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.8.3</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.8.4</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
-      <button id="continueBtn" disabled style="background-color: #10b981; padding: 8px 12px; font-size: 0.9em;">Continue</button>
+      <button id="continueBtn" style="background-color: #10b981; padding: 8px 12px; font-size: 0.9em;">Continue</button>
       <button id="stopScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Stop</button>
       <button id="resetBtn" style="padding: 8px 12px; font-size: 0.9em;">Reset</button>
       <button id="exportStateBtn" style="background-color: #f59e0b; padding: 8px 12px; font-size: 0.9em;">Export</button>
@@ -4249,8 +4249,7 @@
             videoElement.muted = true;
 
             document.getElementById('startScanBtn').disabled = false;
-            // Always enable continue button when video is loaded
-            document.getElementById('continueBtn').disabled = false;
+            // Continue button is always enabled (no longer disabled)
             this.logger.info(`Video duration: ${videoElement.duration.toFixed(2)} seconds (muted)`);
             this.logger.info('Continue button always available - can start processing from any video position');
           };
@@ -4373,7 +4372,11 @@
       }
 
       async continueProcessing() {
-        if (this.isProcessing) return;
+        // Stop any existing processing and clean memory while preserving file state
+        if (this.isProcessing) {
+          this.stopProcessing();
+          await this.cleanMemoryPreserveState();
+        }
 
         this.logger.info("Continuing video processing with additional loops...");
 
@@ -4705,10 +4708,7 @@
         document.getElementById('startScanBtn').disabled = false;
         document.getElementById('stopScanBtn').disabled = true;
         
-        // Keep continue button enabled if video is loaded
-        if (this.videoFile) {
-          document.getElementById('continueBtn').disabled = false;
-        }
+        // Continue button is always enabled (no state management needed)
         
         // Enable discover button if we have video (with null check)
         if (this.videoFile) {
@@ -5824,8 +5824,12 @@
       }
 
       // Repeat processing for a specific file's time range
-      repeatFileRange(filename, startTime, endTime) {
-        if (this.isProcessing) return;
+      async repeatFileRange(filename, startTime, endTime) {
+        // Stop any existing processing and clean memory while preserving file state
+        if (this.isProcessing) {
+          this.stopProcessing();
+          await this.cleanMemoryPreserveState();
+        }
 
         this.logger.info(`Repeating range for ${filename}: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s`);
 
@@ -6236,6 +6240,46 @@
           }
         };
         reader.readAsText(file);
+      }
+
+      // Clean memory while preserving discovered files state
+      async cleanMemoryPreserveState() {
+        console.log('🧹 Cleaning memory while preserving file state...');
+
+        // Preserve essential state
+        const preservedDiscoveredFiles = new Map(this.discoveredFiles);
+        const preservedDownloadedFiles = new Set(this.downloadedFiles);
+        const preservedVideoFile = this.videoFile;
+
+        // Clean up processing state
+        this.metadataReceived = false;
+        this.fileMetadata = null;
+        this.currentActiveFile = null;
+        this.recoveredChunks = new Map();
+        this.missingChunks = new Set();
+        this.recoveredFileData = null;
+
+        // Clean fountain decoder
+        if (this.fountainDecoder) {
+          this.fountainDecoder.dispose();
+          this.fountainDecoder = null;
+        }
+
+        // Clean video processor memory but keep instance
+        if (this.videoProcessor) {
+          this.videoProcessor.cleanupCanvasMemory();
+          this.videoProcessor.cleanupWorkerQueues();
+        }
+
+        // Restore preserved state
+        this.discoveredFiles = preservedDiscoveredFiles;
+        this.downloadedFiles = preservedDownloadedFiles;
+        this.videoFile = preservedVideoFile;
+
+        console.log(`🧹 Memory cleaned, preserved ${this.discoveredFiles.size} discovered files`);
+
+        // Small delay to allow cleanup to complete
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
       // Get list of incomplete files for targeted processing
