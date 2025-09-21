@@ -1408,6 +1408,9 @@
       updatePerformanceIndicator(avgFrameTime, successRate) {
         const indicator = document.getElementById('performanceIndicator');
 
+        // Skip if indicator was removed (we don't use this anymore)
+        if (!indicator) return;
+
         // Don't evaluate performance if no processing has occurred
         if (this.qrCodesProcessed === 0 || this.frameCount === 0) {
           indicator.textContent = 'System ready - no processing active';
