@@ -4423,9 +4423,7 @@
 
           // Increase frame rate for better detection (faster processing)
           this.videoProcessor.frameInterval = Math.max(this.videoProcessor.frameInterval / 2, 1);
-          
-          // Get current position BEFORE any operations
-          const currentPosition = this.videoProcessor.videoElement.currentTime;
+
           console.log(`🔄 Manual continue: Starting loop ${this.videoProcessor.loopCount} from position ${currentPosition.toFixed(2)}s with ${this.videoProcessor.frameInterval}ms interval`);
           
           // Update status
