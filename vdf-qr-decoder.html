@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.8.6</title>
+  <title>QR Code File Decoder (Optimized) v1.8.7</title>
   <style>
     /* Base styles */
     :root {
@@ -626,7 +626,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.8.6</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.8.7</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -4891,7 +4891,7 @@
           this.updateDiscoveredFilesUI();
           return; // In discovery mode, don't run normal processing logic
         } else {
-          // Continue mode: Track discovered files but don't switch processing
+          // Continue mode: Track discovered files AND switch to processing them
           if (isNewFileDiscovered) {
             const fileId = metadata.fileChecksum ? metadata.fileChecksum.substring(0, 8) : null;
             this.discoveredFiles.set(fileName, {
@@ -4902,13 +4902,22 @@
             });
             this.logger.info(`📁 CONTINUE MODE: NEW file discovered: ${fileName} (fileId: ${fileId}) at ${currentTime.toFixed(2)}s`);
 
+            // Switch to processing this new file (same as discovery mode)
+            this.switchToFile(metadata, fileName);
+
             // Update UI to show newly discovered file
             this.updateDiscoveredFilesUI();
           } else {
-            // Update timing for existing discovered file
+            // Update timing for existing discovered file and switch to it if needed
             const fileInfo = this.discoveredFiles.get(fileName);
             if (fileInfo) {
               fileInfo.lastSeenAt = currentTime;
+            }
+
+            // Switch to this file for processing (same as discovery mode)
+            if (!this.currentActiveFile || this.currentActiveFile !== fileName) {
+              this.logger.info(`🔄 CONTINUE MODE: Switching to file ${fileName}`);
+              this.switchToFile(metadata, fileName);
             }
           }
         }
