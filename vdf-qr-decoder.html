@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.9.0</title>
+  <title>QR Code File Decoder (Optimized) v1.9.1</title>
   <style>
     /* Base styles */
     :root {
@@ -626,7 +626,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.9.0</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.9.1</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -4106,46 +4106,23 @@
       }
 
       // Complete reset - clears everything and destroys processors
-      resetContents() {
+      async resetContents() {
         if (this.isProcessing) {
           this.stopProcessing();
         }
 
-        // Completely clean up processors (for full reset)
-        if (this.qrProcessor) {
-          this.qrProcessor.dispose();
-          this.qrProcessor = null;
+        // Clear discovered files and downloads
+        this.downloadedFiles = new Set();
+        this.discoveredFiles = new Map();
+
+        // Reset video position to start
+        const videoElement = this.videoProcessor?.videoElement || document.getElementById('videoPreview');
+        if (videoElement) {
+          videoElement.currentTime = 0;
         }
-        
-        if (this.videoProcessor) {
-          this.videoProcessor.stopProcessing();
-          this.videoProcessor = null;
-        }
 
-        // Reset all application state
-        this.metadataReceived = false;
-        this.fileMetadata = null;
-        this.recoveredChunks = new Map();
-        this.missingChunks = new Set();
-        this.qrCodesDetected = 0;
-        this.packetsProcessed = 0;
-        this.recoveredFileData = null;
-        this.downloadedFiles = new Set(); // Clear downloaded files list
-        this.discoveredFiles = new Map(); // Clear discovered files
-
-        // Reset UI elements
-        this.ui.resetChunkGrid();
-        this.ui.updateFileInfo("No file detected yet");
-        document.getElementById('missingChunks').textContent = "Waiting for metadata...";
-        document.getElementById('scanProgressBar').style.width = '0%';
-        document.getElementById('scanProgressText').textContent = 'Frames: 0/0 | Time Remaining: --:-- | Loop: 1';
-        document.getElementById('downloadContainer').style.display = 'none';
-        this.ui.clearQRHighlight();
-        this.ui.hideErrorMessage();
-
-        // Keep the video input and file if the user wants to try scanning again
-        document.getElementById('startScanBtn').disabled = this.videoFile ? false : true;
-        document.getElementById('discoverBtn').disabled = this.videoFile ? false : true;
+        // Reinitialize complete system state
+        await this.initializeSystemState();
 
         this.logger.info("Contents completely reset, ready for new scan");
       }
@@ -4242,14 +4219,17 @@
           console.log('🔇 Video muted automatically');
 
           // Enable start button once video is loaded
-          videoElement.onloadedmetadata = () => {
+          videoElement.onloadedmetadata = async () => {
             // Ensure video stays muted after metadata load
             videoElement.muted = true;
+
+            // Reinitialize system state for new video file
+            await this.initializeSystemState();
 
             document.getElementById('startScanBtn').disabled = false;
             // Continue button is always enabled (no longer disabled)
             this.logger.info(`Video duration: ${videoElement.duration.toFixed(2)} seconds (muted)`);
-            this.logger.info('Continue button always available - can start processing from any video position');
+            this.logger.info('System reinitialized for new video file');
           };
         } catch (error) {
           this.logger.error(`Error loading video: ${error.message}`);
@@ -4335,6 +4315,40 @@
         }
       }
 
+      // Complete system initialization - call on page load, new video, or reset
+      async initializeSystemState() {
+        console.log('🚀 Initializing complete system state...');
+
+        // Initialize all processing components
+        await this.initializeComponents();
+
+        // Reset UI state
+        this.ui.resetChunkGrid();
+        this.ui.updateFileInfo("System ready - load video file to begin");
+
+        // Initialize processing flags and queues
+        this.discoveryMode = true;
+        this.setProcessingPhase('READY');
+        this.currentFileId = null;
+        this.currentFileChecksum = null;
+        this.qrDataQueue = [];
+        this.frameDiscardCount = 0;
+        this.videoProcessingPaused = false;
+
+        // Reset file state
+        this.metadataReceived = false;
+        this.fileMetadata = null;
+        this.currentActiveFile = null;
+        this.recoveredChunks = new Map();
+        this.missingChunks = new Set();
+        this.recoveredFileData = null;
+
+        // Reset discovered files container
+        document.getElementById('discoveredFilesContainer').style.display = 'none';
+
+        console.log('✅ System state initialized completely');
+      }
+
       async initializeComponents() {
         // Initialize QR processor with enhanced implementation
         this.qrProcessor = new EnhancedQRProcessor({
@@ -4360,11 +4374,11 @@
           errorCallback: (error) => this.logger.error(`Video processing error: ${error.message}`),
           frameInterval: this.settings.frameInterval
         });
-        
+
         // Set completion check callback for looping logic
         this.videoProcessor.isFileComplete = () => {
-          return this.metadataReceived && 
-                 this.fileMetadata && 
+          return this.metadataReceived &&
+                 this.fileMetadata &&
                  this.recoveredChunks.size >= this.fileMetadata.chunksCount;
         };
       }
@@ -6580,13 +6594,8 @@
     document.addEventListener('DOMContentLoaded', async () => {
       window.qrFileDecoder = new QRFileDecoder();
 
-      // Initialize components on page load (as suggested)
-      await window.qrFileDecoder.initializeComponents();
-      console.log('📦 Components initialized on page load');
-
-      // Reset UI on page load (as suggested)
-      window.qrFileDecoder.ui.resetChunkGrid();
-      console.log('🎨 UI reset on page load');
+      // Complete system initialization on page load
+      await window.qrFileDecoder.initializeSystemState();
 
       // Add debug button after initialization
       setTimeout(addDebugButton, 500);
