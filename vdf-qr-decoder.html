@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.8.9</title>
+  <title>QR Code File Decoder (Optimized) v1.9.0</title>
   <style>
     /* Base styles */
     :root {
@@ -626,7 +626,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.8.9</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.9.0</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -4378,35 +4378,26 @@
 
         this.logger.info("Continuing video processing with additional loops...");
 
-        // Check if we need to reinitialize QR processor (in case it was disposed)
-        if (!this.qrProcessor) {
-          this.logger.info("Reinitializing QR processor for continue...");
-          this.qrProcessor = new EnhancedQRProcessor({
-            onQrDetected: this.handleQRCodeResult.bind(this),
-            onError: (error) => this.logger.error(`QR processing error: ${error.message}`),
-            detectionConfidence: this.settings.qrDetectionConfidence
-          });
-          await this.qrProcessor.initialize();
-        }
-
-        // Initialize video processor if it doesn't exist
-        if (!this.videoProcessor && this.videoFile) {
-          console.log('🔧 No video processor found, initializing new one...');
-          const videoElement = document.getElementById('videoPreview');
-          const currentPosition = videoElement.currentTime; // Preserve current position
-
+        // Ensure components are initialized (should be done on page load)
+        if (!this.qrProcessor || !this.packetProcessor || !this.videoProcessor) {
+          console.log('🔧 Initializing missing components...');
           await this.initializeComponents();
-          await this.videoProcessor.initialize(this.videoFile);
 
-          // Restore to current position instead of resetting
-          this.videoProcessor.videoElement.currentTime = currentPosition;
-          console.log(`🎯 Restored video to current position (${currentPosition.toFixed(2)}s)`);
+          if (this.videoFile && this.videoProcessor) {
+            await this.videoProcessor.initialize(this.videoFile);
+          }
         }
 
         // Continue from current video position
         if (this.videoProcessor && this.videoFile) {
           const currentPosition = this.videoProcessor.videoElement.currentTime;
           console.log(`🔄 Continue: Processing from current position (${currentPosition.toFixed(2)}s)`);
+
+          // Always keep discovery mode true (as suggested)
+          this.discoveryMode = true;
+
+          // Reset chunk grid for new file processing
+          this.ui.resetChunkGrid();
 
           // Reset metadata state so it reads M: packets when encountered
           this.metadataReceived = false;
@@ -4442,7 +4433,7 @@
         if (this.isProcessing) return;
         
         this.logger.info("Starting scan with automatic file discovery...");
-        this.discoveryMode = true; // First loop is discovery mode
+        this.discoveryMode = true; // Always keep discovery mode true
         this.discoveredFiles.clear();
         this.isProcessing = true; // Enable processing state
 
@@ -5785,13 +5776,9 @@
                 </div>
               </div>
               <div style="display: flex; gap: 5px;">
-                <button onclick="window.qrFileDecoder.startFileProcessing('${filename}', ${fileInfo.firstSeenAt})" 
-                        style="padding: 6px 12px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                  Decode Full
-                </button>
-                <button onclick="window.qrFileDecoder.repeatFileRange('${filename}', ${fileInfo.firstSeenAt}, ${fileInfo.lastSeenAt})" 
+                <button onclick="window.qrFileDecoder.setRange('${filename}', ${fileInfo.firstSeenAt}, ${fileInfo.lastSeenAt})"
                         style="padding: 6px 12px; background: #f59e0b; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                  Repeat Range
+                  Set Range
                 </button>
                 ${isCompleted ? `<button onclick="window.qrFileDecoder.downloadCompletedFile('${filename}')" 
                         style="padding: 6px 12px; background: #16a34a; color: white; border: none; border-radius: 4px; cursor: pointer;">
@@ -5805,34 +5792,24 @@
         });
       }
 
-      // Repeat processing for a specific file's time range
-      async repeatFileRange(filename, startTime, endTime) {
-        // Stop any existing processing and clean memory while preserving file state
-        if (this.isProcessing) {
-          this.stopProcessing();
-          await this.cleanMemoryPreserveState();
-        }
+      // Set video position for a specific file (just stop and position - no processing)
+      setRange(filename, startTime, endTime) {
+        // Stop any existing processing
+        this.stopProcessing();
 
-        this.logger.info(`Repeating range for ${filename}: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s`);
+        this.logger.info(`Setting range for ${filename}: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s`);
 
         // Set video to slightly before file's start time to catch metadata packet
         const metadataOffset = 3.0; // Go 3 seconds earlier to catch M: metadata packet
         const adjustedStartTime = Math.max(0, startTime - metadataOffset);
 
-        if (this.videoProcessor) {
-          this.videoProcessor.videoElement.currentTime = adjustedStartTime;
+        // Set video position (use whichever video element is available)
+        const videoElement = this.videoProcessor?.videoElement || document.getElementById('videoPreview');
+        if (videoElement) {
+          videoElement.currentTime = adjustedStartTime;
           console.log(`🎯 Set video position to ${adjustedStartTime.toFixed(2)}s (${metadataOffset}s before ${filename} to catch metadata)`);
-        } else {
-          // If no video processor, set the preview video element
-          const videoElement = document.getElementById('videoPreview');
-          if (videoElement) {
-            videoElement.currentTime = adjustedStartTime;
-            console.log(`🎯 Set video position to ${adjustedStartTime.toFixed(2)}s (${metadataOffset}s before ${filename} to catch metadata)`);
-          }
+          console.log(`📍 Use Continue button to start processing from this position`);
         }
-
-        // Use the same continue processing logic
-        this.continueProcessing();
       }
 
       // Check and automatically repeat ranges for incomplete files
@@ -6584,8 +6561,17 @@
     }
 
     // Initialize when the document is loaded
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
       window.qrFileDecoder = new QRFileDecoder();
+
+      // Initialize components on page load (as suggested)
+      await window.qrFileDecoder.initializeComponents();
+      console.log('📦 Components initialized on page load');
+
+      // Reset UI on page load (as suggested)
+      window.qrFileDecoder.ui.resetChunkGrid();
+      console.log('🎨 UI reset on page load');
+
       // Add debug button after initialization
       setTimeout(addDebugButton, 500);
     });
