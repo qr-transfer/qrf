@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.8.7</title>
+  <title>QR Code File Decoder (Optimized) v1.8.8</title>
   <style>
     /* Base styles */
     :root {
@@ -626,7 +626,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.8.7</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.8.8</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -3942,10 +3942,8 @@
             // Use HTML5QRCode with proper File object
             this.html5QrCode.scanFile(file, false)
             .then(decodedText => {
-              // Reduced verbosity - only log significant QR detections
-              if (this.frameCount % 50 === 0 || this.frameCount <= 10) {
-                console.log(`✅ QR detected:`, decodedText.substring(0, 50) + (decodedText.length > 50 ? '...' : ''));
-              }
+              // Temporarily enable full QR logging to debug metadata detection
+              console.log(`✅ QR detected:`, decodedText.substring(0, 50) + (decodedText.length > 50 ? '...' : ''));
               resolve(decodedText);
             })
             .catch(error => {
@@ -4444,27 +4442,9 @@
             loopInfo.textContent = `Status: Manual continue - loop ${this.videoProcessor.loopCount} from ${currentPosition.toFixed(1)}s...`;
           }
           
-          // Continue from current video position (absolutely no reset)
-          console.log(`🎯 Starting processing from current position: ${currentPosition.toFixed(2)}s`);
-          this.videoProcessor.videoElement.play().then(() => {
-            console.log(`✅ Manual continue: Video restarted, resuming processing...`);
-            
-            // Start frame processing again
-            if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
-              this.videoProcessor.processWithVideoFrameCallback();
-            } else {
-              // Update interval timer
-              if (this.videoProcessor.processTimer) {
-                clearInterval(this.videoProcessor.processTimer);
-              }
-              this.videoProcessor.processTimer = setInterval(() => {
-                this.videoProcessor.processCurrentFrame();
-              }, this.videoProcessor.frameInterval);
-            }
-          }).catch(err => {
-            console.error('Failed to continue video processing:', err);
-            this.isProcessing = false;
-          });
+          // Use the same startProcessing method as Start Scan (but as resume to preserve position)
+          console.log(`🎯 Continue: Using proper startProcessing() method from current position: ${currentPosition.toFixed(2)}s`);
+          this.videoProcessor.startProcessing(true); // isResume = true to preserve current position
           
           // Update UI
           document.getElementById('startScanBtn').disabled = true;
