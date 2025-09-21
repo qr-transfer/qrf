@@ -5564,9 +5564,25 @@
         // Set current active file
         this.currentActiveFile = fileName;
 
-        // Reset fountain decoder for the new file
+        // Reset fountain decoder for the new file with video context
         this.fountainDecoder = new EnhancedFountainDecoder();
-        this.fountainDecoder.initialize(metadata);
+
+        // Enhanced metadata with video file information
+        const enhancedMetadata = {
+          ...metadata,
+          videoFile: this.videoFile ? {
+            name: this.videoFile.name,
+            size: this.videoFile.size,
+            lastModified: this.videoFile.lastModified
+          } : null,
+          processingContext: {
+            discoveryMode: this.discoveryMode,
+            videoPosition: this.videoProcessor?.videoElement?.currentTime || 0,
+            sessionId: Date.now()
+          }
+        };
+
+        this.fountainDecoder.initialize(enhancedMetadata);
         this.fountainDecoder.setCompleteCallback(this.handleFileComplete.bind(this));
 
         // Reset file-specific state for new file
