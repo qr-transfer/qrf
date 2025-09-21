@@ -1,0 +1,3363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR File Transfer - Encoder with Auto-Split</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:system-ui,-apple-system,sans-serif;line-height:1.5;background:#f5f5f5;color:#333;max-width:1200px;margin:0 auto;padding:20px}
+        h1{margin:20px 0;color:#2563eb}
+        .container{max-width:800px;margin:0 auto}
+        .panel{background:#fff;padding:20px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.1);flex:1;min-width:300px}
+        .control-panel{display:flex;flex-direction:column;gap:15px}
+        .control-group{display:flex;flex-direction:column;gap:8px}
+        .control-label{font-weight:700}
+        button{padding:12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;margin-top:10px;transition:background .2s}
+        button:hover{background:#1d4ed8}
+        button:disabled{background:#94a3b8;cursor:not-allowed}
+        .display-container{display:flex;flex-direction:column;align-items:center;justify-content:center}
+        #qrDisplay{position:relative;margin:0 auto 20px;border:1px solid #ddd;padding:20px;border-radius:8px;background:#fff;max-width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center}
+        .progress-container{width:100%;background:#e5e7eb;border-radius:4px;overflow:hidden;height:10px;margin-top:15px}
+        .progress-bar{height:100%;background:#2563eb;width:0;transition:width .3s}
+        .file-info{margin-top:20px;padding:15px;background:#f0f9ff;border-radius:8px;border-left:4px solid #2563eb}
+        .metadata-info{margin-top:10px;padding:10px;background:#f0f9ff;border-radius:8px;border-left:4px solid #1d4ed8}
+        .info-row{display:flex;justify-content:space-between;margin-bottom:8px}
+        .info-label{font-weight:700;color:#1e40af}
+        
+        /* Keep-awake video stays invisible in all modes */
+        #keepAwakeVideo {
+            position: fixed !important;
+            top: -1px !important;
+            left: -1px !important;
+            width: 1px !important;
+            height: 1px !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            z-index: -1 !important;
+        }
+
+        /* Fullscreen Mode */
+        .fullscreen{position:fixed;top:0;left:0;width:100vw;height:100vh;background:#000;z-index:1000;display:flex;justify-content:center;align-items:center;flex-direction:column}
+        .fullscreen .qr-container{
+            display:flex;
+            justify-content:center;
+            align-items:center;
+            width:80vmin;
+            height:80vmin;
+            position:relative;
+        }
+        .fullscreen-qr {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            max-width: 95vh;
+            max-height: 95vh;
+        }
+        .fullscreen-progress{position:absolute;bottom:50px;width:80%;max-width:400px}
+        .fullscreen-counter{position:absolute;top:20px;left:20px;background:rgba(0,0,0,.5);color:#fff;padding:10px;border-radius:4px;font-weight:bold;font-size:16px;z-index:10}
+        .exit-button{position:absolute;top:20px;right:20px;background:#ef4444;color:#fff;border:none;width:40px;height:40px;border-radius:20px;font-size:20px;cursor:pointer}
+        
+        /* Countdown Display */
+        .countdown-display{
+            font-size:120px;
+            color:#1890ff;
+            position:absolute;
+            top:50%;
+            left:50%;
+            transform:translate(-50%,-50%);
+            text-shadow:0 0 10px rgba(24,144,255,.5);
+            z-index:100;
+            display:none;
+            background:rgba(0,0,0,.4);
+            width:200px;
+            height:200px;
+            border-radius:50%;
+            line-height:200px;
+            text-align:center;
+            font-weight:bold;
+        }
+        
+        /* Fullscreen Countdown Display */
+        .fullscreen .countdown-display {
+            width: 250px;
+            height: 250px;
+            line-height: 250px;
+            font-size: 150px;
+            background: rgba(0,0,0,.6);
+        }
+        input[type=range]{width:100%;height:8px;background:#e5e7eb;border-radius:4px;appearance:none;outline:0}
+        input[type=range]::-webkit-slider-thumb{appearance:none;width:16px;height:16px;background:#2563eb;border-radius:50%;cursor:pointer}
+        .slider-labels{display:flex;justify-content:space-between;font-size:12px;color:#6b7280;margin-top:5px}
+        .value-display{font-weight:700;color:#2563eb;margin-left:auto}
+        
+        /* File input */
+        .file-input-container{position:relative;overflow:hidden;display:inline-block;width:100%}
+        .file-input-label{padding:12px;background:#e5e7eb;color:#333;border-radius:4px;cursor:pointer;display:block;text-align:center;transition:background .2s}
+        .file-input-label:hover{background:#d1d5db}
+        .file-input-container input[type=file]{position:absolute;left:0;top:0;opacity:0;width:100%;height:100%;cursor:pointer}
+        
+        /* File list styles */
+        .file-list-container{margin-top:15px;background:#f9fafb;border-radius:8px;padding:15px;display:none}
+        .file-list-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-weight:600}
+        .file-list{max-height:300px;overflow-y:auto}
+        .file-item{display:flex;align-items:center;padding:8px;border-bottom:1px solid #e5e7eb;transition:background .2s}
+        .file-item:hover{background:#f3f4f6}
+        .file-item:last-child{border-bottom:none}
+        .file-checkbox{margin-right:12px;width:18px;height:18px;cursor:pointer}
+        .file-info{flex:1;display:flex;flex-direction:column}
+        .file-name{font-weight:500;margin-bottom:2px}
+        .file-size{font-size:12px;color:#6b7280}
+        .file-status{margin-left:auto;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:500;text-transform:uppercase}
+        .status-pending{background:#fef3c7;color:#d97706}
+        .status-inprogress{background:#dbeafe;color:#2563eb}
+        .status-sent{background:#dcfce7;color:#16a34a}
+        .status-error{background:#fee2e2;color:#dc2626}
+        .batch-controls{display:flex;gap:10px;margin-top:10px}
+        .select-all-btn,.clear-all-btn{font-size:12px;padding:6px 12px}
+        
+        /* Checkbox style */
+        .control-switch {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+            margin: 10px 0;
+        }
+        
+        .control-switch input[type="checkbox"] {
+            margin-right: 8px;
+            width: 16px;
+            height: 16px;
+        }
+        
+        .switch-label {
+            font-weight: 500;
+        }
+        
+        /* Combined button */
+        .action-button {
+            background-color: #16a34a;
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+        }
+        
+        .action-button:hover {
+            background-color: #15803d;
+        }
+
+        /* Alignment guides */
+        .alignment-guide {
+            position: absolute;
+            border: 3px dashed rgba(59, 130, 246, 0.7);
+            pointer-events: none;
+            display: none;
+        }
+
+        #qrDisplay.show-guides .alignment-guide {
+            display: block;
+        }
+
+        .guide-label {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+        }
+        
+        /* QR Code transition effects */
+        .qr-image {
+            transition: opacity 0.15s ease-out;
+        }
+
+        /* Performance presets */
+        .preset-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .preset-button {
+            padding: 8px 12px;
+            background: #e5e7eb;
+            color: #333;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            cursor: pointer;
+            flex: 1;
+            min-width: 120px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .preset-button:hover {
+            background: #d1d5db;
+        }
+
+        .preset-button.active {
+            background: #2563eb;
+            color: white;
+            border-color: #2563eb;
+        }
+
+        /* Tooltip */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            margin-left: 5px;
+            width: 16px;
+            height: 16px;
+            background: #e5e7eb;
+            color: #6b7280;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 16px;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: help;
+        }
+
+        .tooltip:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            top: -5px;
+            left: 100%;
+            transform: translateY(-100%);
+            background: rgba(55, 65, 81, 0.9);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            width: 200px;
+            font-weight: normal;
+            font-size: 12px;
+            z-index: 10;
+            line-height: 1.4;
+        }
+
+        .handshake-notice {
+            margin-top: 20px;
+            padding: 10px;
+            background: rgba(245, 158, 11, 0.1);
+            border-left: 3px solid #f59e0b;
+            border-radius: 3px;
+            font-size: 13px;
+            color: #92400e;
+        }
+
+        /* Mobile responsiveness */
+        @media (max-width:768px){
+            .container{flex-direction:column}
+            .handshake-notice, .preset-selector {font-size: 11px;}
+            .preset-button {padding: 6px 8px; min-width: 90px;}
+            .control-label {font-size: 14px;}
+            h1 {font-size: 20px; margin: 10px 0;}
+            .panel {padding: 15px;}
+            .slider-labels {font-size: 10px;}
+            .countdown-display {width: 150px; height: 150px; line-height: 150px; font-size: 90px;}
+        }
+    </style>
+</head>
+<body>
+    <!-- Invisible video to prevent computer sleep -->
+    <video id="keepAwakeVideo" style="position: absolute; top: -1px; left: -1px; width: 1px; height: 1px; opacity: 0; pointer-events: none;" muted loop autoplay>
+        <source src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAr1tZGF0AAACrgYF//+q3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDEyMSByMzA1MSAwMWViMzY0IC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAxOCAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MzoweDExMyBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tMiB0aHJlYWRzPTE3IGxvb2thaGVhZF90aHJlYWRzPTIgc2xpY2VkX3RocmVhZHM9MCBucj0wIGRlY2ltYXRlPTEgaW50ZXJsYWNlZD0wIGJsdXJheV9jb21wYXQ9MCBjb25zdHJhaW5lZF9pbnRyYT0wIGJmcmFtZXM9MyBiX3B5cmFtaWQ9MiBiX2FkYXB0PTEgYl9iaWFzPTAgZGlyZWN0PTEgd2VpZ2h0Yj0xIG9wZW5fZ29wPTAgd2VpZ2h0cD0yIGtleWludD0yNTAga2V5aW50X21pbj0yMyBzY2VuZWN1dD00MCBpbnRyYV9yZWZyZXNoPTAgcmNfbG9va2FoZWFkPTQwIHJjPWNyZiBtYnRyZWU9MSBjcmY9MjMuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0xOjEuMDAAgAAAAJ1liIQAL//+9Qa/8UAqAAADAAA" type="video/mp4">
+    </video>
+    
+    <h1>QR Code File Encoder</h1>
+    <div class="container">
+        <div class="panel control-panel">
+            <div class="control-group">
+                <label class="control-label">Select File</label>
+                <div class="file-input-container">
+                    <label class="file-input-label">
+                        <span id="fileLabel">Choose files</span>
+                        <input type="file" id="fileInput" multiple>
+                    </label>
+                </div>
+                
+                <!-- File list container -->
+                <div id="fileListContainer" class="file-list-container">
+                    <div class="file-list-header">
+                        <span>Selected Files</span>
+                        <div class="batch-controls">
+                            <button id="selectAllBtn" class="select-all-btn">Select All</button>
+                            <button id="clearAllBtn" class="clear-all-btn">Clear All</button>
+                        </div>
+                    </div>
+                    <div id="fileList" class="file-list">
+                        <!-- File items will be added here dynamically -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label class="control-label">Performance Presets</label>
+                <div class="preset-selector">
+                    <button id="fastPreset" class="preset-button">Fast Transfer</button>
+                    <button id="reliablePreset" class="preset-button active">Reliable</button>
+                    <button id="mobilePreset" class="preset-button">Mobile Optimized</button>
+                </div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+                    Presets automatically configure optimal settings for your use case
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-label">
+                    QR Size <span class="value-display" id="sizeValue">800px</span>
+                    <span class="tooltip" data-tooltip="Size of the QR code in pixels. Larger QR codes are easier to scan but may not fit on screen.">?</span>
+                </div>
+                <input type="range" id="sizeSlider" min="200" max="800" value="800">
+                <div class="slider-labels">
+                    <span>Smaller</span>
+                    <span>Larger</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-label">
+                    Display Speed <span class="value-display" id="speedValue">6 FPS</span>
+                    <span class="tooltip" data-tooltip="Frames per second. Higher values transfer data faster, but may be harder to scan.">?</span>
+                </div>
+                <input type="range" id="speedSlider" min="1" max="30" value="6">
+                <div class="slider-labels">
+                    <span>Slower</span>
+                    <span>Faster</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-label">
+                    Chunk Size <span class="value-display" id="chunkValue">250 chars</span>
+                    <span class="tooltip" data-tooltip="Size of each data chunk. Larger chunks transfer faster but may be harder to scan.">?</span>
+                </div>
+                <input type="range" id="chunkSlider" min="100" max="1000" step="50" value="250">
+                <div class="slider-labels">
+                    <span>Smaller chunks</span>
+                    <span>Larger chunks</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-label">
+                    Redundancy <span class="value-display" id="redundancyValue">100%</span>
+                    <span class="tooltip" data-tooltip="Extra data to ensure successful transfer. Higher values improve reliability but increase transfer time.">?</span>
+                </div>
+                <input type="range" id="redundancySlider" min="20" max="200" step="10" value="100">
+                <div class="slider-labels">
+                    <span>Less</span>
+                    <span>More</span>
+                </div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+                    For 30% missed frames, use 60-70% redundancy<br>
+                    For 50% missed frames, use 100-120% redundancy
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    Error Correction Level
+                    <span class="tooltip" data-tooltip="QR code error correction level. Higher levels are more reliable but create larger, more complex QR codes.">?</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 5px;">
+                    <select id="errorCorrectionSelect" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #d1d5db;">
+                        <option value="H">High (30% recovery)</option>
+                        <option value="M">Medium (15% recovery)</option>
+                        <option value="L">Low (7% recovery)</option>
+                    </select>
+                </div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+                    Higher correction = more reliable but larger QR codes
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    Systematic Chunks per QR <span class="value-display" id="systematicChunksValue">2</span>
+                    <span class="tooltip" data-tooltip="Number of chunks to combine in systematic QR codes (reliable phase). 1=one chunk per QR, 2=two chunks per QR.">?</span>
+                </div>
+                <input type="range" id="systematicChunksSlider" min="1" max="4" step="1" value="2">
+                <div class="slider-labels">
+                    <span>Single (1)</span>
+                    <span>Quad (4)</span>
+                </div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+                    Systematic phase: Recommend 1-2 for highest reliability
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    Fountain Max Degree <span class="value-display" id="fountainDegreeValue">5</span>
+                    <span class="tooltip" data-tooltip="Maximum degree for fountain coding phase (redundancy). Higher values create more complex combinations but better error recovery.">?</span>
+                </div>
+                <input type="range" id="fountainDegreeSlider" min="2" max="20" step="1" value="5">
+                <div class="slider-labels">
+                    <span>Simple (2)</span>
+                    <span>Complex (20)</span>
+                </div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+                    Fountain phase: Higher degrees improve recovery but need more processing
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    Auto-Split Threshold <span class="value-display" id="splitThresholdValue">100KB</span>
+                    <span class="tooltip" data-tooltip="Files larger than this size will be automatically split into manageable parts for QR transmission.">?</span>
+                </div>
+                <input type="range" id="splitThresholdSlider" min="50" max="500" step="10" value="100">
+                <div class="slider-labels">
+                    <span>50KB</span>
+                    <span>500KB</span>
+                </div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+                    Large files split automatically for better QR transmission reliability
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label class="control-switch">
+                    <input type="checkbox" id="enableAutoSplitCheckbox" checked>
+                    <span class="switch-label">Enable Auto-Split for Large Files</span>
+                    <span class="tooltip" data-tooltip="Automatically splits large files into smaller parts for more reliable QR transmission.">?</span>
+                </label>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px; margin-left: 24px;">
+                    Recommended for files >100KB to improve transmission success rate
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">
+                    Selective Split Transmission
+                    <span class="tooltip" data-tooltip="Specify which split parts to send (e.g., '1,5,10-15,23'). Leave empty to send all parts.">?</span>
+                </label>
+                <input type="text" id="selectiveSplitInput" placeholder="e.g., 1,5,10-15,23 (leave empty for all parts)"
+                       style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px; font-family: monospace;">
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+                    <strong>Format examples:</strong><br>
+                    • <code>5,10,15</code> - Send parts 5, 10, and 15<br>
+                    • <code>1-10,25,30-35</code> - Send parts 1-10, 25, and 30-35<br>
+                    • <code>45,123,456,789,890</code> - Send specific missing parts<br>
+                    • <em>Empty = send all parts (default behavior)</em>
+                </div>
+                <div id="splitParseInfo" style="font-size: 11px; color: #059669; margin-top: 5px; display: none;">
+                    <strong>Parsed parts to send:</strong> <span id="parsedSplitList"></span>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    Countdown Before Start <span class="value-display" id="countdownValue">10s</span>
+                    <span class="tooltip" data-tooltip="Time to prepare before QR codes start displaying.">?</span>
+                </div>
+                <input type="range" id="countdownSlider" min="0" max="30" value="10">
+                <div class="slider-labels">
+                    <span>None</span>
+                    <span>30s</span>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label class="control-switch">
+                    <input type="checkbox" id="fullscreenCheckbox" checked>
+                    <span class="switch-label">Start in Fullscreen Mode (Recommended)</span>
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label class="control-switch">
+                    <input type="checkbox" id="showGuidesCheckbox">
+                    <span class="switch-label">Show Scanner Alignment Guides</span>
+                </label>
+            </div>
+            
+            <div class="control-group">
+                <label class="control-switch">
+                    <input type="checkbox" id="enableTransitionsCheckbox" checked>
+                    <span class="switch-label">Enable Smooth Transitions</span>
+                    <span class="tooltip" data-tooltip="Enables subtle transitions between QR codes to improve scanning reliability.">?</span>
+                </label>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px; margin-left: 24px;">
+                    Always on for best results; disable only for older devices
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label class="control-switch">
+                    <input type="checkbox" id="highDensityCheckbox">
+                    <span class="switch-label">High Density Mode</span>
+                    <span class="tooltip" data-tooltip="Increases QR code data capacity but requires enhanced scanner capabilities.">?</span>
+                </label>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 5px; margin-left: 24px;">
+                    WARNING: Only enable if using the enhanced parallel processing decoder
+                </div>
+            </div>
+
+            <div class="control-group">
+                <button id="generateAndStartBtn" class="action-button" disabled>Generate & Start Display</button>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                    <button id="generateBtn" disabled>Generate QR Codes</button>
+                    <button id="stopBtn" disabled style="flex: 1; background: #dc2626;">Stop</button>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                    <button id="fullscreenBtn" disabled style="flex: 1; background: #4b5563;">Start Fullscreen Display</button>
+                    <button id="previewBtn" disabled style="flex: 1; background: #6b7280;">Preview Fullscreen</button>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                    <button id="generateIntegrityBtn" disabled style="flex: 1; background: #059669;">Generate Integrity Report</button>
+                    <button id="downloadReportBtn" disabled style="flex: 1; background: #0891b2;">Download Report</button>
+                </div>
+                
+                <!-- QR Generation Progress -->
+                <div id="generationProgress" style="display: none; margin-top: 15px;">
+                    <div style="font-weight: bold; margin-bottom: 5px;" id="progressLabel">Generating QR Codes...</div>
+                    <div class="progress-container">
+                        <div class="progress-bar" id="generationProgressBar"></div>
+                    </div>
+                    <div style="font-size: 12px; color: #6b7280; margin-top: 5px;" id="progressDetails">Initializing...</div>
+                </div>
+            </div>
+
+            <!-- File Information (moved below controls) -->
+            <div id="fileInfo" class="file-info" style="display: none;">
+                <h3 style="margin-bottom: 10px;">File Information</h3>
+                <div class="info-row">
+                    <div class="info-label">File Name:</div>
+                    <div id="fileName">-</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">File Size:</div>
+                    <div id="fileSize">-</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Chunks:</div>
+                    <div id="chunksCount">-</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Packets:</div>
+                    <div id="packetsCount">-</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Redundancy Level:</div>
+                    <div id="redundancyLevel">-</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Transfer Time:</div>
+                    <div id="transferTime">-</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Optimal Distance:</div>
+                    <div id="optimalDistance">-</div>
+                </div>
+                <div class="info-row high-density-indicator" style="display: none;">
+                    <div class="info-label" style="color: #b91c1c;">High Density Mode:</div>
+                    <div style="color: #b91c1c; font-weight: bold;">Active</div>
+                </div>
+                <div id="selectiveSplitInfo" class="info-row" style="display: none;">
+                    <div class="info-label" style="color: #059669;">Selective Transmission:</div>
+                    <div id="selectiveSplitStatus" style="color: #059669; font-weight: bold;">-</div>
+                </div>
+            </div>
+
+            <div class="handshake-notice">
+                <strong>Handshake Mode</strong>: The first frame contains special setup data that helps the decoder optimize for your specific transfer. Make sure to scan this frame.
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Fullscreen mode container (hidden initially) -->
+    <div id="fullscreenDisplay" class="fullscreen" style="display: none;">
+        <div class="qr-container">
+            <img id="fullscreenQR" class="fullscreen-qr" src="" alt="QR Code">
+            <div id="fsCountdownDisplay" class="countdown-display"></div>
+            <!-- Start button in center of screen -->
+            <button id="fullscreenStartBtn" style="position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); padding: 20px 40px; font-size: 28px; background: #16a34a; color: white; border: none; border-radius: 16px; cursor: pointer; z-index: 1001; display: none; box-shadow: 0 8px 32px rgba(0,0,0,0.5);">
+                ▶️ START QR SEQUENCE
+            </button>
+        </div>
+        <div class="fullscreen-counter" id="fullscreenCounter">Frame: 0 / 0</div>
+        <div class="fullscreen-progress progress-container">
+            <div class="progress-bar" id="fullscreenProgressBar"></div>
+        </div>
+        <button class="exit-button" id="exitFullscreenBtn">&times;</button>
+    </div>
+
+    <script>
+        // Constants and configuration
+        const DEFAULT_QR_CONTENT_SIZE = 3500;  // Increased to handle dual chunks
+        const HIGH_DENSITY_QR_CONTENT_SIZE = 5000;
+        let MAX_QR_CONTENT_SIZE = DEFAULT_QR_CONTENT_SIZE;
+
+        // DOM Elements
+        const fileInput = document.getElementById('fileInput');
+        const fileLabel = document.getElementById('fileLabel');
+        const speedSlider = document.getElementById('speedSlider');
+        const sizeSlider = document.getElementById('sizeSlider');
+        const chunkSlider = document.getElementById('chunkSlider');
+        const redundancySlider = document.getElementById('redundancySlider');
+        const countdownSlider = document.getElementById('countdownSlider');
+        const systematicChunksSlider = document.getElementById('systematicChunksSlider');
+        const fountainDegreeSlider = document.getElementById('fountainDegreeSlider');
+        const splitThresholdSlider = document.getElementById('splitThresholdSlider');
+        const enableAutoSplitCheckbox = document.getElementById('enableAutoSplitCheckbox');
+        const selectiveSplitInput = document.getElementById('selectiveSplitInput');
+        const splitParseInfo = document.getElementById('splitParseInfo');
+        const parsedSplitList = document.getElementById('parsedSplitList');
+        const speedValue = document.getElementById('speedValue');
+        const sizeValue = document.getElementById('sizeValue');
+        const chunkValue = document.getElementById('chunkValue');
+        const redundancyValue = document.getElementById('redundancyValue');
+        const systematicChunksValue = document.getElementById('systematicChunksValue');
+        const fountainDegreeValue = document.getElementById('fountainDegreeValue');
+        const splitThresholdValue = document.getElementById('splitThresholdValue');
+        const countdownValue = document.getElementById('countdownValue');
+        const errorCorrectionSelect = document.getElementById('errorCorrectionSelect');
+        const fullscreenCheckbox = document.getElementById('fullscreenCheckbox');
+        const showGuidesCheckbox = document.getElementById('showGuidesCheckbox');
+        const enableTransitionsCheckbox = document.getElementById('enableTransitionsCheckbox');
+        const highDensityCheckbox = document.getElementById('highDensityCheckbox');
+        const generateAndStartBtn = document.getElementById('generateAndStartBtn');
+        const generateBtn = document.getElementById('generateBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const previewBtn = document.getElementById('previewBtn');
+        const generateIntegrityBtn = document.getElementById('generateIntegrityBtn');
+        const downloadReportBtn = document.getElementById('downloadReportBtn');
+        const fileInfo = document.getElementById('fileInfo');
+        const generationProgress = document.getElementById('generationProgress');
+        const progressLabel = document.getElementById('progressLabel');
+        const generationProgressBar = document.getElementById('generationProgressBar');
+        const progressDetails = document.getElementById('progressDetails');
+        const frameType = document.getElementById('frameType');
+        const chunkId = document.getElementById('chunkId');
+        const currentChunkInfo = document.getElementById('currentChunkInfo');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const chunksCount = document.getElementById('chunksCount');
+        const packetsCount = document.getElementById('packetsCount');
+        const redundancyLevel = document.getElementById('redundancyLevel');
+        const transferTime = document.getElementById('transferTime');
+        const optimalDistance = document.getElementById('optimalDistance');
+        const selectiveSplitInfo = document.getElementById('selectiveSplitInfo');
+        const selectiveSplitStatus = document.getElementById('selectiveSplitStatus');
+        const fullscreenDisplay = document.getElementById('fullscreenDisplay');
+        const fullscreenQR = document.getElementById('fullscreenQR');
+        const fullscreenCounter = document.getElementById('fullscreenCounter');
+        const fullscreenProgressBar = document.getElementById('fullscreenProgressBar');
+        const exitFullscreenBtn = document.getElementById('exitFullscreenBtn');
+        const fullscreenStartBtn = document.getElementById('fullscreenStartBtn');
+        const countdownDisplay = document.getElementById('countdownDisplay');
+        const fsCountdownDisplay = document.getElementById('fsCountdownDisplay');
+        const fastPreset = document.getElementById('fastPreset');
+        const reliablePreset = document.getElementById('reliablePreset');
+        const mobilePreset = document.getElementById('mobilePreset');
+
+        // State variables
+        let fileContent = null;
+        let fileNameText = '';
+        let fileSizeBytes = 0;
+        let chunks = [];
+        let fountainPackets = [];
+        let displayInterval = null;
+        let currentFrame = 0;
+        let totalFrames = 0;
+        let isPlaying = false;
+        let isFullscreen = false;
+        let qrSize = 800;
+        let startTime = null;
+        let transmissionTimer = null;
+        let preGeneratedQRs = []; // Array to store pre-generated QR code data URLs
+        let countdownTimer = null;
+        let countdownSeconds = 10;
+        let wakeLock = null;
+        let debugMode = false; // Control debug logging
+
+        // =============================================
+        // Settings Persistence Functions
+        // =============================================
+        
+        // Load settings from localStorage
+        function loadEncoderSettings() {
+            try {
+                const saved = localStorage.getItem('qrEncoderSettings');
+                if (saved) {
+                    const settings = JSON.parse(saved);
+                    console.log('📂 Loaded encoder settings from localStorage:', settings);
+                    
+                    // Apply loaded settings to UI elements
+                    if (settings.speed !== undefined) speedSlider.value = settings.speed;
+                    if (settings.size !== undefined) sizeSlider.value = settings.size;
+                    if (settings.chunkSize !== undefined) chunkSlider.value = settings.chunkSize;
+                    if (settings.redundancy !== undefined) redundancySlider.value = settings.redundancy;
+                    if (settings.countdown !== undefined) countdownSlider.value = settings.countdown;
+                    if (settings.systematicChunks !== undefined) systematicChunksSlider.value = settings.systematicChunks;
+                    if (settings.fountainDegree !== undefined) fountainDegreeSlider.value = settings.fountainDegree;
+                    if (settings.splitThreshold !== undefined) splitThresholdSlider.value = settings.splitThreshold;
+                    if (settings.errorCorrection !== undefined) errorCorrectionSelect.value = settings.errorCorrection;
+                    if (settings.fullscreen !== undefined) fullscreenCheckbox.checked = settings.fullscreen;
+                    if (settings.showGuides !== undefined) showGuidesCheckbox.checked = settings.showGuides;
+                    if (settings.enableTransitions !== undefined) enableTransitionsCheckbox.checked = settings.enableTransitions;
+                    if (settings.highDensity !== undefined) highDensityCheckbox.checked = settings.highDensity;
+                    if (settings.enableAutoSplit !== undefined) enableAutoSplitCheckbox.checked = settings.enableAutoSplit;
+                    if (settings.selectiveSplitInput !== undefined) selectiveSplitInput.value = settings.selectiveSplitInput;
+                    
+                    // Update display values
+                    speedValue.textContent = `${speedSlider.value} FPS`;
+                    sizeValue.textContent = `${sizeSlider.value}px`;
+                    chunkValue.textContent = `${chunkSlider.value} chars`;
+                    redundancyValue.textContent = `${redundancySlider.value}%`;
+                    systematicChunksValue.textContent = systematicChunksSlider.value;
+                    fountainDegreeValue.textContent = fountainDegreeSlider.value;
+                    splitThresholdValue.textContent = `${splitThresholdSlider.value}KB`;
+                    countdownValue.textContent = countdownSlider.value > 0 ? `${countdownSlider.value}s` : 'None';
+                    
+                    // Update global variables
+                    qrSize = parseInt(sizeSlider.value);
+                    countdownSeconds = parseInt(countdownSlider.value);
+                    
+                    return true;
+                }
+            } catch (error) {
+                console.warn('Failed to load encoder settings from localStorage:', error);
+            }
+            return false;
+        }
+
+        // Save settings to localStorage
+        function saveEncoderSettings() {
+            try {
+                const settings = {
+                    speed: speedSlider.value,
+                    size: sizeSlider.value,
+                    chunkSize: chunkSlider.value,
+                    redundancy: redundancySlider.value,
+                    countdown: countdownSlider.value,
+                    systematicChunks: systematicChunksSlider.value,
+                    fountainDegree: fountainDegreeSlider.value,
+                    splitThreshold: splitThresholdSlider.value,
+                    errorCorrection: errorCorrectionSelect.value,
+                    fullscreen: fullscreenCheckbox.checked,
+                    showGuides: showGuidesCheckbox.checked,
+                    enableTransitions: enableTransitionsCheckbox.checked,
+                    highDensity: highDensityCheckbox.checked,
+                    enableAutoSplit: enableAutoSplitCheckbox.checked,
+                    selectiveSplitInput: selectiveSplitInput.value
+                };
+                
+                localStorage.setItem('qrEncoderSettings', JSON.stringify(settings));
+                console.log('💾 Encoder settings saved to localStorage');
+            } catch (error) {
+                console.warn('Failed to save encoder settings to localStorage:', error);
+            }
+        }
+
+        // Load settings on page load
+        loadEncoderSettings();
+
+        // Update UI based on slider values
+        speedSlider.addEventListener('input', () => {
+            const fps = speedSlider.value;
+            speedValue.textContent = `${fps} FPS`;
+            saveEncoderSettings();
+        });
+
+        sizeSlider.addEventListener('input', () => {
+            qrSize = parseInt(sizeSlider.value);
+            sizeValue.textContent = `${qrSize}px`;
+            saveEncoderSettings();
+        });
+
+        chunkSlider.addEventListener('input', () => {
+            const size = chunkSlider.value;
+            chunkValue.textContent = `${size} chars`;
+            saveEncoderSettings();
+        });
+
+        redundancySlider.addEventListener('input', () => {
+            const redundancy = redundancySlider.value;
+            redundancyValue.textContent = `${redundancy}%`;
+            saveEncoderSettings();
+        });
+        
+        countdownSlider.addEventListener('input', () => {
+            countdownSeconds = parseInt(countdownSlider.value);
+            countdownValue.textContent = countdownSeconds > 0 ? `${countdownSeconds}s` : 'None';
+            saveEncoderSettings();
+        });
+        
+        systematicChunksSlider.addEventListener('input', () => {
+            const systematicChunks = systematicChunksSlider.value;
+            systematicChunksValue.textContent = systematicChunks;
+            saveEncoderSettings();
+        });
+        
+        fountainDegreeSlider.addEventListener('input', () => {
+            const fountainDegree = fountainDegreeSlider.value;
+            fountainDegreeValue.textContent = fountainDegree;
+            saveEncoderSettings();
+        });
+        
+        splitThresholdSlider.addEventListener('input', () => {
+            const threshold = splitThresholdSlider.value;
+            splitThresholdValue.textContent = `${threshold}KB`;
+            saveEncoderSettings();
+        });
+
+        // Show alignment guides - only affects fullscreen display now
+        showGuidesCheckbox.addEventListener('change', () => {
+            saveEncoderSettings();
+        });
+        
+        // Toggle high-density mode
+        highDensityCheckbox.addEventListener('change', () => {
+            if (highDensityCheckbox.checked) {
+                MAX_QR_CONTENT_SIZE = HIGH_DENSITY_QR_CONTENT_SIZE;
+                document.querySelectorAll('.high-density-indicator').forEach(el => {
+                    el.style.display = 'block';
+                });
+            } else {
+                MAX_QR_CONTENT_SIZE = DEFAULT_QR_CONTENT_SIZE;
+                document.querySelectorAll('.high-density-indicator').forEach(el => {
+                    el.style.display = 'none';
+                });
+            }
+            
+            if (chunks && chunks.length > 0) {
+                generateBtn.disabled = false;
+            }
+            saveEncoderSettings();
+        });
+
+        // Add event listeners for other checkboxes and selects
+        enableTransitionsCheckbox.addEventListener('change', () => {
+            saveEncoderSettings();
+        });
+
+        enableAutoSplitCheckbox.addEventListener('change', () => {
+            saveEncoderSettings();
+        });
+
+        // Selective split input parsing
+        selectiveSplitInput.addEventListener('input', () => {
+            parseSelectiveSplitInput();
+            saveEncoderSettings();
+        });
+
+        fullscreenCheckbox.addEventListener('change', () => {
+            saveEncoderSettings();
+        });
+
+        errorCorrectionSelect.addEventListener('change', () => {
+            saveEncoderSettings();
+        });
+
+        // Integrity report functionality
+        generateIntegrityBtn.addEventListener('click', () => {
+            generateIntegrityReport();
+        });
+
+        downloadReportBtn.addEventListener('click', () => {
+            downloadIntegrityReport();
+        });
+
+        // Preset button handlers
+        fastPreset.addEventListener('click', () => {
+            applyPreset('fast');
+        });
+
+        reliablePreset.addEventListener('click', () => {
+            applyPreset('reliable');
+        });
+
+        mobilePreset.addEventListener('click', () => {
+            applyPreset('mobile');
+        });
+
+        // Apply preset settings
+        function applyPreset(type) {
+            // Remove active class from all buttons
+            fastPreset.classList.remove('active');
+            reliablePreset.classList.remove('active');
+            mobilePreset.classList.remove('active');
+
+            // Apply settings based on preset type
+            switch (type) {
+                case 'fast':
+                    fastPreset.classList.add('active');
+                    speedSlider.value = 12;
+                    chunkSlider.value = 600;
+                    redundancySlider.value = 50;
+                    systematicChunksSlider.value = 2;
+                    fountainDegreeSlider.value = 3;
+                    errorCorrectionSelect.value = 'M';
+                    enableTransitionsCheckbox.checked = true;
+                    break;
+                    
+                case 'reliable':
+                    reliablePreset.classList.add('active');
+                    speedSlider.value = 6;
+                    chunkSlider.value = 250;
+                    redundancySlider.value = 100;
+                    systematicChunksSlider.value = 2;
+                    fountainDegreeSlider.value = 5;
+                    errorCorrectionSelect.value = 'H';
+                    sizeSlider.value = 800;
+                    qrSize = 800;
+                    sizeValue.textContent = `${qrSize}px`;
+                    enableTransitionsCheckbox.checked = true;
+                    break;
+                    
+                case 'mobile':
+                    mobilePreset.classList.add('active');
+                    speedSlider.value = 8;
+                    chunkSlider.value = 400;
+                    redundancySlider.value = 100;
+                    systematicChunksSlider.value = 1;
+                    fountainDegreeSlider.value = 4;
+                    errorCorrectionSelect.value = 'H';
+                    sizeSlider.value = 600;
+                    qrSize = 600;
+                    sizeValue.textContent = `${qrSize}px`;
+                    enableTransitionsCheckbox.checked = true;
+                    break;
+            }
+
+            // Update slider display values
+            speedValue.textContent = `${speedSlider.value} FPS`;
+            chunkValue.textContent = `${chunkSlider.value} chars`;
+            redundancyValue.textContent = `${redundancySlider.value}%`;
+            systematicChunksValue.textContent = systematicChunksSlider.value;
+            fountainDegreeValue.textContent = fountainDegreeSlider.value;
+            
+            // Save the preset settings to localStorage
+            saveEncoderSettings();
+        }
+
+        // File batch management
+        let fileList = [];
+        let currentProcessingIndex = 0;
+        let currentIntegrityReport = null;
+
+        // File selection handler
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                // Clear existing file list
+                fileList = [];
+                
+                // Add all selected files to the list
+                Array.from(fileInput.files).forEach((file, index) => {
+                    fileList.push({
+                        id: Date.now() + index,
+                        file: file,
+                        name: file.name,
+                        size: file.size,
+                        selected: true,
+                        status: 'pending' // pending, inprogress, sent, error
+                    });
+                });
+                
+                // Update UI
+                updateFileListDisplay();
+                updateFileLabel();
+                generateBtn.disabled = false;
+                generateAndStartBtn.disabled = false;
+                
+                // Stop any ongoing display
+                if (displayInterval) {
+                    clearInterval(displayInterval);
+                    displayInterval = null;
+                }
+                isPlaying = false;
+                stopBtn.disabled = true;
+                fullscreenBtn.disabled = true;
+                previewBtn.disabled = true;
+
+                // Apply optimal settings for the file
+                applyOptimalSettings();
+            }
+        });
+        
+        // Use reliable settings as default for all file sizes
+        function calculateOptimalSettings(fileSize) {
+            // Always use reliable settings regardless of file size
+            return {
+                fps: 6,
+                chunkSize: 450,
+                redundancy: 100,  // High redundancy for reliability
+                distance: "25-30cm",
+                preset: "reliable"
+            };
+        }
+
+        // Update file label with count
+        function updateFileLabel() {
+            const selectedCount = fileList.filter(f => f.selected).length;
+            const totalCount = fileList.length;
+            
+            if (totalCount === 0) {
+                fileLabel.textContent = 'Choose files';
+            } else if (totalCount === 1) {
+                fileLabel.textContent = fileList[0].name;
+            } else {
+                fileLabel.textContent = `${selectedCount}/${totalCount} files selected`;
+            }
+        }
+
+        // Update file list display
+        function updateFileListDisplay() {
+            const container = document.getElementById('fileListContainer');
+            const listElement = document.getElementById('fileList');
+            
+            if (fileList.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+            
+            container.style.display = 'block';
+            listElement.innerHTML = '';
+            
+            fileList.forEach((fileItem, index) => {
+                const itemElement = document.createElement('div');
+                itemElement.className = 'file-item';
+                itemElement.innerHTML = `
+                    <input type="checkbox" class="file-checkbox" id="file-${fileItem.id}" 
+                           ${fileItem.selected ? 'checked' : ''} 
+                           onchange="toggleFileSelection(${fileItem.id})">
+                    <div class="file-info">
+                        <div class="file-name">${fileItem.name}</div>
+                        <div class="file-size">${formatFileSize(fileItem.size)}</div>
+                    </div>
+                    <div class="file-status status-${fileItem.status}">${fileItem.status}</div>
+                `;
+                listElement.appendChild(itemElement);
+            });
+        }
+
+        // Toggle file selection
+        function toggleFileSelection(fileId) {
+            const fileItem = fileList.find(f => f.id === fileId);
+            if (fileItem) {
+                fileItem.selected = !fileItem.selected;
+                updateFileLabel();
+            }
+        }
+
+        // Update file status
+        function updateFileStatus(fileId, status) {
+            const fileItem = fileList.find(f => f.id === fileId);
+            if (fileItem) {
+                fileItem.status = status;
+                updateFileListDisplay();
+            }
+        }
+
+        // Format file size
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Select/Clear all buttons
+        document.getElementById('selectAllBtn').addEventListener('click', () => {
+            fileList.forEach(f => f.selected = true);
+            updateFileListDisplay();
+            updateFileLabel();
+        });
+
+        document.getElementById('clearAllBtn').addEventListener('click', () => {
+            fileList.forEach(f => f.selected = false);
+            updateFileListDisplay();
+            updateFileLabel();
+        });
+
+        // Enterprise file splitting function
+        async function splitFileIntoParts(file, maxPartSize) {
+            return new Promise((resolve, reject) => {
+                const fileReader = new FileReader();
+                fileReader.onload = () => {
+                    try {
+                        const arrayBuffer = fileReader.result;
+                        const fileData = new Uint8Array(arrayBuffer);
+                        const parts = [];
+                        
+                        // Calculate number of parts needed
+                        const totalParts = Math.ceil(fileData.length / maxPartSize);
+                        
+                        console.log(`✂️ ENTERPRISE: Splitting ${file.name} (${fileData.length} bytes) into ${totalParts} parts of ~${formatFileSize(maxPartSize)} each`);
+                        
+                        for (let i = 0; i < totalParts; i++) {
+                            const start = i * maxPartSize;
+                            const end = Math.min(start + maxPartSize, fileData.length);
+                            const partData = fileData.slice(start, end);
+                            
+                            // Create part filename with enterprise naming convention
+                            const fileExtension = file.name.split('.').pop();
+                            const baseName = file.name.replace(`.${fileExtension}`, '');
+                            const partName = `${baseName}.part${i + 1}-${totalParts}.${fileExtension}`;
+                            
+                            // Create File object for the part
+                            const partBlob = new Blob([partData], { type: file.type });
+                            const partFile = new File([partBlob], partName, { type: file.type });
+                            
+                            parts.push(partFile);
+                            console.log(`📦 Created part ${i + 1}/${totalParts}: ${partName} (${formatFileSize(partData.length)})`);
+                        }
+                        
+                        resolve(parts);
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                fileReader.onerror = reject;
+                fileReader.readAsArrayBuffer(file);
+            });
+        }
+
+        // Format file size helper
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Process batch of files - generate combined QR sequence for all files
+        async function processBatchFiles(selectedFiles, autoStart = false) {
+            currentProcessingIndex = 0;
+            console.log(`📁 Starting COMBINED batch processing of ${selectedFiles.length} files...`);
+            console.log(`🎬 AutoStart mode: ${autoStart} - will ${autoStart ? 'display all QR codes automatically' : 'only generate codes'}`);
+            
+            // Combined packets array for all files
+            const combinedPackets = [];
+            let totalCombinedPackets = 0;
+            
+            // Generate QR codes for all files and combine them
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const fileItem = selectedFiles[i];
+                currentProcessingIndex = i;
+                
+                try {
+                    console.log(`📄 Processing file ${i + 1}/${selectedFiles.length}: ${fileItem.name} (${fileItem.size} bytes)`);
+                    
+                    // Update status to in progress
+                    updateFileStatus(fileItem.id, 'inprogress');
+                    
+                    // Check if file needs auto-splitting
+                    const shouldSplit = enableAutoSplitCheckbox.checked && 
+                                       fileItem.size > (parseInt(splitThresholdSlider.value) * 1024);
+                    
+                    if (shouldSplit) {
+                        console.log(`✂️ ENTERPRISE: File ${fileItem.name} (${formatFileSize(fileItem.size)}) exceeds ${splitThresholdSlider.value}KB threshold - auto-splitting`);
+
+                        // Get selective parts list if specified
+                        const selectedParts = parseSelectiveSplitInput();
+
+                        // Split file with selective parts support
+                        const splitParts = await splitFileIntoSelectiveParts(fileItem.file, parseInt(splitThresholdSlider.value) * 1024, selectedParts);
+
+                        if (splitParts.length === 0) {
+                            console.warn(`⚠️ No valid parts to process for ${fileItem.name}`);
+                            updateFileStatus(fileItem.id, 'error');
+                            continue;
+                        }
+
+                        for (let partIndex = 0; partIndex < splitParts.length; partIndex++) {
+                            const partFile = splitParts[partIndex];
+                            console.log(`📦 Processing part ${partIndex + 1}/${splitParts.length}: ${partFile.name}`);
+
+                            const partPackets = await generateQRCodesForFileOnly(partFile);
+                            combinedPackets.push(...partPackets);
+                            totalCombinedPackets += partPackets.length;
+
+                            console.log(`📦 Added ${partPackets.length} packets for ${partFile.name} (total: ${totalCombinedPackets})`);
+                        }
+
+                        const totalPossibleParts = Math.ceil(fileItem.size / (parseInt(splitThresholdSlider.value) * 1024));
+                        const processingType = selectedParts ? `SELECTIVE (${splitParts.length} of ${totalPossibleParts} parts)` : `COMPLETE (${splitParts.length} parts)`;
+
+                        // Update selective transmission UI
+                        if (selectedParts) {
+                            selectiveSplitInfo.style.display = 'block';
+                            selectiveSplitStatus.textContent = `Sending ${splitParts.length}/${totalPossibleParts} parts: ${selectedParts.join(', ')}`;
+                        } else {
+                            selectiveSplitInfo.style.display = 'none';
+                        }
+
+                        console.log(`✅ ENTERPRISE: Completed ${processingType} processing for ${fileItem.name}`);
+                    } else {
+                        console.log(`📄 File ${fileItem.name} (${formatFileSize(fileItem.size)}) under ${splitThresholdSlider.value}KB threshold - processing as single file`);
+                        
+                        // Generate QR codes for single file
+                        const filePackets = await generateQRCodesForFileOnly(fileItem.file);
+                        
+                        // Add file's packets to combined array
+                        combinedPackets.push(...filePackets);
+                        totalCombinedPackets += filePackets.length;
+                        
+                        console.log(`📦 Added ${filePackets.length} packets for ${fileItem.name} (total: ${totalCombinedPackets})`);
+                    }
+                    
+                    // Mark as processed
+                    updateFileStatus(fileItem.id, 'sent');
+                    fileItem.selected = false;
+                    updateFileListDisplay();
+                    updateFileLabel();
+                    
+                } catch (error) {
+                    console.error(`❌ Error processing file ${fileItem.name}:`, error);
+                    updateFileStatus(fileItem.id, 'error');
+                    
+                    if (i < selectedFiles.length - 1) {
+                        const continueProcessing = confirm(`Error processing ${fileItem.name}. Continue with remaining files?`);
+                        if (!continueProcessing) {
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Set combined packets as global arrays for display
+            console.log(`🎯 Combining all files into single QR sequence: ${totalCombinedPackets} total packets`);
+            allPackets = combinedPackets;
+            fountainPackets = combinedPackets;
+            totalPackets = totalCombinedPackets;
+            totalFrames = totalCombinedPackets; // CRITICAL: Set totalFrames for display system
+            
+            console.log(`🔧 Display variables set: totalPackets=${totalPackets}, totalFrames=${totalFrames}`);
+            
+            // Pre-generate all QR code images for smooth display
+            console.log(`🎨 Pre-generating all ${totalCombinedPackets} QR code images...`);
+            await preGenerateAllQRCodes();
+            console.log(`✅ All QR codes pre-generated and ready for display`);
+            
+            // Update UI for combined batch
+            const firstFile = selectedFiles[0];
+            const fileInfo = document.getElementById('fileInfo');
+            if (fileInfo) {
+                document.getElementById('fileName').textContent = `Batch: ${selectedFiles.length} files`;
+                document.getElementById('fileSize').textContent = `Combined transfer`;
+                document.getElementById('packetsCount').textContent = totalCombinedPackets;
+                fileInfo.style.display = 'block';
+            }
+            
+            console.log(`📁 Combined batch ready: ${totalCombinedPackets} QR codes for ${selectedFiles.length} files`);
+            
+            // If autoStart, display the combined sequence
+            if (autoStart && totalCombinedPackets > 0) {
+                console.log(`🎬 Auto-starting combined QR display for all files...`);
+                
+                if (fullscreenCheckbox.checked) {
+                    // Enter fullscreen and start the animated sequence (same as manual button)
+                    isFullscreen = true;
+                    fullscreenDisplay.style.display = 'flex';
+                    
+                    if (countdownSeconds > 0) {
+                        await startCountdownAndWait();
+                    } else {
+                        await startPlayingAndWait();
+                    }
+                } else {
+                    if (countdownSeconds > 0) {
+                        await startCountdownAndWait();
+                    } else {
+                        await startPlayingAndWait();
+                    }
+                }
+                
+                console.log(`✅ Combined batch transmission complete!`);
+            } else {
+                // Enable manual display for combined sequence
+                fullscreenBtn.disabled = false;
+                previewBtn.disabled = false;
+                generateIntegrityBtn.disabled = false;
+                console.log(`💡 Click "Start Display" or "Fullscreen" to show combined QR sequence for all files`);
+            }
+        }
+
+        // Generate QR codes for a specific file (returns packets array)
+        async function generateQRCodesForFileOnly(file) {
+            return new Promise((resolve, reject) => {
+                try {
+                    console.log(`🔧 Generating packets for ${file.name} (${file.size} bytes)`);
+                    
+                    const fileReader = new FileReader();
+                    fileReader.onload = async () => {
+                        try {
+                            const arrayBuffer = fileReader.result;
+                            const fileData = new Uint8Array(arrayBuffer);
+                            const chunkSize = parseInt(chunkSlider.value);
+                            const chunks = [];
+                            
+                            // Split file into chunks
+                            for (let offset = 0; offset < fileData.length; offset += chunkSize) {
+                                const chunk = fileData.slice(offset, offset + chunkSize);
+                                chunks.push(chunk);
+                            }
+                            
+                            // Create LT encoder
+                            const ltEncoder = new SystematicLTEncoder(chunks);
+                            ltEncoder.systematicChunksPerQR = parseInt(systematicChunksSlider.value);
+                            ltEncoder.fountainMaxDegree = parseInt(fountainDegreeSlider.value);
+                            ltEncoder.currentFileName = file.name;
+                            ltEncoder.currentFileSize = file.size;
+                            ltEncoder.currentFileType = file.type;
+                            
+                            // Generate packets
+                            const filePackets = [ltEncoder.generateMetadataPacket()];
+                            const totalPacketsToGenerate = ltEncoder.calculateTotalPackets();
+                            
+                            for (let i = 1; i < totalPacketsToGenerate; i++) {
+                                filePackets.push(ltEncoder.generatePacket());
+                            }
+                            
+                            console.log(`✅ Generated ${filePackets.length} packets for ${file.name}`);
+                            resolve(filePackets);
+                        } catch (error) {
+                            reject(error);
+                        }
+                    };
+                    
+                    fileReader.onerror = reject;
+                    fileReader.readAsArrayBuffer(file);
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        }
+
+        // Generate QR codes for a specific file (legacy - sets globals)
+        async function generateQRCodesForFile(file) {
+            return new Promise((resolve, reject) => {
+                try {
+                    console.log(`🔧 Starting QR generation for ${file.name} (${file.size} bytes)`);
+                    
+                    const fileReader = new FileReader();
+                    fileReader.onload = async () => {
+                        try {
+                            console.log(`📖 File read complete, processing...`);
+                            
+                            // Update file name display
+                            fileName.textContent = file.name;
+                            
+                            // Use existing generateQRCodes logic - same as the main function
+                            const arrayBuffer = fileReader.result;
+                            const fileData = new Uint8Array(arrayBuffer);
+                            
+                            console.log(`📦 File data loaded: ${fileData.length} bytes`);
+                            
+                            // Apply file data to globals for encoding
+                            fileNameText = file.name;
+                            fileSizeBytes = file.size;
+                            
+                            // Split file into chunks
+                            const chunkSize = parseInt(chunkSlider.value);
+                            const chunks = [];
+                            
+                            console.log(`✂️ Splitting into ${chunkSize} byte chunks...`);
+                            
+                            for (let offset = 0; offset < fileData.length; offset += chunkSize) {
+                                const chunk = fileData.slice(offset, offset + chunkSize);
+                                chunks.push(chunk);
+                            }
+                            
+                            console.log(`📊 Created ${chunks.length} chunks`);
+                            
+                            // Create LT encoder with systematic extensions
+                            console.log(`🏗️ Creating SystematicLTEncoder...`);
+                            const ltEncoder = new SystematicLTEncoder(chunks);
+                            ltEncoder.systematicChunksPerQR = parseInt(systematicChunksSlider.value);
+                            ltEncoder.fountainMaxDegree = parseInt(fountainDegreeSlider.value);
+                            
+                            // Set current file info for metadata generation
+                            ltEncoder.currentFileName = file.name;
+                            ltEncoder.currentFileSize = file.size;
+                            ltEncoder.currentFileType = file.type;
+                            
+                            console.log(`⚙️ Encoder configured: systematic=${ltEncoder.systematicChunksPerQR}, fountain=${ltEncoder.fountainMaxDegree}`);
+                            
+                            // Generate packets
+                            console.log(`📤 Generating metadata packet...`);
+                            const localFountainPackets = [ltEncoder.generateMetadataPacket()];
+                            
+                            console.log(`🔢 Calculating total packets needed...`);
+                            const totalPacketsToGenerate = ltEncoder.calculateTotalPackets();
+                            console.log(`📊 Will generate ${totalPacketsToGenerate} total packets`);
+                            
+                            for (let i = 1; i < totalPacketsToGenerate; i++) {
+                                const packet = ltEncoder.generatePacket();
+                                localFountainPackets.push(packet);
+                                
+                                // Progress logging every 50 packets
+                                if (i % 50 === 0) {
+                                    console.log(`📤 Generated ${i}/${totalPacketsToGenerate} packets...`);
+                                }
+                            }
+                            
+                            console.log(`✅ Generated all ${localFountainPackets.length} packets`);
+                            
+                            // Set BOTH global variables for display
+                            allPackets = localFountainPackets;
+                            fountainPackets = localFountainPackets; // Fix: Also set global fountainPackets
+                            totalPackets = allPackets.length;
+                            
+                            console.log(`🔧 Global arrays set: allPackets.length=${allPackets.length}, fountainPackets.length=${fountainPackets.length}`);
+                            
+                            console.log(`📊 Updating packet info UI...`);
+                            try {
+                                // Update UI elements directly (same as updatePacketInfo)
+                                // Update file info in the main file info panel
+                                if (fileName) fileName.textContent = file.name;
+                                if (fileSize) fileSize.textContent = formatFileSize(file.size);
+                                if (chunksCount) chunksCount.textContent = chunks.length;
+                                if (packetsCount) packetsCount.textContent = fountainPackets.length;
+                                if (redundancyLevel) redundancyLevel.textContent = `${parseInt(redundancySlider.value)}%`;
+                                if (transferTime) transferTime.textContent = `~${Math.ceil(fountainPackets.length / parseInt(speedSlider.value))} seconds`;
+                                
+                                // Show file info
+                                const fileInfo = document.getElementById('fileInfo');
+                                if (fileInfo) fileInfo.style.display = 'block';
+                                
+                                console.log(`✅ UI update completed`);
+                            } catch (err) {
+                                console.error(`❌ Error updating UI:`, err);
+                                // Don't throw - this isn't critical for QR generation
+                            }
+                            
+                            console.log(`🎯 QR generation complete for ${file.name}`);
+                            resolve();
+                        } catch (error) {
+                            console.error(`❌ Error in file processing:`, error);
+                            console.error(`❌ Error details:`, error.message);
+                            console.error(`❌ Error stack:`, error.stack);
+                            reject(error);
+                        }
+                    };
+                    
+                    fileReader.onerror = (error) => {
+                        console.error(`❌ File reader error:`, error);
+                        reject(error);
+                    };
+                    
+                    console.log(`📖 Reading file as ArrayBuffer...`);
+                    fileReader.readAsArrayBuffer(file);
+                } catch (error) {
+                    console.error(`❌ Error setting up file reader:`, error);
+                    reject(error);
+                }
+            });
+        }
+
+        // Start playing and wait for completion
+        async function startPlayingAndWait() {
+            return new Promise((resolve) => {
+                startPlaying();
+                
+                // Wait for display to complete (now using setTimeout for display)
+                const checkCompletion = setInterval(() => {
+                    if (!displayInterval && !isPlaying) {
+                        clearInterval(checkCompletion);
+                        resolve();
+                    }
+                }, 1000);
+            });
+        }
+
+        // Start countdown and wait for completion
+        async function startCountdownAndWait() {
+            return new Promise((resolve) => {
+                // Start countdown first
+                startCountdown();
+                
+                // Wait for countdown + display to complete
+                const checkCompletion = setInterval(() => {
+                    if (!displayInterval && !countdownTimer && !isPlaying) {
+                        clearInterval(checkCompletion);
+                        resolve();
+                    }
+                }, 1000);
+            });
+        }
+        
+        // Exit fullscreen mode
+        function exitFullscreenMode() {
+            const fullscreenDisplay = document.getElementById('fullscreenDisplay');
+            if (fullscreenDisplay) {
+                fullscreenDisplay.style.display = 'none';
+            }
+            
+            // Exit browser fullscreen if active
+            if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement) {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.mozCancelFullScreen) {
+                    document.mozCancelFullScreen();
+                }
+            }
+        }
+        
+        // Apply optimal settings
+        function applyOptimalSettings() {
+            if (!fileInput.files.length) return;
+            
+            const optimal = calculateOptimalSettings(fileSizeBytes);
+            
+            // Set slider values
+            speedSlider.value = optimal.fps;
+            speedValue.textContent = `${optimal.fps} FPS`;
+            
+            chunkSlider.value = optimal.chunkSize;
+            chunkValue.textContent = `${optimal.chunkSize} chars`;
+            
+            redundancySlider.value = optimal.redundancy;
+            redundancyValue.textContent = `${optimal.redundancy}%`;
+
+            // Set optimal distance
+            optimalDistance.textContent = optimal.distance;
+
+            // Apply the matching preset
+            applyPreset(optimal.preset);
+        }
+
+        // Generate & Start button (combined functionality)
+        generateAndStartBtn.addEventListener('click', async () => {
+            const selectedFiles = fileList.filter(f => f.selected);
+            if (selectedFiles.length === 0) {
+                alert('Please select at least one file to process');
+                return;
+            }
+            
+            generateAndStartBtn.disabled = true;
+            
+            // Show progress bar
+            generationProgress.style.display = 'block';
+            progressLabel.textContent = 'Generating QR Codes for Batch...';
+            generationProgressBar.style.width = '0%';
+            progressDetails.textContent = 'Initializing batch processing...';
+            
+            try {
+                await processBatchFiles(selectedFiles, true);
+            } catch (error) {
+                alert('Error during batch processing: ' + error.message);
+            } finally {
+                // Hide progress bar
+                generationProgress.style.display = 'none';
+                generateAndStartBtn.disabled = false;
+            }
+        });
+
+        // Generate QR codes
+        generateBtn.addEventListener('click', async () => {
+            const selectedFiles = fileList.filter(f => f.selected);
+            if (selectedFiles.length === 0) {
+                alert('Please select at least one file to generate QR codes');
+                return;
+            }
+            
+            generateBtn.disabled = true;
+            
+            // Show progress bar
+            generationProgress.style.display = 'block';
+            progressLabel.textContent = 'Generating QR Codes...';
+            generationProgressBar.style.width = '0%';
+            progressDetails.textContent = 'Preparing files for encoding...';
+            
+            try {
+                await processBatchFiles(selectedFiles, false);
+                fullscreenBtn.disabled = false;
+                previewBtn.disabled = false;
+                generateIntegrityBtn.disabled = false;
+            } catch (error) {
+                alert('Error generating QR codes: ' + error.message);
+            } finally {
+                // Hide progress bar
+                generationProgress.style.display = 'none';
+                generateBtn.disabled = false;
+            }
+        });
+
+        // Generate QR codes function
+        async function generateQRCodes() {
+            if (!fileInput.files.length) return;
+            
+            const file = fileInput.files[0];
+            const chunkSize = parseInt(chunkSlider.value);
+            const redundancyPercent = parseInt(redundancySlider.value);
+            
+            // Read the file as binary data
+            const fileData = await readFileAsBinary(file);
+            fileContent = fileData;
+            
+            // Split file into binary chunks  
+            chunks = chunkFileBinary(fileContent, chunkSize);
+            
+            if (debugMode) {
+                console.log(`🔍 ENCODER DEBUG - File reading:`);
+                console.log(`  File size: ${fileData.length} bytes`);
+                console.log(`  File type: ${fileData.constructor.name}`);
+                console.log(`  File first 4 bytes: [${Array.from(fileData.slice(0, 4)).join(', ')}]`);
+                console.log(`  Chunk size: ${chunkSize} bytes`);
+                console.log(`  Created ${chunks.length} chunks`);
+                console.log(`  First chunk: ${chunks[0].length} bytes, type: ${chunks[0].constructor.name}`);
+                console.log(`  First chunk first 4 bytes: [${Array.from(chunks[0].slice(0, 4)).join(', ')}]`);
+                console.log(`  Last chunk: ${chunks[chunks.length-1].length} bytes`);
+            }
+            
+            // Create LT encoder with systematic extensions
+            const ltEncoder = new SystematicLTEncoder(chunks);
+            
+            // Set systematic and fountain parameters separately
+            ltEncoder.systematicChunksPerQR = parseInt(systematicChunksSlider.value);
+            ltEncoder.fountainMaxDegree = parseInt(fountainDegreeSlider.value);
+            
+            // Set current file info for metadata generation
+            ltEncoder.currentFileName = fileNameText;
+            ltEncoder.currentFileSize = fileSizeBytes;
+            ltEncoder.currentFileType = fileInput.files[0] ? fileInput.files[0].type : '';
+            
+            // Generate metadata packet first
+            fountainPackets = [ltEncoder.generateMetadataPacket()];
+            
+            // Calculate total packets to generate
+            const totalPackets = ltEncoder.calculateTotalPackets();
+            
+            // Generate the rest of the packets using LT coding
+            for (let i = 1; i < totalPackets; i++) {
+                fountainPackets.push(ltEncoder.generatePacket());
+            }
+            
+            // Generate an additional copy of chunk 0 to ensure it's received
+            if (chunks.length > 0) {
+                const redundantChunk0 = ltEncoder.createSystematicPacket(0);
+                redundantChunk0.p = ltEncoder.packetCounter; // Update packet ID
+                fountainPackets.push(redundantChunk0);
+            }
+            
+            // Ensure we have enough redundancy packets (LT phase)
+            const generatedLTPackets = fountainPackets.filter(p => p.systematic === false && p.metaString === undefined).length;
+            const systematicPhasePackets = fountainPackets.filter(p => p.systematic === true).length;
+            
+            // If we don't have enough LT packets based on redundancy requirements, add more
+            const targetLTPackets = Math.ceil(chunks.length * (redundancyPercent / 100));
+            if (generatedLTPackets < targetLTPackets) {
+                const additionalPacketsNeeded = targetLTPackets - generatedLTPackets;
+                
+                for (let i = 0; i < additionalPacketsNeeded; i++) {
+                    // Force systematic phase to false to generate LT packets
+                    ltEncoder.systematicPhase = false;
+                    fountainPackets.push(ltEncoder.createLTPacket());
+                }
+            }
+            
+            totalFrames = fountainPackets.length;
+            
+            // Update UI
+            console.log(`📊 Total frames: ${totalFrames}`);
+            fileName.textContent = fileNameText;
+            fileSize.textContent = formatFileSize(fileSizeBytes);
+            chunksCount.textContent = chunks.length;
+            packetsCount.textContent = fountainPackets.length;
+            redundancyLevel.textContent = `${redundancyPercent}% (${Math.round((fountainPackets.length / chunks.length - 1) * 100)}% effective)`;
+            transferTime.textContent = `~${Math.ceil(totalFrames / parseInt(speedSlider.value))} seconds`;
+            optimalDistance.textContent = calculateOptimalSettings(fileSizeBytes).distance;
+            
+            // Calculate systematic vs. fountain packets accurately
+            const systematicCount = systematicPhasePackets;
+            const fountainCount = generatedLTPackets + (fountainPackets.length - systematicCount - generatedLTPackets - 1); // -1 for metadata
+            
+            // Create phase information element if it doesn't exist
+            if (!document.getElementById('phaseInfo')) {
+                const phaseInfo = document.createElement('div');
+                phaseInfo.id = 'phaseInfo';
+                phaseInfo.className = 'info-row';
+                phaseInfo.innerHTML = `
+                    <div class="info-label">Encoding Phases:</div>
+                    <div id="phaseDetails">
+                        <div>Systematic: ${systematicCount} packets</div>
+                        <div>Fountain: ${fountainCount} packets</div>
+                    </div>
+                `;
+                document.getElementById('fileInfo').appendChild(phaseInfo);
+            } else {
+                document.getElementById('phaseDetails').innerHTML = `
+                    <div>Systematic: ${systematicCount} packets</div>
+                    <div>Fountain: ${fountainCount} packets</div>
+                `;
+            }
+            
+            // Show LT parameters if they don't exist
+            if (!document.getElementById('ltParams') && fountainPackets.length > 0) {
+                const ltParams = document.createElement('div');
+                ltParams.id = 'ltParams';
+                ltParams.className = 'info-row';
+                ltParams.innerHTML = `
+                    <div class="info-label">LT Parameters:</div>
+                    <div id="ltDetails">
+                        <div>c: ${ltEncoder.c.toFixed(2)}</div>
+                        <div>δ: ${ltEncoder.delta.toFixed(2)}</div>
+                    </div>
+                `;
+                document.getElementById('fileInfo').appendChild(ltParams);
+            }
+            
+            fileInfo.style.display = 'block';
+            
+            // Display first pre-generated QR code
+            if (preGeneratedQRs.length > 0) {
+                displayPreGeneratedQR(0, isFullscreen);
+                currentFrame = 0;
+            }
+            
+            return true;
+        }
+
+        // Preview fullscreen with placeholder
+        previewBtn.addEventListener('click', () => {
+            enterFullscreenPreviewMode();
+        });
+        
+        // Preview fullscreen mode for camera adjustment
+        function enterFullscreenPreviewMode() {
+            isFullscreen = true;
+            fullscreenDisplay.style.display = 'flex';
+            
+            // Show placeholder QR with alignment guides
+            fullscreenQR.src = "data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23f0f0f0' stroke='%23999' stroke-width='2'/%3e%3ctext x='50' y='35' text-anchor='middle' font-size='8' fill='%23666'%3eQR Code%3c/text%3e%3ctext x='50' y='50' text-anchor='middle' font-size='8' fill='%23666'%3ePreview%3c/text%3e%3ctext x='50' y='65' text-anchor='middle' font-size='8' fill='%23666'%3eAlign Camera%3c/text%3e%3c/svg%3e";
+            fullscreenCounter.textContent = `Preview Mode - Align your camera`;
+            
+            console.log('📷 Entered fullscreen preview mode for camera alignment');
+        }
+        
+        // Start countdown with first QR code visible for camera alignment
+        async function startCountdown() {
+            let countdown = countdownSeconds;
+            
+            console.log(`⏰ Starting countdown with first QR code visible for camera alignment`);
+            
+            // Show the first pre-generated QR code immediately (for camera alignment)
+            if (preGeneratedQRs.length > 0) {
+                displayPreGeneratedQR(0, isFullscreen);
+                console.log(`📋 First QR code (metadata) displayed during countdown for camera alignment`);
+            }
+            
+            // Initialize countdown displays (only fullscreen countdown exists now)
+            fsCountdownDisplay.textContent = countdown;
+            fsCountdownDisplay.style.display = isFullscreen ? 'block' : 'none';
+            
+            // Disable buttons during countdown
+            fullscreenBtn.disabled = true;
+            
+            // Start countdown timer
+            countdownTimer = setInterval(() => {
+                countdown--;
+                
+                if (countdown <= 0) {
+                    // Countdown complete, hide countdown and continue sequence
+                    clearInterval(countdownTimer);
+                    fsCountdownDisplay.style.display = 'none';
+                    console.log(`⏰ Countdown finished - keeping first metadata QR for additional 3 seconds`);
+                    
+                    // Keep the first metadata QR for additional 3 seconds after countdown
+                    setTimeout(() => {
+                        console.log(`📋 Additional 3-second metadata display complete - starting sequence from frame 1`);
+                        currentFrame = 1;
+                        startPlayingFromCurrentFrame();
+                    }, 3000); // Additional 3 seconds for first metadata QR
+                } else {
+                    // Update countdown display (only fullscreen exists now)
+                    fsCountdownDisplay.textContent = countdown;
+                }
+            }, 1000);
+        }
+        
+        // Request wake lock to prevent screen from sleeping
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('Screen wake lock activated');
+                    
+                    wakeLock.addEventListener('release', () => {
+                        console.log('Screen wake lock released');
+                    });
+                }
+            } catch (err) {
+                console.log('Wake lock failed:', err.message);
+            }
+        }
+
+        // Release wake lock
+        function releaseWakeLock() {
+            if (wakeLock) {
+                wakeLock.release();
+                wakeLock = null;
+                console.log('Screen wake lock released manually');
+            }
+        }
+
+        // Start playing QR codes
+        function startPlaying() {
+            console.log(`🎬 startPlaying() called - beginning QR display`);
+            console.log(`📊 Total packets available: ${totalPackets}`);
+            console.log(`📊 Fountain packets array length: ${fountainPackets.length}`);
+            
+            isPlaying = true;
+            stopBtn.disabled = false;
+            currentFrame = 0;
+            
+            // Prevent screen from sleeping during QR display
+            requestWakeLock();
+            
+            // Start timestamp for transmission
+            startTime = Date.now();
+            
+            // Update transmission time periodically
+            transmissionTimer = setInterval(updateTransmissionStats, 1000);
+            
+            // Display QR codes at specified frame rate
+            const baseInterval = 1000 / parseInt(speedSlider.value);
+            let nextFrameDelay = baseInterval;
+            
+            // Simplified transition implementation
+            const scheduleNextFrame = async () => {
+                // Display pre-generated QR code for current frame
+                displayPreGeneratedQR(currentFrame, isFullscreen);
+                
+                // Check if current frame is metadata (first frame or has metaString)
+                const currentPacket = fountainPackets[currentFrame];
+                const isMetadata = currentFrame === 0 || (currentPacket && currentPacket.metaString);
+                
+                // Set delay - metadata packets get 3x longer display time
+                if (isMetadata) {
+                    nextFrameDelay = Math.max(baseInterval * 3, 3000); // At least 3 seconds for metadata
+                    console.log(`📋 Metadata QR displayed for ${nextFrameDelay}ms (3x longer)`);
+                } else {
+                    nextFrameDelay = baseInterval;
+                }
+                
+                // Update frame index with safety check
+                if (totalFrames > 0) {
+                    currentFrame = (currentFrame + 1) % totalFrames;
+                    console.log(`📍 Frame updated: ${currentFrame}/${totalFrames}`);
+                } else {
+                    console.error(`❌ totalFrames is ${totalFrames}, stopping display`);
+                    return; // Stop the loop if totalFrames is invalid
+                }
+                
+                // Schedule next frame
+                displayInterval = setTimeout(scheduleNextFrame, nextFrameDelay);
+            };
+            
+            // Start the display sequence
+            scheduleNextFrame();
+        }
+
+        // Enterprise-grade QR pre-generation with comprehensive error handling
+        async function preGenerateAllQRCodes() {
+            console.log(`🏭 ENTERPRISE: Starting pre-generation with full error handling and validation`);
+            preGeneratedQRs = []; // Clear existing
+            
+            // Validation checks
+            if (!fountainPackets || fountainPackets.length === 0) {
+                throw new Error('ENTERPRISE ERROR: No fountain packets available for QR generation');
+            }
+            
+            if (!errorCorrectionSelect || !errorCorrectionSelect.value) {
+                throw new Error('ENTERPRISE ERROR: Error correction level not set');
+            }
+            
+            let successCount = 0;
+            let errorCount = 0;
+            const startTime = performance.now();
+            
+            for (let i = 0; i < fountainPackets.length; i++) {
+                const packet = fountainPackets[i];
+                
+                // Add delay every 10 QR codes to prevent browser unresponsiveness
+                if (i > 0 && i % 10 === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 50)); // 50ms delay
+                    
+                    // Update progress bar
+                    const progress = (i / fountainPackets.length * 100);
+                    generationProgressBar.style.width = `${progress}%`;
+                    progressDetails.textContent = `Processing frame ${i}/${fountainPackets.length} (${progress.toFixed(1)}%)`;
+                    
+                    console.log(`🔄 QR Generation Progress: ${i}/${fountainPackets.length} (${progress.toFixed(1)}%)`);
+                }
+                
+                try {
+                    // Enterprise validation of packet structure
+                    if (!packet) {
+                        throw new Error(`Packet ${i} is null or undefined`);
+                    }
+                    
+                    // Get packet data with validation
+                    let packetData;
+                    if (packet.metaString) {
+                        packetData = packet.metaString;
+                        if (typeof packetData !== 'string' || packetData.length === 0) {
+                            throw new Error(`Invalid metadata string in packet ${i}`);
+                        }
+                    } else if (packet.dataString) {
+                        packetData = packet.dataString;
+                        if (typeof packetData !== 'string' || packetData.length === 0) {
+                            throw new Error(`Invalid data string in packet ${i}`);
+                        }
+                    } else {
+                        throw new Error(`Packet ${i} has no valid data (no metaString or dataString)`);
+                    }
+                    
+                    // Validate packet data length (QR code limits)
+                    if (packetData.length > 4000) {
+                        console.warn(`⚠️ ENTERPRISE WARNING: Frame ${i} data length ${packetData.length} may exceed QR capacity`);
+                    }
+                    
+                    // Generate QR code with enterprise-grade error handling
+                    const qrDataURL = await new Promise((resolve, reject) => {
+                        // Set timeout for QR generation (enterprise reliability)
+                        const timeout = setTimeout(() => {
+                            reject(new Error(`QR generation timeout for frame ${i} after 5 seconds`));
+                        }, 5000);
+                        
+                        QRCode.toDataURL(packetData, {
+                            errorCorrectionLevel: errorCorrectionSelect.value,
+                            width: qrSize,
+                            margin: 2,
+                            color: {
+                                dark: '#333333',
+                                light: '#FFFFFF'
+                            }
+                        }, (error, url) => {
+                            clearTimeout(timeout);
+                            if (error) {
+                                reject(new Error(`QRCode.toDataURL failed for frame ${i}: ${error.message}`));
+                            } else if (!url || typeof url !== 'string') {
+                                reject(new Error(`Invalid QR data URL returned for frame ${i}`));
+                            } else {
+                                resolve(url);
+                            }
+                        });
+                    });
+                    
+                    preGeneratedQRs[i] = qrDataURL;
+                    successCount++;
+                    
+                    // Progress logging with enterprise details
+                    if ((i + 1) % 10 === 0 || i === 0 || packet.metaString) {
+                        const packetType = packet.metaString ? 'METADATA' : 'DATA';
+                        console.log(`🎨 ENTERPRISE: Pre-generated QR ${i + 1}/${fountainPackets.length} (${packetType}) - Data length: ${packetData.length}`);
+                    }
+                    
+                } catch (error) {
+                    errorCount++;
+                    console.error(`❌ ENTERPRISE ERROR: Frame ${i} generation failed:`, error.message);
+                    console.error(`❌ ENTERPRISE CONTEXT: Packet type=${packet.metaString ? 'metadata' : packet.dataString ? 'data' : 'unknown'}, qrSize=${qrSize}, errorLevel=${errorCorrectionSelect.value}`);
+                    
+                    // Enterprise fallback: Create error QR code
+                    try {
+                        const errorQR = await new Promise((resolve, reject) => {
+                            QRCode.toDataURL(`ENTERPRISE_ERROR_FRAME_${i}`, {
+                                errorCorrectionLevel: 'M',
+                                width: qrSize,
+                                color: { dark: '#FF0000', light: '#FFFFFF' }
+                            }, (error, url) => {
+                                if (error) reject(error);
+                                else resolve(url);
+                            });
+                        });
+                        preGeneratedQRs[i] = errorQR;
+                        console.log(`🔧 ENTERPRISE RECOVERY: Created error QR for frame ${i}`);
+                    } catch (fallbackError) {
+                        console.error(`❌ ENTERPRISE CRITICAL: Even fallback QR failed for frame ${i}:`, fallbackError);
+                        preGeneratedQRs[i] = null;
+                    }
+                }
+            }
+            
+            // Final progress update
+            generationProgressBar.style.width = '100%';
+            progressDetails.textContent = `Generation complete! ${fountainPackets.length} QR codes ready`;
+            
+            const duration = performance.now() - startTime;
+            console.log(`✅ ENTERPRISE: Pre-generation complete in ${duration.toFixed(0)}ms`);
+            console.log(`📊 ENTERPRISE STATS: ${successCount} success, ${errorCount} errors, ${preGeneratedQRs.filter(qr => qr !== null).length} total usable QRs`);
+            
+            // Enterprise validation of results
+            if (successCount === 0) {
+                throw new Error('ENTERPRISE CRITICAL: No QR codes could be generated');
+            }
+            
+            if (errorCount > successCount * 0.1) { // More than 10% errors
+                console.warn(`⚠️ ENTERPRISE WARNING: High error rate ${errorCount}/${fountainPackets.length} (${(errorCount/fountainPackets.length*100).toFixed(1)}%)`);
+            }
+        }
+
+        // Enterprise-grade display function with comprehensive error handling
+        function displayPreGeneratedQR(frameIndex, forFullscreen = false) {
+            try {
+                // Enterprise validation
+                if (typeof frameIndex !== 'number' || frameIndex < 0) {
+                    throw new Error(`Invalid frame index: ${frameIndex}`);
+                }
+                
+                if (frameIndex >= preGeneratedQRs.length) {
+                    throw new Error(`Frame index ${frameIndex} exceeds pre-generated array length ${preGeneratedQRs.length}`);
+                }
+                
+                const qrDataURL = preGeneratedQRs[frameIndex];
+                
+                if (!qrDataURL) {
+                    throw new Error(`No pre-generated QR data for frame ${frameIndex}`);
+                }
+                
+                if (typeof qrDataURL !== 'string' || !qrDataURL.startsWith('data:image/')) {
+                    throw new Error(`Invalid QR data URL format for frame ${frameIndex}`);
+                }
+                
+                console.log(`📱 ENTERPRISE: Displaying pre-generated QR for frame ${frameIndex}`);
+                
+                // Enterprise-grade DOM updates with validation
+                if (forFullscreen) {
+                    if (!fullscreenQR) {
+                        throw new Error('Fullscreen QR element not found');
+                    }
+                    fullscreenQR.src = qrDataURL;
+                    fullscreenQR.onerror = () => {
+                        console.error(`❌ ENTERPRISE ERROR: Failed to load QR image for frame ${frameIndex} in fullscreen`);
+                    };
+                } else {
+                    if (!qrDisplay) {
+                        throw new Error('QR display element not found');
+                    }
+                    qrDisplay.innerHTML = `<img src="${qrDataURL}" alt="QR Code" style="max-width: 100%; max-height: 100%;" onerror="console.error('QR image load failed for frame ${frameIndex}')">`;
+                }
+                
+                // Enterprise-grade UI updates with error handling
+                try {
+                    console.log(`📍 Displaying frame: ${frameIndex + 1} / ${totalFrames}`);
+                    
+                    // Update fullscreen counter
+                    if (forFullscreen || isFullscreen) {
+                        fullscreenCounter.textContent = `Frame: ${frameIndex + 1} / ${totalFrames}`;
+                    }
+                    
+                    // Enterprise-safe metadata update
+                    try {
+                        updateFrameMetadata(frameIndex);
+                    } catch (metadataError) {
+                        console.warn(`⚠️ ENTERPRISE WARNING: Frame metadata update failed for frame ${frameIndex}:`, metadataError.message);
+                        // Continue without metadata update - not critical
+                    }
+                    
+                    const progress = ((frameIndex + 1) / totalFrames) * 100;
+                    if (fullscreenProgressBar) fullscreenProgressBar.style.width = `${progress}%`;
+                } catch (uiError) {
+                    console.warn(`⚠️ ENTERPRISE WARNING: UI update failed for frame ${frameIndex}:`, uiError.message);
+                    // Don't throw - UI errors shouldn't break QR display
+                }
+                
+            } catch (error) {
+                console.error(`❌ ENTERPRISE ERROR: Display failed for frame ${frameIndex}:`, error.message);
+                console.error(`❌ ENTERPRISE CONTEXT: forFullscreen=${forFullscreen}, totalFrames=${totalFrames}, preGeneratedQRs.length=${preGeneratedQRs.length}`);
+                
+                // Enterprise recovery: Try to continue with next frame
+                console.log(`🔧 ENTERPRISE RECOVERY: Attempting to continue to next frame`);
+            }
+        }
+        
+        // Start playing from current frame (used after countdown)
+        function startPlayingFromCurrentFrame() {
+            console.log(`🎬 Starting QR sequence from frame ${currentFrame}`);
+            isPlaying = true;
+            stopBtn.disabled = false;
+            
+            // Continue with the sequence scheduling
+            const baseInterval = 1000 / parseInt(speedSlider.value);
+            
+            const scheduleNextFrame = async () => {
+                // Display pre-generated QR code for current frame
+                displayPreGeneratedQR(currentFrame, isFullscreen);
+                
+                // Check if current frame is metadata
+                const currentPacket = fountainPackets[currentFrame];
+                const isMetadata = currentPacket && currentPacket.metaString;
+                
+                // Set delay - metadata packets get longer display
+                let nextFrameDelay;
+                if (isMetadata) {
+                    nextFrameDelay = Math.max(baseInterval * 3, 3000);
+                    console.log(`📋 Metadata QR displayed for ${nextFrameDelay}ms (3x longer)`);
+                } else {
+                    nextFrameDelay = baseInterval;
+                }
+                
+                // Update frame index with safety check
+                if (totalFrames > 0) {
+                    currentFrame = (currentFrame + 1) % totalFrames;
+                    console.log(`📍 Frame updated: ${currentFrame}/${totalFrames}`);
+                } else {
+                    console.error(`❌ totalFrames is ${totalFrames}, stopping display`);
+                    return;
+                }
+                
+                // Schedule next frame
+                displayInterval = setTimeout(scheduleNextFrame, nextFrameDelay);
+            };
+            
+            // Start the sequence from current frame
+            scheduleNextFrame();
+        }
+
+        // Stop display
+        stopBtn.addEventListener('click', () => {
+            stopPlaying();
+        });
+        
+        function stopPlaying() {
+            if (countdownTimer) {
+                clearInterval(countdownTimer);
+                countdownTimer = null;
+                if (isFullscreen) {
+                    fsCountdownDisplay.style.display = 'none';
+                }
+            }
+            
+            if (displayInterval) {
+                clearTimeout(displayInterval); // Changed from clearInterval to clearTimeout
+                displayInterval = null;
+            }
+            
+            if (transmissionTimer) {
+                clearInterval(transmissionTimer);
+                transmissionTimer = null;
+            }
+            
+            // Release wake lock when stopping
+            releaseWakeLock();
+            
+            isPlaying = false;
+            stopBtn.disabled = true;
+        }
+
+        // Fullscreen mode - show fullscreen with start button
+        fullscreenBtn.addEventListener('click', () => {
+            if (fountainPackets.length === 0) {
+                alert('Please generate QR codes first');
+                return;
+            }
+            
+            // Enter fullscreen mode and show start button
+            isFullscreen = true;
+            fullscreenDisplay.style.display = 'flex';
+            fullscreenStartBtn.style.display = 'block';
+            fullscreenCounter.textContent = `Ready: ${fountainPackets.length} QR codes prepared`;
+            
+            // Show first QR code as preview
+            if (preGeneratedQRs.length > 0) {
+                displayPreGeneratedQR(0, true);
+            }
+        });
+        
+        // Fullscreen start button - actually start the QR sequence
+        fullscreenStartBtn.addEventListener('click', () => {
+            // Hide start button and begin sequence
+            fullscreenStartBtn.style.display = 'none';
+            
+            // Start the QR sequence with countdown if enabled (same as before)
+            if (countdownSeconds > 0) {
+                startCountdown();
+            } else {
+                startPlaying();
+            }
+        });
+        
+        // Enter fullscreen mode
+        function enterFullscreenMode() {
+            isFullscreen = true;
+            fullscreenDisplay.style.display = 'flex';
+            
+            // Stop normal display if it's playing
+            if (isPlaying) {
+                stopPlaying();
+            }
+            
+            // Wait a moment for fullscreen layout to settle, then display pre-generated QR code
+            setTimeout(() => {
+                if (currentFrame >= 0 && preGeneratedQRs.length > 0) {
+                    displayPreGeneratedQR(currentFrame, true);
+                }
+            }, 100);
+        }
+
+        // Exit fullscreen mode
+        exitFullscreenBtn.addEventListener('click', () => {
+            isFullscreen = false;
+            fullscreenDisplay.style.display = 'none';
+            fullscreenStartBtn.style.display = 'none';
+            
+            // Stop fullscreen display and reset counter
+            stopPlaying();
+            
+            // Reset frame counter so it starts from beginning next time
+            currentFrame = 0;
+            
+            // Re-enable fullscreen button if QR codes are available
+            if (fountainPackets.length > 0) {
+                fullscreenBtn.disabled = false;
+                previewBtn.disabled = false;
+            }
+            
+            console.log('🔄 Fullscreen exited - frame counter reset to 0, buttons re-enabled');
+        });
+
+        // Handle window resize for fullscreen mode
+        window.addEventListener('resize', () => {
+            if (isFullscreen && currentFrame >= 0 && preGeneratedQRs.length > 0) {
+                // Redisplay pre-generated QR code with new fullscreen size
+                setTimeout(() => {
+                    displayPreGeneratedQR(currentFrame, true);
+                }, 100);
+            }
+        });
+        
+        // Update transmission statistics
+        function updateTransmissionStats() {
+            if (!isPlaying || !startTime) return;
+            
+            const elapsed = (Date.now() - startTime) / 1000;
+            const elapsedFormatted = formatTime(elapsed);
+            // Calculate transmission speed (for console logging)
+            const totalBytes = fileSizeBytes;
+            const progress = Math.min(currentFrame / totalFrames, 1);
+            const bytesTransferred = totalBytes * progress;
+            const bytesPerSecond = bytesTransferred / elapsed;
+            
+            console.log(`📊 Transmission: ${elapsedFormatted}, Speed: ${formatFileSize(bytesPerSecond)}/s, Progress: ${(progress * 100).toFixed(1)}%`);
+        }
+        
+        // Format time in MM:SS format
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // Calculate optimal fullscreen QR size
+        function calculateFullscreenQRSize() {
+            // Get actual viewport dimensions
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            
+            // Reserve space for UI elements (counter, progress bar, exit button)
+            const topReserved = 80;  // Space for counter and exit button
+            const bottomReserved = 100; // Space for progress bar
+            const sideMargin = 40;   // Side margins for safety
+            
+            // Calculate available space
+            const availableWidth = viewportWidth - (sideMargin * 2);
+            const availableHeight = viewportHeight - topReserved - bottomReserved;
+            
+            // Use the smaller dimension to ensure QR code fits (keep it square)
+            const maxSize = Math.min(availableWidth, availableHeight);
+            
+            // Apply safety margin (90% of available space)
+            return Math.floor(maxSize * 0.9);
+        }
+
+        // Helper: Generate QR code for specific frame
+        async function generateQRCodeForFrame(frameIndex, forFullscreen = false) {
+            try {
+                console.log(`🎯 Generating QR for frame ${frameIndex} (fullscreen: ${forFullscreen})`);
+                
+                if (!fountainPackets[frameIndex]) {
+                    console.error(`❌ No packet found for frame ${frameIndex}`);
+                    return;
+                }
+                
+                const packet = fountainPackets[frameIndex];
+                console.log(`📦 Packet type: ${packet.metaString ? 'metadata' : 'data'}`);
+                
+                // Use the compact string format directly
+                let packetData;
+                if (frameIndex === 0 && packet.metaString) {
+                    // First frame with metadata
+                    packetData = packet.metaString;
+                } else if (packet.dataString) {
+                    // Regular data frame
+                    packetData = packet.dataString;
+                }
+                
+                // Create QR code with proper fullscreen sizing
+                const options = {
+                    errorCorrectionLevel: errorCorrectionSelect.value,
+                    margin: 1,
+                    width: forFullscreen ? calculateFullscreenQRSize() : qrSize,
+                    color: {
+                        dark: '#000000',
+                        light: '#FFFFFF'
+                    }
+                };
+                
+                const qrCodeDataUrl = await new Promise((resolve, reject) => {
+                    QRCode.toDataURL(packetData, options, (error, url) => {
+                        if (error) reject(error);
+                        else resolve(url);
+                    });
+                });
+                
+                // Update display
+                if (forFullscreen || isFullscreen) {
+                    fullscreenQR.src = qrCodeDataUrl;
+                    fullscreenCounter.textContent = `Frame: ${frameIndex + 1} / ${totalFrames}`;
+                    
+                    if (enableTransitionsCheckbox.checked) {
+                        fullscreenQR.classList.add('qr-image');
+                    }
+                    
+                    // Only fullscreen countdown exists now
+                    fsCountdownDisplay.style.display = 'none';
+                }
+                
+                // Always update regular display too
+                qrDisplay.innerHTML = `<img src="${qrCodeDataUrl}" alt="QR Code" style="max-width: 100%; max-height: 100%;">`;
+                
+                // Apply transition class if enabled
+                if (enableTransitionsCheckbox.checked) {
+                    const newImage = qrDisplay.querySelector('img');
+                    if (newImage) {
+                        newImage.classList.add('qr-image');
+                    }
+                }
+                
+                // Re-add alignment guides if they were enabled
+                if (showGuidesCheckbox.checked) {
+                    const alignmentGuide1 = document.createElement('div');
+                    alignmentGuide1.className = 'alignment-guide';
+                    alignmentGuide1.style = 'width: 90%; height: 90%; top: 5%; left: 5%;';
+                    
+                    const alignmentGuide2 = document.createElement('div');
+                    alignmentGuide2.className = 'alignment-guide';
+                    alignmentGuide2.style = 'width: 70%; height: 70%; top: 15%; left: 15%;';
+                    
+                    const guideLabel = document.createElement('div');
+                    guideLabel.className = 'guide-label';
+                    guideLabel.style = 'top: 2%; left: 50%; transform: translateX(-50%);';
+                    guideLabel.textContent = 'Keep QR code within this area';
+                    
+                    qrDisplay.appendChild(alignmentGuide1);
+                    qrDisplay.appendChild(alignmentGuide2);
+                    qrDisplay.appendChild(guideLabel);
+                    
+                    if (showGuidesCheckbox.checked) {
+                        qrDisplay.classList.add('show-guides');
+                    }
+                }
+                
+                // No countdown display needed for regular display
+                console.log(`📍 Current frame: ${frameIndex + 1} / ${totalFrames}`);
+                
+                // Update metadata display
+                updateFrameMetadata(frameIndex);
+                
+                // Update fullscreen progress bar
+                const progress = ((frameIndex + 1) / totalFrames) * 100;
+                fullscreenProgressBar.style.width = `${progress}%`;
+                
+            } catch (error) {
+                console.error(`Error generating QR code for frame ${frameIndex}:`, error);
+                console.error(`Packet data length: ${packetData ? packetData.length : 'null'}`);
+                console.error(`Packet type: ${packet.metaString ? 'metadata' : 'data'}`);
+                
+                // Don't break the sequence - show error QR instead
+                try {
+                    const errorQR = await new Promise((resolve, reject) => {
+                        QRCode.toDataURL(`ERROR: Frame ${frameIndex} failed to generate`, { 
+                            errorCorrectionLevel: 'M',
+                            width: 400,
+                            color: { dark: '#FF0000', light: '#FFFFFF' }
+                        }, (error, url) => {
+                            if (error) reject(error);
+                            else resolve(url);
+                        });
+                    });
+                    
+                    // Display error QR code
+                    if (forFullscreen && fullscreenQR) {
+                        fullscreenQR.src = errorQR;
+                    } else if (qrDisplay) {
+                        qrDisplay.innerHTML = `<img src="${errorQR}" alt="Error QR Code" style="max-width: 100%; max-height: 100%;">`;
+                    }
+                    
+                    console.log(`⚠️ Displayed error QR for frame ${frameIndex}`);
+                } catch (fallbackError) {
+                    console.error('Even error QR generation failed:', fallbackError);
+                }
+            }
+        }
+        
+        // Enterprise-grade frame metadata display with comprehensive validation
+        function updateFrameMetadata(frameIndex) {
+            try {
+                const packet = fountainPackets[frameIndex];
+                if (!packet) {
+                    console.warn(`⚠️ ENTERPRISE: No packet found for frame ${frameIndex} metadata update`);
+                    return;
+                }
+                
+                // Determine frame type with enterprise validation
+                let frameTypeText;
+                let packetSizeInfo = '';
+                
+                // Check if this is a metadata packet (any frame with metaString)
+                if (packet.metaString) {
+                    frameTypeText = frameIndex === 0 ? 'Handshake (Setup Data)' : 'File Metadata';
+                    if (currentChunkInfo) currentChunkInfo.style.display = 'none';
+                    
+                    // Add size info for metadata packet
+                    const metaSize = packet.metaString.length;
+                    packetSizeInfo = ` (${metaSize} bytes)`;
+                    
+                    console.log(`📋 ENTERPRISE: Frame ${frameIndex} is metadata packet (${metaSize} bytes)`);
+                } else if (packet.dataString) {
+                    // Parse from compact string format with enterprise validation
+                    // Format: D:<fileId>:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+                    if (typeof packet.dataString !== 'string') {
+                        throw new Error(`Invalid dataString type for frame ${frameIndex}: ${typeof packet.dataString}`);
+                    }
+
+                    const parts = packet.dataString.split(':');
+                if (parts.length >= 7) {
+                    const fileId = parts[1];
+                    const packetId = parts[2];
+                    const degree = parts[6];
+                    
+                    frameTypeText = `Data Packet (Degree: ${degree})`;
+                    if (currentChunkInfo) currentChunkInfo.style.display = 'block';
+                    if (chunkId) chunkId.textContent = `${packetId} (contains ${degree} chunk${degree > 1 ? 's' : ''})`;
+                    
+                    // Add size info
+                    packetSizeInfo = ` (${packet.dataString.length} bytes)`;
+                } else {
+                    throw new Error(`Invalid dataString format for frame ${frameIndex}: insufficient parts (${parts.length})`);
+                }
+                } else {
+                    // Neither metaString nor dataString found
+                    throw new Error(`Frame ${frameIndex} packet has no valid data (no metaString or dataString)`);
+                }
+                
+                // Enterprise-safe DOM update
+                if (frameType) {
+                    frameType.textContent = frameTypeText + packetSizeInfo;
+                } else {
+                    console.warn(`⚠️ ENTERPRISE: frameType element not found for frame ${frameIndex}`);
+                }
+                
+            } catch (error) {
+                console.error(`❌ ENTERPRISE ERROR: updateFrameMetadata failed for frame ${frameIndex}:`, error.message);
+                console.error(`❌ ENTERPRISE CONTEXT: packet structure:`, {
+                    hasMetaString: !!fountainPackets[frameIndex]?.metaString,
+                    hasDataString: !!fountainPackets[frameIndex]?.dataString,
+                    packetKeys: fountainPackets[frameIndex] ? Object.keys(fountainPackets[frameIndex]) : 'null'
+                });
+                
+                // Enterprise fallback: Set basic frame info
+                try {
+                    if (frameType) {
+                        frameType.textContent = `Frame ${frameIndex + 1} (metadata parsing failed)`;
+                    }
+                } catch (fallbackError) {
+                    console.error(`❌ ENTERPRISE CRITICAL: Even fallback frame type update failed:`, fallbackError);
+                }
+            }
+        }
+
+        // Helper: Update progress bar
+        function updateProgress() {
+            const progress = ((currentFrame + 1) / totalFrames) * 100;
+            if (isFullscreen) {
+                fullscreenProgressBar.style.width = `${progress}%`;
+            }
+        }
+
+        // Helper: Read file as binary data
+        function readFileAsBinary(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const arrayBuffer = reader.result;
+                    resolve(new Uint8Array(arrayBuffer));
+                };
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // Helper: Split binary file into chunks  
+        function chunkFileBinary(data, chunkSize) {
+            const chunks = [];
+            for (let i = 0; i < data.length; i += chunkSize) {
+                const chunk = data.slice(i, i + chunkSize);
+                chunks.push(chunk);
+            }
+            return chunks;
+        }
+
+        // Helper: Read file as base64 (legacy)
+        function readFileAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Helper: Split file into chunks (legacy)
+        function chunkFile(data, chunkSize) {
+            const chunks = [];
+            for (let i = 0; i < data.length; i += chunkSize) {
+                chunks.push(data.slice(i, i + chunkSize));
+            }
+            return chunks;
+        }
+
+        // Helper: Format file size
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' bytes';
+            else if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            else return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        // Systematic LT Encoder Implementation
+        class SystematicLTEncoder {
+            constructor(originalChunks, seedBase = Date.now()) {
+                // Original properties
+                this.originalChunks = originalChunks;
+                this.numChunks = originalChunks.length;
+                this.seedBase = seedBase;
+                this.packetCounter = 0;
+                this.avgChunkSize = this.calculateAverageChunkSize();
+                
+                // New properties for systematic LT coding
+                this.systematicPhase = true;  // Start in systematic phase
+                this.currentSystematicIndex = 0;  // Track which systematic chunk to send next
+                this.systematicChunksPerQR = 2;  // Default systematic chunks per QR (will be overridden)
+                this.fountainMaxDegree = 3;  // Default fountain max degree (will be overridden)
+                
+                // LT code parameters
+                this.c = 0.03;  // Robust Soliton parameter c
+                this.delta = 0.5;  // Robust Soliton failure probability
+            }
+            
+            // Calculate average chunk size based on sampling
+            calculateAverageChunkSize() {
+                let sum = 0;
+                const sampleSize = Math.min(10, this.numChunks);
+                
+                for (let i = 0; i < sampleSize; i++) {
+                    sum += this.originalChunks[i].length;
+                }
+                
+                return Math.ceil(sum / sampleSize);
+            }
+            
+            // Calculate maximum safe degree based on QR code capacity
+            // This method is no longer needed - using separate systematic and fountain parameters
+            // calculateMaxSafeDegree() removed - replaced with systematicChunksPerQR and fountainMaxDegree
+            
+            // Calculate the total number of packets needed
+            calculateTotalPackets() {
+                // For LT codes with systematic extensions:
+                // 1. We need packets for the systematic phase
+                // If we're using dual chunks, we need fewer systematic packets
+                let systematicPackets;
+                if (this.systematicChunksPerQR >= 2) {
+                    // When using multiple chunks during systematic phase, we need approximately numChunks/systematicChunksPerQR
+                    // plus any leftover for remainder chunks
+                    systematicPackets = Math.ceil(this.numChunks / this.systematicChunksPerQR);
+                } else {
+                    // Standard case: one packet per chunk
+                    systematicPackets = this.numChunks;
+                }
+                
+                // 2. Add redundancy factor from UI slider
+                const redundancyPercent = parseInt(document.getElementById('redundancySlider').value);
+                const redundancyFactor = redundancyPercent / 100;
+                
+                // Calculate additional packets needed based on redundancy
+                // We need more redundant packets if we have dual-chunk systematic packets
+                const additionalPackets = Math.ceil(this.numChunks * redundancyFactor);
+                
+                // Add extra safety packets for higher redundancy when using multi-chunk
+                const extraPackets = this.systematicChunksPerQR >= 2 ? Math.ceil(this.numChunks * 0.1) : 0;
+                
+                // Total packets = systematic + additional + extra
+                return systematicPackets + additionalPackets + extraPackets;
+            }
+            
+            // Main packet generation function - handles both phases
+            generatePacket() {
+                // PHASE 1: Systematic Phase - Send each chunk exactly once
+                if (this.systematicPhase) {
+                    // Determine if we should send two chunks in one systematic packet
+                    const maxQRSize = document.getElementById('highDensityCheckbox').checked ? 
+                        HIGH_DENSITY_QR_CONTENT_SIZE : DEFAULT_QR_CONTENT_SIZE;
+                    
+                    // Try to send multiple chunks if configured
+                    if (this.systematicChunksPerQR >= 2 && 
+                        this.currentSystematicIndex < this.numChunks && 
+                        this.numChunks - 1 - this.currentSystematicIndex >= 0) {
+                        
+                        // Create a packet containing two chunks (one from start, one from end)
+                        const packet = this.createDualSystematicPacket(
+                            this.currentSystematicIndex, 
+                            this.numChunks - 1 - this.currentSystematicIndex
+                        );
+                        
+                        // Move to next chunk
+                        this.currentSystematicIndex++;
+                        
+                        // Check if we've completed the systematic phase
+                        if (this.currentSystematicIndex >= this.numChunks) {
+                            this.systematicPhase = false;
+                        }
+                        
+                        return packet;
+                    } else {
+                        // Create a standard packet with just the next chunk
+                        const packet = this.createSystematicPacket(this.currentSystematicIndex);
+                        
+                        // Move to next chunk
+                        this.currentSystematicIndex++;
+                        
+                        // Check if we've completed the systematic phase
+                        if (this.currentSystematicIndex >= this.numChunks) {
+                            this.systematicPhase = false;
+                        }
+                        
+                        return packet;
+                    }
+                }
+                
+                // PHASE 2: Fountain Phase - Generate LT-coded packets
+                return this.createLTPacket();
+            }
+            
+            // Create a packet during the systematic phase (single chunk)
+            createSystematicPacket(chunkIndex) {
+                // Get the chunk data (now binary)
+                const chunkData = this.originalChunks[chunkIndex];
+                
+                // Create a seed based on packet counter
+                const seed = this.seedBase + this.packetCounter;
+                
+                // Convert binary chunk to base64 for transmission
+                const chunkBase64 = this.arrayBufferToBase64(chunkData);
+                
+                // Create data string containing just this chunk
+                // Format: chunkIndex:base64ChunkData
+                const combinedData = `${chunkIndex}:${chunkBase64}`;
+                
+                // Get 8-char fileId from checksum for packet correlation
+                const fileId = this.fileChecksum ? this.fileChecksum.substring(0, 8) : '00000000';
+
+                // Create the packet using compact string format
+                // Format: D:<fileId>:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+                const dataString = `D:${fileId}:${this.packetCounter}:${seed}:${this.seedBase}:${this.numChunks}:1:${combinedData}`;
+                
+                if (debugMode) {
+                    console.log(`🔍 ENCODER DEBUG - Single systematic packet ${this.packetCounter}:`);
+                    console.log(`  Chunk ${chunkIndex}: ${chunkData.length} bytes`);
+                    console.log(`  Chunk type: ${chunkData.constructor.name}`);
+                    console.log(`  First 4 bytes: [${Array.from(chunkData.slice(0, 4)).join(', ')}]`);
+                    console.log(`  Base64 length: ${chunkBase64.length} chars`);
+                    console.log(`  Base64 preview: ${chunkBase64.substring(0, 20)}...`);
+                    console.log(`  Base64 valid: ${/^[A-Za-z0-9+/]*={0,2}$/.test(chunkBase64)}`);
+                    console.log(`  Combined data length: ${combinedData.length} chars`);
+                    console.log(`  Combined preview: ${combinedData.substring(0, 30)}...`);
+                    console.log(`  Final packet length: ${dataString.length} chars`);
+                    console.log(`  Final packet preview: ${dataString.substring(0, 80)}...`);
+                }
+                
+                // Create and return the packet object
+                const packet = {
+                    format: "compact",
+                    dataString: dataString,
+                    s: seed,
+                    d: 1,  // Degree is always 1 for systematic packets
+                    p: this.packetCounter++,
+                    n: this.numChunks,
+                    b: this.seedBase,
+                    systematic: true
+                };
+                
+                // Check packet size for QR code limits
+                this.checkAndHandlePacketSize(packet);
+                
+                return packet;
+            }
+            
+            // Create a systematic packet with two chunks (one from beginning, one from end)
+            createDualSystematicPacket(firstChunkIndex, secondChunkIndex) {
+                // Get the chunk data for both chunks (now binary)
+                const firstChunkData = this.originalChunks[firstChunkIndex];
+                const secondChunkData = this.originalChunks[secondChunkIndex];
+                
+                if (debugMode) {
+                    console.log(`🔍 ENCODER DEBUG - Dual systematic packet ${this.packetCounter}:`);
+                    console.log(`  Chunk ${firstChunkIndex}: ${firstChunkData.length} bytes, type: ${firstChunkData.constructor.name}`);
+                    console.log(`  Chunk ${secondChunkIndex}: ${secondChunkData.length} bytes, type: ${secondChunkData.constructor.name}`);
+                    console.log(`  First chunk first 4 bytes: [${Array.from(firstChunkData.slice(0, 4)).join(', ')}]`);
+                    console.log(`  Second chunk first 4 bytes: [${Array.from(secondChunkData.slice(0, 4)).join(', ')}]`);
+                }
+                
+                // Create a seed based on packet counter
+                const seed = this.seedBase + this.packetCounter;
+                
+                // Convert binary chunks to base64 for transmission
+                const firstChunkBase64 = this.arrayBufferToBase64(firstChunkData);
+                const secondChunkBase64 = this.arrayBufferToBase64(secondChunkData);
+                
+                // Create data string containing both chunks with the specified delimiter format
+                // Format: index1:base64chunk1|index2:base64chunk2
+                const combinedData = `${firstChunkIndex}:${firstChunkBase64}|${secondChunkIndex}:${secondChunkBase64}`;
+                
+                // Get 8-char fileId from checksum for packet correlation
+                const fileId = this.fileChecksum ? this.fileChecksum.substring(0, 8) : '00000000';
+
+                // Create the packet using compact string format
+                // Format: D:<fileId>:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+                const dataString = `D:${fileId}:${this.packetCounter}:${seed}:${this.seedBase}:${this.numChunks}:2:${combinedData}`;
+                
+                if (debugMode) {
+                    console.log(`  First base64: ${firstChunkBase64.length} chars, preview: ${firstChunkBase64.substring(0, 20)}...`);
+                    console.log(`  First base64 valid: ${/^[A-Za-z0-9+/]*={0,2}$/.test(firstChunkBase64)}`);
+                    console.log(`  Second base64: ${secondChunkBase64.length} chars, preview: ${secondChunkBase64.substring(0, 20)}...`);
+                    console.log(`  Second base64 valid: ${/^[A-Za-z0-9+/]*={0,2}$/.test(secondChunkBase64)}`);
+                    console.log(`  Combined data length: ${combinedData.length} chars`);
+                    console.log(`  Combined preview: ${combinedData.substring(0, 50)}...`);
+                    console.log(`  Contains invalid chars: ${/[^A-Za-z0-9+/=:|]/.test(combinedData)}`);
+                    console.log(`  Final packet length: ${dataString.length} chars`);
+                    console.log(`  Final packet preview: ${dataString.substring(0, 100)}...`);
+                }
+                
+                // Create and return the packet object
+                const packet = {
+                    format: "compact",
+                    dataString: dataString,
+                    s: seed,
+                    d: 2,  // Degree is 2 for dual systematic packets
+                    p: this.packetCounter++,
+                    n: this.numChunks,
+                    b: this.seedBase,
+                    systematic: true
+                };
+                
+                // Check packet size for QR code limits
+                this.checkAndHandlePacketSize(packet);
+                
+                return packet;
+            }
+            
+            // Create a packet during the LT phase
+            createLTPacket() {
+                // Create a seed based on packet counter
+                const seed = this.seedBase + this.packetCounter;
+                
+                // Create PRNG with this seed
+                const rng = this.createPRNG(seed);
+                
+                // Get degree using Robust Soliton distribution
+                const degree = this.getRobustSolitonDegree(rng);
+                
+                // Select chunks according to LT coding rules
+                const selectedIndices = this.selectChunksLT(degree, rng);
+                
+                // Get binary XOR data for fountain coding (proper LT implementation)
+                const fountainData = this.xorChunks(selectedIndices);
+                
+                // Get string representation of the indices for encoding in the packet
+                const indicesStr = selectedIndices.join(',');
+                
+                // Convert the XOR data to a base64 string for transmission
+                const base64Data = this.arrayBufferToBase64(fountainData);
+                
+                // Get 8-char fileId from checksum for packet correlation
+                const fileId = this.fileChecksum ? this.fileChecksum.substring(0, 8) : '00000000';
+
+                // Create the packet using enhanced format for fountain coding
+                // Format: D:<fileId>:<packetId>:<seed>:<seedBase>:<numChunks>:1:<sourceIndices>:<xorData>
+                // Note: Field 6 is always 1 for fountain (treated as single record with XOR data)
+                const dataString = `D:${fileId}:${this.packetCounter}:${seed}:${this.seedBase}:${this.numChunks}:1:${indicesStr}:${base64Data}`;
+                
+                // Create and return the packet object
+                const packet = {
+                    format: "enhanced",
+                    dataString: dataString,
+                    s: seed,
+                    d: degree,
+                    p: this.packetCounter++,
+                    n: this.numChunks,
+                    b: this.seedBase,
+                    systematic: false,
+                    sourceIndices: selectedIndices,
+                    fountainData: fountainData
+                };
+                
+                // Check packet size for QR code limits
+                this.checkAndHandlePacketSize(packet);
+                
+                return packet;
+            }
+            
+            // Check if packet size exceeds QR code capacity and handle truncation if needed
+            checkAndHandlePacketSize(packet) {
+                // Get the QR content size limit from configuration
+                const maxQRSize = document.getElementById('highDensityCheckbox').checked ? 
+                    HIGH_DENSITY_QR_CONTENT_SIZE : DEFAULT_QR_CONTENT_SIZE;
+                
+                // Calculate actual packet size
+                const packetSize = packet.dataString.length;
+                
+                // If packet is too large, truncate the data
+                if (packetSize > maxQRSize * 0.9) {  // Use 90% of max size for safety
+                    // Truncate the packet to fit within QR code limits
+                    this.truncatePacket(packet, maxQRSize * 0.9);
+                }
+            }
+            
+            // Truncate a packet to fit within QR code limits
+            truncatePacket(packet, maxSize) {
+                // Parse out the header portion of the packet
+                // Format: D:<fileId>:<packetId>:<seed>:<seedBase>:<numChunks>:<degree>:<data>
+                const parts = packet.dataString.split(":", 7);
+                const header = parts.slice(0, 7).join(":");
+                
+                // Calculate how much space is available for data
+                const headerSize = header.length + 1;  // +1 for the colon separator
+                const availableSize = maxSize - headerSize;
+                
+                // Get the original data part
+                const originalData = packet.dataString.substring(headerSize);
+                const originalLength = originalData.length;
+                
+                // Truncate the data
+                const truncatedData = originalData.substring(0, availableSize);
+                
+                // Update the packet
+                packet.dataString = `${header}:${truncatedData}`;
+                packet.truncated = true;
+                
+                // Add truncation marker to dataString format
+                packet.dataString = `${packet.dataString}:t:${originalLength}`;
+            }
+            
+            // Create a pseudo-random number generator with a specific seed
+            createPRNG(seed) {
+                let s = seed;
+                return function() {
+                    s = Math.sin(s) * 10000;
+                    return s - Math.floor(s);
+                };
+            }
+            
+            // Get the degree using Robust Soliton distribution (LT coding)
+            getRobustSolitonDegree(rng) {
+                // If we have only one chunk, return 1
+                if (this.numChunks <= 1) return 1;
+                
+                // Parameters for Robust Soliton Distribution
+                const c = this.c;  // Parameter controlling the distribution shape
+                const delta = this.delta;  // Failure probability
+                
+                // Calculate R parameter (from LT codes paper)
+                const R = c * Math.log(this.numChunks / delta) * Math.sqrt(this.numChunks);
+                
+                // Cap max degree by the smaller of fountainMaxDegree or numChunks
+                const maxDegree = Math.min(this.fountainMaxDegree, this.numChunks);
+                
+                // Generate a value in [0,1) to use for degree selection
+                const r = rng();
+                
+                // Calculate ideal Robust Soliton distribution
+                let cdf = 0;  // Cumulative distribution function
+                
+                // Special case for degree 1 from Robust Soliton
+                const p1 = (1.0 / this.numChunks) + (R / this.numChunks);
+                cdf += p1;
+                
+                if (r < cdf) return 1;
+                
+                // Calculate probabilities for degrees 2 to maxDegree
+                for (let d = 2; d <= maxDegree; d++) {
+                    // Standard Soliton component
+                    let p_std = 1.0 / (d * (d - 1));
+                    
+                    // Robust Soliton addon component
+                    let p_robust = 0;
+                    
+                    // Extra probability mass for degrees around n/R
+                    if (d <= Math.floor(this.numChunks / R)) {
+                        p_robust = R / (d * this.numChunks);
+                    } else if (d === Math.floor(this.numChunks / R)) {
+                        p_robust = (R * Math.log(R / delta)) / this.numChunks;
+                    }
+                    
+                    // Add probabilities to CDF
+                    cdf += p_std + p_robust;
+                    
+                    // If our random value falls in this range, return this degree
+                    if (r < cdf) return d;
+                }
+                
+                // If we reach here, return the maximum degree
+                return maxDegree;
+            }
+            
+            // Select chunks for LT packets
+            selectChunksLT(degree, rng) {
+                const indices = [];
+                
+                // Ensure we don't try to select more chunks than available
+                const actualDegree = Math.min(degree, this.numChunks);
+                
+                // In LT codes, chunks are selected uniformly at random without replacement
+                while (indices.length < actualDegree) {
+                    const index = Math.floor(rng() * this.numChunks);
+                    
+                    // Avoid duplicate chunks in the same packet
+                    if (!indices.includes(index)) {
+                        indices.push(index);
+                    }
+                }
+                
+                return indices;
+            }
+            
+            // Combine chunks using XOR operations (proper Fountain/LT coding)
+            combineChunks(indices) {
+                if (indices.length === 0) return "";
+                
+                // For backward compatibility, also create the string format
+                // Format: index1:chunk1|index2:chunk2|index3:chunk3
+                const stringFormat = indices.map(index => {
+                    return `${index}:${this.originalChunks[index]}`;
+                }).join("|");
+                
+                // Also create the binary XOR fountain data
+                const fountainData = this.xorChunks(indices);
+                
+                // Return the string format for compatibility
+                return stringFormat;
+            }
+            
+            // Combine chunks using XOR for LT coding
+            xorChunks(indices) {
+                if (indices.length === 0) return new Uint8Array(0);
+                
+                // Get first chunk data as Uint8Array (now handles binary data)
+                const firstChunk = this.ensureUint8Array(this.originalChunks[indices[0]]);
+                
+                // If only one chunk, return it directly
+                if (indices.length === 1) return firstChunk;
+                
+                // Find maximum chunk length to handle different chunk sizes
+                let maxLength = firstChunk.length;
+                for (let i = 1; i < indices.length; i++) {
+                    const chunkData = this.ensureUint8Array(this.originalChunks[indices[i]]);
+                    maxLength = Math.max(maxLength, chunkData.length);
+                }
+                
+                // Create result array initialized with first chunk, padded to max length
+                const result = new Uint8Array(maxLength);
+                result.set(firstChunk);
+                
+                // XOR with remaining chunks
+                for (let i = 1; i < indices.length; i++) {
+                    const chunkIndex = indices[i];
+                    const chunkData = this.ensureUint8Array(this.originalChunks[chunkIndex]);
+                    
+                    // XOR the data
+                    for (let j = 0; j < Math.min(result.length, chunkData.length); j++) {
+                        result[j] ^= chunkData[j];
+                    }
+                }
+                
+                return result;
+            }
+            
+            // Convert string to Uint8Array (for legacy compatibility)
+            stringToUint8Array(str) {
+                const arr = new Uint8Array(str.length);
+                for (let i = 0; i < str.length; i++) {
+                    arr[i] = str.charCodeAt(i);
+                }
+                return arr;
+            }
+            
+            // Ensure data is Uint8Array (works with both binary and string data)
+            ensureUint8Array(data) {
+                if (data instanceof Uint8Array) {
+                    return data;
+                }
+                if (typeof data === 'string') {
+                    return this.stringToUint8Array(data);
+                }
+                // Convert other array types
+                return new Uint8Array(data);
+            }
+            
+            // Convert ArrayBuffer to base64 string
+            arrayBufferToBase64(buffer) {
+                let binary = '';
+                const bytes = new Uint8Array(buffer);
+                for (let i = 0; i < bytes.length; i++) {
+                    binary += String.fromCharCode(bytes[i]);
+                }
+                return btoa(binary);
+            }
+            
+            // Generate metadata packet with LT code specific information
+            generateMetadataPacket() {
+                // Basic file metadata - use current processing file, not UI elements
+                const fileNameText = this.currentFileName || document.getElementById('fileName').textContent;
+                const fileSizeBytes = this.currentFileSize || (fileInput.files[0] ? fileInput.files[0].size : 0);
+                const fileType = this.currentFileType || (fileInput.files[0] ? fileInput.files[0].type : '');
+                
+                // Get encoding parameters
+                const fps = parseInt(document.getElementById('speedSlider').value);
+                const systematicChunks = parseInt(document.getElementById('systematicChunksSlider').value);
+                const fountainMaxDegree = parseInt(document.getElementById('fountainDegreeSlider').value);
+                const chunkSize = parseInt(document.getElementById('chunkSlider').value);
+                const redundancy = parseInt(document.getElementById('redundancySlider').value);
+                const highDensityMode = document.getElementById('highDensityCheckbox').checked ? 1 : 0;
+                const ecLevel = document.getElementById('errorCorrectionSelect').value;
+                
+                // Create file checksum for data integrity verification
+                // Use current file data chunks to calculate checksum
+                const fileChecksum = this.calculateFileChecksumFromChunks(this.originalChunks);
+                
+                // Create metadata checksum  
+                const checksumData = `${fileNameText}:${fileSizeBytes}:${this.numChunks}`;
+                const metaChecksum = this.simpleChecksum(checksumData);
+                
+                // Add LT-specific parameters
+                const ltParams = `${this.c}:${this.delta}`;
+                
+                // Create compact metadata string with incremental encoder version
+                // Format: M:<version>:<filename>:<filetype>:<filesize>:<chunks>:<packets>:<systematicchunks>:<density>:<fps>:<chunksize>:<redund>:<ecl>:<metachecksum>:<filechecksum>:<encoderversion>:<ltparams>:<fountainmaxdegree>
+                const protocolVersion = '3.0'; // Keep existing protocol version
+                const encoderVersion = '4.0'; // New incremental encoder version with fileId support
+                const metadataString = `M:${protocolVersion}:${encodeURIComponent(fileNameText)}:${encodeURIComponent(fileType)}:${fileSizeBytes}:${this.numChunks}:${this.calculateTotalPackets()}:${systematicChunks}:${highDensityMode}:${fps}:${chunkSize}:${redundancy}:${ecLevel}:${metaChecksum}:${fileChecksum}:${encoderVersion}:${ltParams}:${fountainMaxDegree}`;
+                
+                // Debug the metadata being generated
+                console.log(`📋 METADATA DEBUG:`);
+                console.log(`  fileName: "${fileNameText}"`);
+                console.log(`  fileType: "${fileType}"`);
+                console.log(`  fileSize: ${fileSizeBytes}`);
+                console.log(`  metadata string: ${metadataString.substring(0, 100)}...`);
+                
+                // Create metadata packet
+                const packet = {
+                    format: "compact",
+                    metaString: metadataString,
+                    s: this.seedBase,
+                    p: this.packetCounter++,
+                    n: this.numChunks,
+                    b: this.seedBase
+                };
+                
+                return packet;
+            }
+            
+            // Calculate file checksum for integrity verification - Enhanced FNV-1a algorithm
+            calculateFileChecksum(binaryData) {
+                if (!binaryData) {
+                    console.warn('calculateFileChecksum: binaryData is null, returning default');
+                    return 'nullchk';
+                }
+                
+                let hash = 2166136261; // FNV-1a offset basis
+                for (let i = 0; i < binaryData.length; i++) {
+                    hash ^= binaryData[i];
+                    hash = Math.imul(hash, 16777619); // FNV-1a prime
+                }
+                return (hash >>> 0).toString(36).substring(0, 8); // 8 chars for file integrity
+            }
+            
+            // Calculate file checksum from chunks - Enhanced FNV-1a algorithm
+            calculateFileChecksumFromChunks(chunks) {
+                if (!chunks || chunks.length === 0) {
+                    console.warn('calculateFileChecksumFromChunks: chunks is null/empty, returning default');
+                    return 'nochunk';
+                }
+                
+                let hash = 2166136261; // FNV-1a offset basis
+                // Calculate hash across all chunks
+                for (const chunk of chunks) {
+                    for (let i = 0; i < chunk.length; i++) {
+                        hash ^= chunk[i];
+                        hash = Math.imul(hash, 16777619); // FNV-1a prime
+                    }
+                }
+                return (hash >>> 0).toString(36).substring(0, 8);
+            }
+
+            // Simple checksum for data verification
+            simpleChecksum(str) {
+                let hash = 0;
+                for (let i = 0; i < str.length; i++) {
+                    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                    hash = hash & hash; // Convert to 32bit integer
+                }
+                return Math.abs(hash).toString(36).substring(0, 6); // Base36 representation, 6 chars
+            }
+        }
+
+        // =============================================
+        // Selective Split Transmission Functions
+        // =============================================
+
+        function parseSelectiveSplitInput() {
+            const input = selectiveSplitInput.value.trim();
+
+            if (!input) {
+                splitParseInfo.style.display = 'none';
+                return null; // Send all parts
+            }
+
+            try {
+                const parts = new Set();
+                const segments = input.split(',').map(s => s.trim());
+
+                for (const segment of segments) {
+                    if (segment.includes('-')) {
+                        // Range format: "10-15"
+                        const [start, end] = segment.split('-').map(s => parseInt(s.trim()));
+                        if (isNaN(start) || isNaN(end) || start < 1 || end < start) {
+                            throw new Error(`Invalid range: ${segment}`);
+                        }
+                        for (let i = start; i <= end; i++) {
+                            parts.add(i);
+                        }
+                    } else {
+                        // Single number: "5"
+                        const num = parseInt(segment);
+                        if (isNaN(num) || num < 1) {
+                            throw new Error(`Invalid part number: ${segment}`);
+                        }
+                        parts.add(num);
+                    }
+                }
+
+                const sortedParts = Array.from(parts).sort((a, b) => a - b);
+
+                // Update UI with parsed parts
+                splitParseInfo.style.display = 'block';
+                parsedSplitList.textContent = sortedParts.join(', ');
+                console.log(`📋 Parsed selective parts: ${sortedParts.join(', ')}`);
+
+                return sortedParts;
+
+            } catch (error) {
+                splitParseInfo.style.display = 'block';
+                parsedSplitList.textContent = `Error: ${error.message}`;
+                parsedSplitList.style.color = '#dc2626';
+                console.warn(`⚠️ Selective split parsing error: ${error.message}`);
+                return null;
+            }
+        }
+
+        // Modified file splitting function with selective part support
+        async function splitFileIntoSelectiveParts(file, maxPartSize, selectedParts = null) {
+            return new Promise((resolve, reject) => {
+                const fileReader = new FileReader();
+                fileReader.onload = () => {
+                    try {
+                        const arrayBuffer = fileReader.result;
+                        const fileData = new Uint8Array(arrayBuffer);
+                        const parts = [];
+
+                        // Calculate total parts needed
+                        const totalParts = Math.ceil(fileData.length / maxPartSize);
+
+                        if (selectedParts) {
+                            console.log(`✂️ SELECTIVE: Splitting ${file.name} - sending only parts ${selectedParts.join(', ')} out of ${totalParts} total`);
+
+                            // Only process selected parts
+                            for (const partNum of selectedParts) {
+                                if (partNum > totalParts) {
+                                    console.warn(`⚠️ Part ${partNum} exceeds total parts (${totalParts}) - skipping`);
+                                    continue;
+                                }
+
+                                const i = partNum - 1; // Convert to 0-based index
+                                const start = i * maxPartSize;
+                                const end = Math.min(start + maxPartSize, fileData.length);
+                                const partData = fileData.slice(start, end);
+
+                                // Create part filename
+                                const fileExtension = file.name.split('.').pop();
+                                const baseName = file.name.replace(`.${fileExtension}`, '');
+                                const partName = `${baseName}.part${partNum}-${totalParts}.${fileExtension}`;
+
+                                // Create File object for the part
+                                const partBlob = new Blob([partData], { type: file.type });
+                                const partFile = new File([partBlob], partName, { type: file.type });
+
+                                parts.push(partFile);
+                                console.log(`📦 Created selective part ${partNum}/${totalParts}: ${partName} (${formatFileSize(partData.length)})`);
+                            }
+
+                        } else {
+                            console.log(`✂️ STANDARD: Splitting ${file.name} (${fileData.length} bytes) into ${totalParts} parts of ~${formatFileSize(maxPartSize)} each`);
+
+                            // Process all parts (original logic)
+                            for (let i = 0; i < totalParts; i++) {
+                                const start = i * maxPartSize;
+                                const end = Math.min(start + maxPartSize, fileData.length);
+                                const partData = fileData.slice(start, end);
+
+                                const fileExtension = file.name.split('.').pop();
+                                const baseName = file.name.replace(`.${fileExtension}`, '');
+                                const partName = `${baseName}.part${i + 1}-${totalParts}.${fileExtension}`;
+
+                                const partBlob = new Blob([partData], { type: file.type });
+                                const partFile = new File([partBlob], partName, { type: file.type });
+
+                                parts.push(partFile);
+                                console.log(`📦 Created part ${i + 1}/${totalParts}: ${partName} (${formatFileSize(partData.length)})`);
+                            }
+                        }
+
+                        console.log(`✅ Split operation complete: ${parts.length} parts created`);
+                        resolve(parts);
+
+                    } catch (error) {
+                        console.error(`❌ Error splitting file: ${error.message}`);
+                        reject(error);
+                    }
+                };
+                fileReader.readAsArrayBuffer(file);
+            });
+        }
+
+        // =============================================
+        // Integrity Report Generation Functions
+        // =============================================
+        
+        function generateIntegrityReport() {
+            const selectedFiles = fileList.filter(f => f.selected);
+            if (selectedFiles.length === 0) {
+                alert('Please select files to generate integrity report');
+                return;
+            }
+            
+            console.log(`📊 Generating integrity report for ${selectedFiles.length} files...`);
+            
+            const report = {
+                reportDate: new Date().toISOString(),
+                reportVersion: '3.0',
+                totalFiles: selectedFiles.length,
+                files: {}
+            };
+            
+            // Process each file
+            selectedFiles.forEach((fileItem, index) => {
+                const file = fileItem.file;
+                console.log(`📄 Processing integrity for: ${file.name}`);
+                
+                // Read file and calculate checksums
+                const fileReader = new FileReader();
+                fileReader.onload = async function(event) {
+                    const fileData = new Uint8Array(event.target.result);
+                    
+                    // Calculate multiple checksums
+                    const checksums = {
+                        qr_checksum_fnv1a: calculateFileChecksumFNV1a(fileData),
+                        md5: await calculateMD5(fileData),
+                        size: fileData.length,
+                        fileName: file.name,
+                        fileType: file.type || 'application/octet-stream',
+                        lastModified: file.lastModified
+                    };
+                    
+                    report.files[file.name] = checksums;
+                    
+                    // Check if all files processed
+                    if (Object.keys(report.files).length === selectedFiles.length) {
+                        currentIntegrityReport = report;
+                        downloadReportBtn.disabled = false;
+                        console.log(`✅ Integrity report generated for ${selectedFiles.length} files`);
+                        alert(`Integrity report generated for ${selectedFiles.length} files. Click "Download Report" to save.`);
+                    }
+                };
+                fileReader.readAsArrayBuffer(file);
+            });
+        }
+        
+        function downloadIntegrityReport() {
+            if (!currentIntegrityReport) {
+                alert('No integrity report available. Generate one first.');
+                return;
+            }
+            
+            const reportJSON = JSON.stringify(currentIntegrityReport, null, 2);
+            const blob = new Blob([reportJSON], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `integrity_report_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            console.log('📥 Integrity report downloaded');
+        }
+        
+        // Enhanced FNV-1a checksum (matches encoder algorithm)
+        function calculateFileChecksumFNV1a(binaryData) {
+            let hash = 2166136261; // FNV-1a offset basis
+            for (let i = 0; i < binaryData.length; i++) {
+                hash ^= binaryData[i];
+                hash = Math.imul(hash, 16777619); // FNV-1a prime
+            }
+            return (hash >>> 0).toString(36).substring(0, 8);
+        }
+        
+        // Simple MD5 implementation using Web Crypto API
+        async function calculateMD5(data) {
+            try {
+                const hashBuffer = await crypto.subtle.digest('MD5', data);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            } catch (error) {
+                // Fallback for browsers that don't support MD5
+                console.warn('MD5 not supported, using fallback checksum');
+                return calculateFileChecksumFNV1a(data) + '_md5alt';
+            }
+        }
+        
+        // Update button states when files are processed
+        function updateIntegrityButtonStates() {
+            const selectedFiles = fileList.filter(f => f.selected);
+            generateIntegrityBtn.disabled = selectedFiles.length === 0;
+        }
+    </script>
+</body>
+</html>
