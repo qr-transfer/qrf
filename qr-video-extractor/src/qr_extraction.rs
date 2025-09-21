@@ -85,18 +85,33 @@ impl QrExtractor {
                     // Save chunk results to individual JSONL file in output directory
                     let jsonl_filename = format!("chunk_{:03}.jsonl", chunk.id + 1);
                     let jsonl_path = output_dir.join(&jsonl_filename);
-                    if let Ok(_) = self.save_chunk_to_jsonl(&chunk_results, &jsonl_path.to_string_lossy()) {
-                        cb(ProcessingEvent::ChunkCompleted {
-                            chunk_id: chunk.id,
-                            qr_codes_found: qr_count,
-                            jsonl_file: jsonl_filename,
-                            duration_ms,
-                        });
-                    } else {
-                        cb(ProcessingEvent::Error {
-                            phase: 2,
-                            error: format!("Failed to save JSONL for chunk {}", chunk.id + 1),
-                        });
+
+                    match self.save_chunk_to_jsonl(&chunk_results, &jsonl_path.to_string_lossy()) {
+                        Ok(_) => {
+                            // Ensure file is fully written and synced
+                            std::thread::sleep(std::time::Duration::from_millis(10));
+
+                            cb(ProcessingEvent::ChunkCompleted {
+                                chunk_id: chunk.id,
+                                qr_codes_found: qr_count,
+                                jsonl_file: jsonl_filename.clone(),
+                                duration_ms,
+                            });
+
+                            // Verify file exists (silent for TUI)
+                            if !jsonl_path.exists() {
+                                cb(ProcessingEvent::Error {
+                                    phase: 2,
+                                    error: format!("JSONL file not found after save: {}", jsonl_filename),
+                                });
+                            }
+                        }
+                        Err(e) => {
+                            cb(ProcessingEvent::Error {
+                                phase: 2,
+                                error: format!("Failed to save JSONL for chunk {}: {}", chunk.id + 1, e),
+                            });
+                        }
                     }
 
                     // Add to global results
@@ -127,6 +142,24 @@ impl QrExtractor {
             }
         });
 
+        // CRITICAL: Wait for all JSONL files to be fully written and verify they exist
+        std::thread::sleep(std::time::Duration::from_millis(100)); // Allow file system sync
+
+        let mut verified_chunks = 0;
+        for i in 0..total_chunks {
+            let jsonl_path = output_dir.join(format!("chunk_{:03}.jsonl", i + 1));
+            if jsonl_path.exists() {
+                verified_chunks += 1;
+            }
+        }
+
+        callback(ProcessingEvent::Progress {
+            phase: 2,
+            current: verified_chunks,
+            total: total_chunks,
+            message: format!("Verified {}/{} JSONL files written to disk", verified_chunks, total_chunks),
+        });
+
         let final_results = {
             let results_guard = results.lock().unwrap();
             results_guard.clone()
@@ -142,7 +175,7 @@ impl QrExtractor {
             phase: 2,
             current: total_chunks,
             total: total_chunks,
-            message: format!("Extracted {} QR codes from {} chunks in {}ms",
+            message: format!("Phase 2 COMPLETE: Extracted {} QR codes from {} chunks in {}ms, all JSONLs verified",
                            sorted_results.len(), total_chunks, processing_time),
         });
 

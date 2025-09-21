@@ -72,6 +72,13 @@ pub enum ProcessingEvent {
         to: String,
         reason: String,
     },
+    // Frame-level progress tracking
+    FrameProgress {
+        chunk_id: usize,
+        frames_processed: u64,
+        total_frames: u64,
+        qr_codes_found: usize,
+    },
 }
 
 pub type EventCallback = Box<dyn Fn(ProcessingEvent) + Send + Sync>;
@@ -131,6 +138,10 @@ impl OutputHandler for ConsoleOutputHandler {
             }
             ProcessingEvent::ModeTransition { from, to, reason } => {
                 eprintln!("{} ({}), switching from {} to {} mode...", reason, reason, from, to);
+            }
+            ProcessingEvent::FrameProgress { chunk_id, frames_processed, total_frames, qr_codes_found } => {
+                let progress = (*frames_processed as f64 / *total_frames as f64 * 100.0).min(100.0);
+                println!("Chunk {}: Frame {}/{} ({:.1}%) - {} QR codes", chunk_id + 1, frames_processed, total_frames, progress, qr_codes_found);
             }
         }
     }

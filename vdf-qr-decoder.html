@@ -4411,10 +4411,20 @@
         // Ensure components are initialized (should be done on page load)
         if (!this.qrProcessor || !this.packetProcessor || !this.videoProcessor) {
           console.log('🔧 Initializing missing components...');
+
+          // Save current video position before initialization
+          const videoElement = document.getElementById('videoPreview');
+          const savedPosition = videoElement ? videoElement.currentTime : 0;
+          console.log(`💾 Saving video position: ${savedPosition.toFixed(2)}s before initialization`);
+
           await this.initializeComponents();
 
           if (this.videoFile && this.videoProcessor) {
             await this.videoProcessor.initialize(this.videoFile);
+
+            // Restore saved video position after initialization
+            this.videoProcessor.videoElement.currentTime = savedPosition;
+            console.log(`🔄 Restored video position to: ${savedPosition.toFixed(2)}s after initialization`);
           }
         }
 

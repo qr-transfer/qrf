@@ -24,6 +24,8 @@ pub struct TuiState {
     pub messages: Vec<String>,
     pub should_quit: bool,
     pub chunks: Vec<ChunkInfo>,
+    pub total_frames: u64,
+    pub frames_processed: u64,
 }
 
 #[derive(Clone)]
@@ -92,6 +94,8 @@ impl TuiState {
             messages: Vec::new(),
             should_quit: false,
             chunks: Vec::new(),
+            total_frames: 0,
+            frames_processed: 0,
         }
     }
 
@@ -116,6 +120,18 @@ impl TuiState {
                     };
                     self.phases[phase_idx].message = message.clone();
                 }
+
+                // Extract total frame count from video analysis message
+                if phase == 1 && message.contains("frames") {
+                    if let Some(frames_str) = message.split("frames").next() {
+                        if let Some(last_part) = frames_str.split_whitespace().last() {
+                            if let Ok(frames) = last_part.replace(",", "").parse::<u64>() {
+                                self.total_frames = frames;
+                            }
+                        }
+                    }
+                }
+
                 self.messages.push(format!("Progress [{}]: {}", phase, message));
                 if self.messages.len() > 100 {
                     self.messages.remove(0);
@@ -211,6 +227,26 @@ impl TuiState {
                 self.messages.push(format!("🔄 Mode transition: {} → {} ({})", from, to, reason));
                 if self.messages.len() > 100 {
                     self.messages.remove(0);
+                }
+            }
+            ProcessingEvent::FrameProgress { chunk_id, frames_processed, total_frames, qr_codes_found } => {
+                // Update chunk-specific frame count
+                if let Some(chunk) = self.chunks.iter_mut().find(|c| c.id == chunk_id) {
+                    chunk.frames_processed = frames_processed as usize;
+                    chunk.qr_codes_found = qr_codes_found;
+                }
+
+                // Update total frame progress
+                self.frames_processed = self.chunks.iter().map(|c| c.frames_processed as u64).sum();
+
+                // Only log significant progress updates to avoid spam
+                if frames_processed % 500 == 0 || frames_processed == total_frames {
+                    let progress = (frames_processed as f64 / total_frames as f64 * 100.0).min(100.0);
+                    self.messages.push(format!("📊 Chunk {}: {}/{} frames ({:.1}%) - {} QR codes",
+                                              chunk_id + 1, frames_processed, total_frames, progress, qr_codes_found));
+                    if self.messages.len() > 100 {
+                        self.messages.remove(0);
+                    }
                 }
             }
         }
@@ -447,20 +483,25 @@ impl TuiManager {
             .block(Block::default().borders(Borders::ALL).title("Recent Messages"));
         f.render_widget(messages_list, chunks[3]);
 
-        // Status bar with controls and system info
+        // Status bar with controls and frame progress
         let total_qr_codes: usize = state.chunks.iter().map(|c| c.qr_codes_found).sum();
         let completed_chunks = state.chunks.iter().filter(|c| c.status == ChunkStatus::Completed).count();
         let total_chunks = state.chunks.len();
 
-        let status_text = if total_chunks > 0 {
-            format!("Chunks: {}/{} | QR Codes: {} | Press 'q' or 'Esc' to quit | Press '?' for help",
+        let status_text = if state.total_frames > 0 {
+            let frame_progress = (state.frames_processed as f64 / state.total_frames as f64 * 100.0).min(100.0);
+            format!("Frames: {}/{} ({:.1}%) | Chunks: {}/{} | QR Codes: {} | Press 'q'/'Esc' to quit",
+                   state.frames_processed, state.total_frames, frame_progress,
+                   completed_chunks, total_chunks, total_qr_codes)
+        } else if total_chunks > 0 {
+            format!("Chunks: {}/{} | QR Codes: {} | Press 'q'/'Esc' to quit",
                    completed_chunks, total_chunks, total_qr_codes)
         } else {
-            "Press 'q' or 'Esc' to quit | Press '?' for help".to_string()
+            "Press 'q' or 'Esc' to quit | Processing will begin shortly...".to_string()
         };
 
         let status_bar = Paragraph::new(status_text)
-            .block(Block::default().borders(Borders::ALL).title("Controls"))
+            .block(Block::default().borders(Borders::ALL).title("Status & Controls"))
             .style(Style::default().fg(Color::Green));
         f.render_widget(status_bar, chunks[4]);
     }

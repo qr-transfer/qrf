@@ -231,10 +231,22 @@ fn process_video_with_callback(
     thread_count: usize,
     callback: EventCallback,
 ) -> Result<()> {
+    // Initialize logging for the entire process
+    let log_path = args.output.join("processing.log");
+    let process_logger = crate::error_logger::ErrorLogger::new(&log_path.to_string_lossy())
+        .unwrap_or_else(|_| crate::error_logger::ErrorLogger::new("/tmp/processing.log").unwrap());
+
+    process_logger.log_info(&format!("=== PROCESSING STARTED === Version: 0.1.0"));
+    process_logger.log_info(&format!("Input: {}", args.input.as_ref().unwrap().display()));
+    process_logger.log_info(&format!("Output: {}", args.output.display()));
+    process_logger.log_info(&format!("Chunks: {}, Threads: {}", chunk_count, thread_count));
+
     callback(ProcessingEvent::PhaseStarted {
         phase: 1,
         description: "Video Analysis & Intelligent Splitting".to_string(),
     });
+
+    process_logger.log_processing_phase("PHASE_1", "Started video analysis and splitting");
 
     let input_path = args.input.as_ref().ok_or_else(|| {
         anyhow::anyhow!("Input video file path is required")
@@ -257,6 +269,8 @@ fn process_video_with_callback(
         video_processor.split_by_count(chunk_count, &args.output, &callback)?
     };
 
+    process_logger.log_processing_phase("PHASE_1", &format!("Created {} video chunks", chunks.len()));
+
     callback(ProcessingEvent::PhaseCompleted {
         phase: 1,
         duration_ms: 0,
@@ -267,12 +281,18 @@ fn process_video_with_callback(
         description: "Parallel Chunk Processing & JSONL Creation".to_string(),
     });
 
+    process_logger.log_processing_phase("PHASE_2", "Started parallel chunk processing");
+
     // Create output directory for JSONL files
     std::fs::create_dir_all(&args.output)?;
 
     // Phase 2: Extract QR codes and create individual chunk JSONL files
     let qr_extractor = QrExtractor::new(thread_count, args.skip);
+    process_logger.log_info(&format!("Starting QR extraction with {} threads, skip_frames: {}", thread_count, args.skip));
+
     let qr_results = qr_extractor.extract_from_chunks(&chunks, &args.output, &callback)?;
+
+    process_logger.log_processing_phase("PHASE_2", &format!("COMPLETED - {} QR codes extracted", qr_results.qr_codes.len()));
 
     callback(ProcessingEvent::PhaseCompleted {
         phase: 2,
@@ -284,9 +304,13 @@ fn process_video_with_callback(
         description: "JSONL Combination & File Reconstruction".to_string(),
     });
 
+    process_logger.log_processing_phase("PHASE_3", "Started JSONL combination and file reconstruction");
+
     // Phase 3: Combine all JSONLs, split by metadata, then reconstruct files
     let reconstructor = FileReconstructor::new(&args.output);
     let final_report = reconstructor.process_combined_jsonl_files(&args.output, &callback)?;
+
+    process_logger.log_processing_phase("PHASE_3", &format!("COMPLETED - {} files reconstructed", final_report.files.len()));
 
     callback(ProcessingEvent::PhaseCompleted {
         phase: 3,

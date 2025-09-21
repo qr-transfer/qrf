@@ -173,7 +173,11 @@ impl FileReconstructor {
         });
 
         // Step 1: Read all chunk JSONL files and combine QR data
-        let combined_qr_data = self.read_and_combine_jsonl_files(output_dir)?;
+        let mut combined_qr_data = self.read_and_combine_jsonl_files(output_dir)?;
+
+        // CRITICAL: Sort by frame number to process metadata packets first
+        combined_qr_data.sort_by_key(|qr| qr.frame_number);
+        self.error_logger.log_info(&format!("Sorted {} QR codes by frame order for proper metadata/data sequence", combined_qr_data.len()));
 
         callback(ProcessingEvent::Progress {
             phase: 3,
@@ -279,9 +283,6 @@ impl FileReconstructor {
                 }
             }
         }
-
-        // Sort by frame number for proper processing order
-        combined_qr_data.sort_by_key(|qr| qr.frame_number);
 
         self.error_logger.log_info(&format!("Combined {} QR codes from all chunk JSONL files", combined_qr_data.len()));
 
