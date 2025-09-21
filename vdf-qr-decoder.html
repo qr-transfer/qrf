@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.10.7</title>
+  <title>QR Code File Decoder (Optimized) v1.10.7-ui</title>
   <style>
     /* Base styles */
     :root {
@@ -5721,8 +5721,10 @@
         container.style.display = 'block';
         filesList.innerHTML = '';
 
-        // Create buttons for each discovered file
-        Array.from(this.discoveredFiles.entries()).forEach(([filename, fileInfo], index) => {
+        // Create buttons for each discovered file (most recent first)
+        Array.from(this.discoveredFiles.entries())
+          .sort(([,a], [,b]) => (b.firstSeenAt || 0) - (a.firstSeenAt || 0))
+          .forEach(([filename, fileInfo], index) => {
           const fileButton = document.createElement('div');
           fileButton.style.cssText = 'margin-bottom: 10px; padding: 10px; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb;';
 
