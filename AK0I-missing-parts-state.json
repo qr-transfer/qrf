@@ -21,8 +21,8 @@
         "fileChecksum": "",
         "encoderVersion": "3.0"
       },
-      "firstSeenAt": 16645.0,
-      "lastSeenAt": 16648.0,
+      "firstSeenAt": 15177.0,
+      "lastSeenAt": 15183.0,
       "completed": false,
       "downloaded": false,
       "partialChunks": 0,
@@ -47,8 +47,8 @@
         "fileChecksum": "",
         "encoderVersion": "3.0"
       },
-      "firstSeenAt": 16990.0,
-      "lastSeenAt": 16993.0,
+      "firstSeenAt": 15522.0,
+      "lastSeenAt": 15528.0,
       "completed": false,
       "downloaded": false,
       "partialChunks": 0,
@@ -73,8 +73,8 @@
         "fileChecksum": "",
         "encoderVersion": "3.0"
       },
-      "firstSeenAt": 17335.0,
-      "lastSeenAt": 17338.0,
+      "firstSeenAt": 15867.0,
+      "lastSeenAt": 15873.0,
       "completed": false,
       "downloaded": false,
       "partialChunks": 0,
@@ -99,8 +99,8 @@
         "fileChecksum": "",
         "encoderVersion": "3.0"
       },
-      "firstSeenAt": 17565.0,
-      "lastSeenAt": 17568.0,
+      "firstSeenAt": 16097.0,
+      "lastSeenAt": 16103.0,
       "completed": false,
       "downloaded": false,
       "partialChunks": 0,
@@ -125,7 +125,7 @@
         "fileChecksum": "",
         "encoderVersion": "3.0"
       },
-      "firstSeenAt": 29215.0,
+      "firstSeenAt": 29212.0,
       "lastSeenAt": 29218.0,
       "completed": false,
       "downloaded": false,
@@ -134,6 +134,6 @@
     }
   ],
   "downloadedFiles": [],
-  "videoPosition": 16645.0,
+  "videoPosition": 15177.0,
   "notes": "Missing parts: AK0I.part88,91,94,96 + AL0I.part27. Calculated using 115s intervals. AK0I.part107 ends ~28800s, AL0I.part27 starts ~29215s. Total video ~8h."
 }
