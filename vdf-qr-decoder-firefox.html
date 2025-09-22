@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder v2.1.2 (Performance + v4 FileId Fix)</title>
+  <title>QR Code File Decoder v2.1.2-Firefox (Browser Optimized)</title>
   <style>
     /* Base styles */
     :root {
@@ -22,7 +22,7 @@
     * {
       box-sizing: border-box;
       margin: 0;
-      font-size: 0.8em; /* 20% smaller globally */
+      font-size: 1.0em; /* Firefox: Normal size - no global reduction */
       padding: 0;
     }
 
@@ -627,7 +627,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v2.1.2</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v2.1.2-Firefox</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -2894,8 +2894,8 @@
           window.startStatsMonitoring();
         }
 
-        // Use requestVideoFrameCallback if available
-        if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+        // Firefox: Prefer setInterval over requestVideoFrameCallback for better compatibility
+        if (false && 'requestVideoFrameCallback' in HTMLVideoElement.prototype) {
           console.log(`🎬 START PROCESSING: Using requestVideoFrameCallback`);
           this.processWithVideoFrameCallback();
         } else {
