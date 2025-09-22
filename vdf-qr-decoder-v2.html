@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder v2.1.1 (Performance + v4 FileId Fix)</title>
+  <title>QR Code File Decoder v2.1.2 (Performance + v4 FileId Fix)</title>
   <style>
     /* Base styles */
     :root {
@@ -627,7 +627,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v2.1.1</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v2.1.2</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -5773,7 +5773,7 @@
           .sort(([,a], [,b]) => (b.firstSeenAt || 0) - (a.firstSeenAt || 0))
           .forEach(([filename, fileInfo], index) => {
           const fileButton = document.createElement('div');
-          fileButton.style.cssText = 'margin-bottom: 10px; padding: 10px; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb;';
+          fileButton.style.cssText = 'margin-bottom: 3px; padding: 4px 6px; border: 1px solid #e5e7eb; border-radius: 3px; background: #f9fafb; font-size: 0.75em;';
 
           const fileSize = this.formatFileSize(fileInfo.metadata.fileSize);
           let timeRange = `${this.formatTimeToHMS(fileInfo.firstSeenAt)} - ${this.formatTimeToHMS(fileInfo.lastSeenAt)}`;
@@ -5806,24 +5806,24 @@
           }
           
           fileButton.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <div>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <span style="font-weight: bold; color: #1f2937;">${filename}</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px;">
+              <div style="flex: 1; min-width: 0;">
+                <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+                  <span style="font-weight: bold; color: #1f2937; font-size: 0.9em;">${filename}</span>
                   ${statusBadge}
                   ${integrityBadge}
                 </div>
-                <div style="font-size: 12px; color: #6b7280;">
-                  Size: ${fileSize} | Chunks: ${fileInfo.metadata.chunksCount} | Time: ${timeRange}
+                <div style="font-size: 0.65em; color: #6b7280; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                  ${fileSize} | ${fileInfo.metadata.chunksCount} chunks | ${timeRange}
                 </div>
               </div>
-              <div style="display: flex; gap: 5px;">
+              <div style="display: flex; gap: 3px; flex-shrink: 0;">
                 <button onclick="window.qrFileDecoder.setRange('${filename}', ${fileInfo.firstSeenAt}, ${fileInfo.lastSeenAt})"
-                        style="padding: 6px 12px; background: #f59e0b; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        style="padding: 3px 6px; background: #f59e0b; color: white; border: none; border-radius: 2px; cursor: pointer; font-size: 0.7em;">
                   Set Range
                 </button>
-                ${isCompleted ? `<button onclick="window.qrFileDecoder.downloadCompletedFile('${filename}')" 
-                        style="padding: 6px 12px; background: #16a34a; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                ${isCompleted ? `<button onclick="window.qrFileDecoder.downloadCompletedFile('${filename}')"
+                        style="padding: 3px 6px; background: #16a34a; color: white; border: none; border-radius: 2px; cursor: pointer; font-size: 0.7em;">
                   Download
                 </button>` : ''}
               </div>
