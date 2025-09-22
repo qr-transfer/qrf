@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use ffmpeg_next as ffmpeg;
-use image::{ImageBuffer, Rgb};
+use image::{ImageBuffer, Rgb, Luma};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::io::{BufReader, Read};
@@ -202,8 +202,8 @@ impl QrExtractor {
     }
 
     fn extract_chunk_to_qr_data(&self, chunk: &VideoChunk) -> Result<Vec<QrCodeData>> {
-        // Use external FFmpeg + zbar approach to avoid hanging
-        let qr_results = self.extract_qr_external(&chunk)?;
+        // Use pure memory processing with streaming JSONL (TUI events handled by main callback system)
+        let qr_results = self.extract_qr_pure_memory(chunk)?;
         Ok(qr_results)
     }
 
@@ -214,17 +214,60 @@ impl QrExtractor {
 
     fn extract_qr_pure_memory(&self, chunk: &VideoChunk) -> Result<Vec<QrCodeData>> {
         use std::collections::HashSet;
+        use std::fs::File;
+        use std::io::{BufWriter, Write};
 
-        ffmpeg::init().map_err(|e| anyhow!("Failed to initialize FFmpeg: {}", e))?;
+        // Initialize logger for this chunk
+        let log_path = chunk.path.parent().unwrap_or(&std::path::PathBuf::from(".")).join("processing.log");
+        let logger = crate::error_logger::ErrorLogger::new(&log_path.to_string_lossy())
+            .unwrap_or_else(|_| crate::error_logger::ErrorLogger::new("/tmp/processing.log").unwrap());
+
+        logger.log_info(&format!("Chunk {}: Starting pure memory processing", chunk.id + 1));
+
+        ffmpeg::init().map_err(|e| {
+            logger.log_error("FFMPEG_INIT", &format!("Failed to initialize FFmpeg: {}", e));
+            anyhow!("Failed to initialize FFmpeg: {}", e)
+        })?;
         ffmpeg::log::set_level(ffmpeg::log::Level::Quiet);
 
-        let mut ictx = ffmpeg::format::input(&chunk.path)?;
+        logger.log_info(&format!("Chunk {}: FFmpeg initialized, opening video file", chunk.id + 1));
+
+        let mut ictx = ffmpeg::format::input(&chunk.path).map_err(|e| {
+            logger.log_error("VIDEO_OPEN", &format!("Failed to open {}: {}", chunk.path.display(), e));
+            anyhow!("Failed to open video file: {}", e)
+        })?;
+
+        logger.log_info(&format!("Chunk {}: Video file opened successfully", chunk.id + 1));
+
         let input = ictx.streams().best(ffmpeg::media::Type::Video)
-            .ok_or(anyhow!("No video stream found"))?;
+            .ok_or_else(|| {
+                logger.log_error("VIDEO_STREAM", &format!("No video stream found in {}", chunk.path.display()));
+                anyhow!("No video stream found")
+            })?;
         let video_stream_index = input.index();
 
-        let context_decoder = ffmpeg::codec::context::Context::from_parameters(input.parameters())?;
-        let mut decoder = context_decoder.decoder().video()?;
+        logger.log_info(&format!("Chunk {}: Video stream {} found", chunk.id + 1, video_stream_index));
+
+        let context_decoder = ffmpeg::codec::context::Context::from_parameters(input.parameters()).map_err(|e| {
+            logger.log_error("DECODER_CREATE", &format!("Failed to create decoder: {}", e));
+            anyhow!("Failed to create decoder: {}", e)
+        })?;
+
+        let mut decoder = context_decoder.decoder().video().map_err(|e| {
+            logger.log_error("VIDEO_DECODER", &format!("Failed to create video decoder: {}", e));
+            anyhow!("Failed to create video decoder: {}", e)
+        })?;
+
+        logger.log_info(&format!("Chunk {}: Video decoder created successfully", chunk.id + 1));
+
+        // ✅ Create JSONL file for streaming writes
+        let default_output = std::path::PathBuf::from("video_results");
+        let output_dir = chunk.path.parent().unwrap_or(&default_output);
+        let jsonl_filename = format!("chunk_{:03}.jsonl", chunk.id + 1);
+        let jsonl_path = output_dir.join(&jsonl_filename);
+
+        let file = File::create(&jsonl_path)?;
+        let mut jsonl_writer = BufWriter::new(file);
 
         // QR deduplication tracking
         let mut seen_qr_codes = HashSet::new();
@@ -265,9 +308,22 @@ impl QrExtractor {
                                 continue; // Skip duplicate QR code
                             }
 
-                            // ✅ Store only unique QR codes
+                            // ✅ Store only unique QR codes AND stream to JSONL immediately
                             seen_qr_codes.insert(qr_data.data.clone());
                             qr_results.push(qr_data.clone());
+
+                            // ✅ Stream QR code to JSONL file immediately
+                            if let Ok(json_line) = serde_json::to_string(&qr_data) {
+                                if let Err(e) = writeln!(jsonl_writer, "{}", json_line) {
+                                    logger.log_error("JSONL_WRITE", &format!("Failed to write QR to JSONL: {}", e));
+                                } else {
+                                    // Flush immediately to ensure data is written
+                                    if let Err(e) = jsonl_writer.flush() {
+                                        logger.log_error("JSONL_FLUSH", &format!("Failed to flush JSONL: {}", e));
+                                    }
+                                }
+                            }
+
                             last_qr_data = Some(qr_data.data);
                         }
                     }
@@ -303,11 +359,29 @@ impl QrExtractor {
 
                         seen_qr_codes.insert(qr_data.data.clone());
                         qr_results.push(qr_data.clone());
+
+                        // ✅ Stream QR code to JSONL file immediately (flush section)
+                        if let Ok(json_line) = serde_json::to_string(&qr_data) {
+                            if let Err(e) = writeln!(jsonl_writer, "{}", json_line) {
+                                logger.log_error("JSONL_WRITE_FLUSH", &format!("Failed to write QR to JSONL during flush: {}", e));
+                            } else {
+                                if let Err(e) = jsonl_writer.flush() {
+                                    logger.log_error("JSONL_FLUSH_FLUSH", &format!("Failed to flush JSONL during flush: {}", e));
+                                }
+                            }
+                        }
+
                         last_qr_data = Some(qr_data.data);
                     }
                 }
             }
         }
+
+        // Close JSONL file to ensure all data is written
+        drop(jsonl_writer);
+
+        logger.log_info(&format!("Chunk {}: COMPLETED - {} total frames processed, {} unique QR codes extracted, JSONL saved",
+                               chunk.id + 1, frame_count, qr_results.len()));
 
         Ok(qr_results)
     }
@@ -378,21 +452,109 @@ impl QrExtractor {
 
         let mut qr_codes = Vec::new();
 
-        // Try rqrr QR detection
-        let mut scanner = rqrr::PreparedImage::prepare(luma_img);
-        let grids = scanner.detect_grids();
+        // Strategy 1: Try rqrr first (fast but has assertion issues)
+        if let Ok(rqrr_codes) = self.try_rqrr_safe(&luma_img, frame_number, chunk_id) {
+            qr_codes.extend(rqrr_codes);
+        }
 
-        for grid in grids {
-            if let Ok((_, content)) = grid.decode() {
-                qr_codes.push(QrCodeData {
-                    frame_number,
-                    data: content,
-                    chunk_id,
-                });
+        // Strategy 2: If no codes found, try quircs (more robust)
+        if qr_codes.is_empty() {
+            if let Ok(quircs_codes) = self.try_quircs_safe(&luma_img, frame_number, chunk_id) {
+                qr_codes.extend(quircs_codes);
+            }
+        }
+
+        // Strategy 3: If still no codes, try image preprocessing
+        if qr_codes.is_empty() {
+            if let Ok(enhanced_codes) = self.try_enhanced_detection(&luma_img, frame_number, chunk_id) {
+                qr_codes.extend(enhanced_codes);
             }
         }
 
         // ✅ All image data automatically discarded here (scope end)
+        Ok(qr_codes)
+    }
+
+    fn try_rqrr_safe(&self, luma_img: &ImageBuffer<Luma<u8>, Vec<u8>>, frame_number: u64, chunk_id: usize) -> Result<Vec<QrCodeData>> {
+        let mut qr_codes = Vec::new();
+
+        // Use panic protection for rqrr assertion failures
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut scanner = rqrr::PreparedImage::prepare(luma_img.clone());
+            let grids = scanner.detect_grids();
+            let mut codes = Vec::new();
+
+            for grid in grids {
+                if let Ok((_, content)) = grid.decode() {
+                    codes.push(content);
+                }
+            }
+            codes
+        }));
+
+        match result {
+            Ok(codes) => {
+                for content in codes {
+                    qr_codes.push(QrCodeData {
+                        frame_number,
+                        data: content,
+                        chunk_id,
+                    });
+                }
+            }
+            Err(_) => {
+                // rqrr assertion failure - return empty (quircs will be tried next)
+                return Ok(Vec::new());
+            }
+        }
+
+        Ok(qr_codes)
+    }
+
+    fn try_quircs_safe(&self, luma_img: &ImageBuffer<Luma<u8>, Vec<u8>>, frame_number: u64, chunk_id: usize) -> Result<Vec<QrCodeData>> {
+        let mut qr_codes = Vec::new();
+
+        let mut decoder = quircs::Quirc::new();
+        let codes = decoder.identify(luma_img.width() as usize, luma_img.height() as usize, luma_img);
+
+        for code in codes {
+            match code {
+                Ok(valid_code) => {
+                    if let Ok(decoded) = valid_code.decode() {
+                        qr_codes.push(QrCodeData {
+                            frame_number,
+                            data: String::from_utf8_lossy(&decoded.payload).to_string(),
+                            chunk_id,
+                        });
+                    }
+                }
+                Err(_) => continue,
+            }
+        }
+
+        Ok(qr_codes)
+    }
+
+    fn try_enhanced_detection(&self, luma_img: &ImageBuffer<Luma<u8>, Vec<u8>>, frame_number: u64, chunk_id: usize) -> Result<Vec<QrCodeData>> {
+        use image::imageops;
+
+        let mut qr_codes = Vec::new();
+
+        // Strategy: Enhance image contrast and try detection again
+        let enhanced_img = imageops::contrast(luma_img, 30.0); // Increase contrast
+
+        // Try rqrr on enhanced image
+        if let Ok(enhanced_codes) = self.try_rqrr_safe(&enhanced_img, frame_number, chunk_id) {
+            qr_codes.extend(enhanced_codes);
+        }
+
+        // If still no codes, try quircs on enhanced image
+        if qr_codes.is_empty() {
+            if let Ok(quircs_codes) = self.try_quircs_safe(&enhanced_img, frame_number, chunk_id) {
+                qr_codes.extend(quircs_codes);
+            }
+        }
+
         Ok(qr_codes)
     }
 
@@ -712,10 +874,9 @@ impl QrExtractor {
             // ✅ PNG data discarded here - only QR text kept
             png_buffer.clear();
 
-            // Progress reporting
+            // Progress reporting (silent for TUI)
             if frame_number % 5 == 0 {
-                println!("Chunk {}: Processed {} frames, found {} QR codes",
-                        chunk.id + 1, frame_number, qr_results.len());
+                // Frame progress tracking
             }
         }
 

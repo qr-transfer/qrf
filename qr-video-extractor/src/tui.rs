@@ -26,6 +26,7 @@ pub struct TuiState {
     pub chunks: Vec<ChunkInfo>,
     pub total_frames: u64,
     pub frames_processed: u64,
+    pub start_time: Option<std::time::Instant>,
 }
 
 #[derive(Clone)]
@@ -96,12 +97,18 @@ impl TuiState {
             chunks: Vec::new(),
             total_frames: 0,
             frames_processed: 0,
+            start_time: None,
         }
     }
 
     pub fn handle_event(&mut self, event: ProcessingEvent) {
         match event {
             ProcessingEvent::PhaseStarted { phase, description } => {
+                // Start timing on first phase
+                if phase == 1 && self.start_time.is_none() {
+                    self.start_time = Some(std::time::Instant::now());
+                }
+
                 let phase_idx = (phase as usize).saturating_sub(1);
                 if phase_idx < self.phases.len() {
                     self.phases[phase_idx].status = PhaseStatus::InProgress;
@@ -376,8 +383,8 @@ impl TuiManager {
             .constraints([
                 Constraint::Length(3),          // Title
                 Constraint::Length(6),          // Phases
-                Constraint::Min(6),             // Chunk tracking
-                Constraint::Length(6),          // Messages
+                Constraint::Min(10),            // Chunk tracking (more space)
+                Constraint::Length(4),          // Messages (compact)
                 Constraint::Length(3),          // Status bar
             ])
             .split(f.size());
@@ -450,19 +457,18 @@ impl TuiManager {
                     ChunkStatus::Error => Style::default().fg(Color::Red),
                 };
 
-                let jsonl_info = chunk.jsonl_file.as_ref()
-                    .map(|f| format!(" → {}", f))
-                    .unwrap_or_default();
-
+                // Compact duration display (convert ms to minutes:seconds)
                 let duration_info = chunk.duration_ms
-                    .map(|d| format!(" ({}ms)", d))
+                    .map(|d| {
+                        let secs = d / 1000;
+                        format!(" ({:02}:{:02})", secs / 60, secs % 60)
+                    })
                     .unwrap_or_default();
 
+                // Compact display: no redundant JSONL filename
                 ListItem::new(Line::from(vec![
-                    Span::styled(format!("{} ", status_char), style),
-                    Span::styled(format!("Chunk {}: {} QR codes", chunk.id + 1, chunk.qr_codes_found), style),
-                    Span::styled(jsonl_info, Style::default().fg(Color::Cyan)),
-                    Span::styled(duration_info, Style::default().fg(Color::Gray)),
+                    Span::styled(format!("{} Chunk {}: {} QR codes{}",
+                                       status_char, chunk.id + 1, chunk.qr_codes_found, duration_info), style),
                 ]))
             })
             .collect();
@@ -475,7 +481,7 @@ impl TuiManager {
             .messages
             .iter()
             .rev()
-            .take(5)
+            .take(3)
             .map(|m| ListItem::new(m.as_str()))
             .collect();
 
@@ -488,14 +494,30 @@ impl TuiManager {
         let completed_chunks = state.chunks.iter().filter(|c| c.status == ChunkStatus::Completed).count();
         let total_chunks = state.chunks.len();
 
-        let status_text = if state.total_frames > 0 {
-            let frame_progress = (state.frames_processed as f64 / state.total_frames as f64 * 100.0).min(100.0);
-            format!("Frames: {}/{} ({:.1}%) | Chunks: {}/{} | QR Codes: {} | Press 'q'/'Esc' to quit",
-                   state.frames_processed, state.total_frames, frame_progress,
-                   completed_chunks, total_chunks, total_qr_codes)
-        } else if total_chunks > 0 {
-            format!("Chunks: {}/{} | QR Codes: {} | Press 'q'/'Esc' to quit",
-                   completed_chunks, total_chunks, total_qr_codes)
+        let status_text = if let Some(start_time) = state.start_time {
+            let elapsed = start_time.elapsed();
+            let elapsed_str = format!("{:02}:{:02}", elapsed.as_secs() / 60, elapsed.as_secs() % 60);
+
+            if state.total_frames > 0 && state.frames_processed > 0 {
+                let frame_progress = (state.frames_processed as f64 / state.total_frames as f64 * 100.0).min(100.0);
+                let remaining_frames = state.total_frames.saturating_sub(state.frames_processed);
+                let frames_per_sec = state.frames_processed as f64 / elapsed.as_secs_f64();
+                let remaining_secs = if frames_per_sec > 0.0 {
+                    (remaining_frames as f64 / frames_per_sec) as u64
+                } else {
+                    0
+                };
+                let remaining_str = format!("{:02}:{:02}", remaining_secs / 60, remaining_secs % 60);
+
+                format!("Frames: {}/{} ({:.1}%) | Chunks: {}/{} | QR: {} | Time: {}/-{} | 'q' to quit",
+                       state.frames_processed, state.total_frames, frame_progress,
+                       completed_chunks, total_chunks, total_qr_codes, elapsed_str, remaining_str)
+            } else if total_chunks > 0 {
+                format!("Chunks: {}/{} | QR: {} | Time: {} | 'q' to quit",
+                       completed_chunks, total_chunks, total_qr_codes, elapsed_str)
+            } else {
+                format!("Time: {} | 'q' to quit", elapsed_str)
+            }
         } else {
             "Press 'q' or 'Esc' to quit | Processing will begin shortly...".to_string()
         };

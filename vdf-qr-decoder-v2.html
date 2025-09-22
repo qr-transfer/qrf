@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder v2.0.0 (Performance Optimized)</title>
+  <title>QR Code File Decoder v2.1.0 (Performance + v4 FileId Fix)</title>
   <style>
     /* Base styles */
     :root {
@@ -627,7 +627,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v2.0.0</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v2.1.0</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -4526,6 +4526,16 @@
 
         // Primary validation: Check fileId match for new format packets
         if (packet.fileId) {
+          // Special handling for null/zero fileId (encoder implementation gap)
+          if (packet.fileId === '00000000') {
+            // Emit one warning per file for null fileId
+            if (!this.nullFileIdWarningShown) {
+              this.nullFileIdWarningShown = true;
+              console.warn(`⚠️ File ${this.fileMetadata?.fileName}: Encoder using null fileId (00000000) - treating as v3-like format`);
+            }
+            return { isValid: true, reason: 'Null fileId accepted (encoder implementation gap)' };
+          }
+
           // New format packet - must have matching fileId
           const expectedFileId = this.currentFileChecksum || (this.fileMetadata.fileChecksum ? this.fileMetadata.fileChecksum.substring(0, 8) : null);
 
@@ -5574,6 +5584,9 @@
 
         // Set current active file
         this.currentActiveFile = fileName;
+
+        // Reset null fileId warning for new file
+        this.nullFileIdWarningShown = false;
 
         // Reset fountain decoder for the new file with video context
         this.fountainDecoder = new EnhancedFountainDecoder();
