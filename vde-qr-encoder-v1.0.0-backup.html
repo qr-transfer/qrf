@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QR File Transfer - Encoder v1.1.0 (v4 FileId Fix)</title>
+    <title>QR File Transfer - Encoder with Auto-Split</title>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
     <style>
         *{margin:0;padding:0;box-sizing:border-box}
@@ -3049,9 +3049,6 @@
                 // Create file checksum for data integrity verification
                 // Use current file data chunks to calculate checksum
                 const fileChecksum = this.calculateFileChecksumFromChunks(this.originalChunks);
-
-                // Store file checksum for v4 fileId generation
-                this.fileChecksum = fileChecksum;
                 
                 // Create metadata checksum  
                 const checksumData = `${fileNameText}:${fileSizeBytes}:${this.numChunks}`;
