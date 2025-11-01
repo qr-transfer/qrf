@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder (Optimized) v1.10.13</title>
+  <title>QR Code File Decoder v2.1.2 (Performance + v4 FileId Fix)</title>
   <style>
     /* Base styles */
     :root {
@@ -627,7 +627,7 @@
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v1.10.13</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v2.1.2</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -669,13 +669,13 @@
   <div class="video-container">
     <video id="videoPreview" controls muted></video>
     <canvas id="overlayCanvas"></canvas>
-    <!-- Single-Line Video Progress with Blue Bar -->
-    <div style="display: flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 0.55em;">
-      <span id="scanProgressText" style="white-space: nowrap; min-width: 50px;">0/0</span>
+    <!-- Fixed-Width Video Progress (No Trembling) -->
+    <div style="display: flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 0.55em; font-family: monospace;">
+      <span id="scanProgressText" style="width: 90px; text-align: left; white-space: nowrap; overflow: hidden;">0/0</span>
       <div style="flex: 1; height: 3px; background: #e5e7eb; border-radius: 2px; position: relative;">
         <div id="scanProgressBar" style="height: 100%; background: #2563eb; border-radius: 2px; width: 0%; transition: width 0.3s;"></div>
       </div>
-      <span id="loopInfo" style="white-space: nowrap; color: #666; min-width: 70px;">Ready</span>
+      <span id="loopInfo" style="width: 80px; text-align: right; white-space: nowrap; overflow: hidden; color: #666;">Ready</span>
     </div>
   </div>
 
@@ -1456,12 +1456,29 @@
       }
     };
 
-    // Update stats every 500ms for more responsive display
-    setInterval(() => {
-      if (window.performanceStats) {
-        window.performanceStats.updateDisplay();
+    // Performance stats monitoring (managed lifecycle)
+    let statsUpdateInterval = null;
+
+    // Start stats monitoring only during processing
+    window.startStatsMonitoring = function() {
+      if (!statsUpdateInterval) {
+        statsUpdateInterval = setInterval(() => {
+          if (window.qrFileDecoder?.isProcessing && window.performanceStats) {
+            window.performanceStats.updateDisplay();
+          }
+        }, 2000); // Reduced frequency: 500ms → 2000ms (75% less overhead)
+        console.log('📊 Stats monitoring started (2s intervals)');
       }
-    }, 500);
+    };
+
+    // Stop stats monitoring when processing stops
+    window.stopStatsMonitoring = function() {
+      if (statsUpdateInterval) {
+        clearInterval(statsUpdateInterval);
+        statsUpdateInterval = null;
+        console.log('📊 Stats monitoring stopped');
+      }
+    };
 
     // =============================================
     // Improved PacketProcessor Implementation
@@ -1989,8 +2006,8 @@
         this.codedPackets.push(packet);
         this.updateMemoryUsage();
 
-        // Immediate cleanup after adding packet
-        setTimeout(() => this.performImmediateCleanup(), 0);
+        // Cleanup only at file boundaries (not after every packet)
+        // setTimeout(() => this.performImmediateCleanup(), 0); // REMOVED: Causes timeout overflow
 
         return true;
       }
@@ -2872,6 +2889,11 @@
         // Perform initial memory check to populate stats immediately
         this.performMemoryCheck();
 
+        // Start performance monitoring during processing
+        if (window.startStatsMonitoring) {
+          window.startStatsMonitoring();
+        }
+
         // Use requestVideoFrameCallback if available
         if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
           console.log(`🎬 START PROCESSING: Using requestVideoFrameCallback`);
@@ -3056,6 +3078,11 @@
 
       stopProcessing() {
         this.isProcessing = false;
+
+        // Stop performance monitoring when processing stops
+        if (window.stopStatsMonitoring) {
+          window.stopStatsMonitoring();
+        }
 
         // Pause video
         if (!this.videoElement.paused) {
@@ -3907,12 +3934,25 @@
             // Use HTML5QRCode with proper File object
             this.html5QrCode.scanFile(file, false)
             .then(decodedText => {
-              // Show unique QR codes only (track what we've seen)
-              if (!this.seenQRCodes) this.seenQRCodes = new Set();
+              // Bounded QR cache with LRU eviction (thread-safe)
+              if (!this.seenQRCodes) {
+                this.seenQRCodes = new Map(); // Map for LRU tracking
+                this.maxQRCacheSize = 5000; // Bounded cache size
+              }
 
               const qrPreview = decodedText.substring(0, 80);
-              if (!this.seenQRCodes.has(qrPreview)) {
-                this.seenQRCodes.add(qrPreview);
+              const isNewQR = !this.seenQRCodes.has(qrPreview);
+
+              if (isNewQR) {
+                // Thread-safe cache size management
+                if (this.seenQRCodes.size >= this.maxQRCacheSize) {
+                  // Remove oldest 20% when cache is full
+                  const toRemove = Math.floor(this.maxQRCacheSize * 0.2);
+                  const keys = Array.from(this.seenQRCodes.keys()).slice(0, toRemove);
+                  keys.forEach(key => this.seenQRCodes.delete(key));
+                }
+
+                this.seenQRCodes.set(qrPreview, Date.now()); // Add with timestamp
                 console.log(`🆕 NEW QR detected:`, qrPreview + (decodedText.length > 80 ? '...' : ''));
                 console.log(`   Type: ${decodedText.startsWith('M:') ? 'METADATA' : decodedText.startsWith('D:') ? 'DATA' : decodedText.startsWith('F:') ? 'FOUNTAIN' : 'UNKNOWN'}`);
               }
@@ -5733,7 +5773,7 @@
           .sort(([,a], [,b]) => (b.firstSeenAt || 0) - (a.firstSeenAt || 0))
           .forEach(([filename, fileInfo], index) => {
           const fileButton = document.createElement('div');
-          fileButton.style.cssText = 'margin-bottom: 10px; padding: 10px; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb;';
+          fileButton.style.cssText = 'margin-bottom: 3px; padding: 4px 6px; border: 1px solid #e5e7eb; border-radius: 3px; background: #f9fafb; font-size: 0.75em;';
 
           const fileSize = this.formatFileSize(fileInfo.metadata.fileSize);
           let timeRange = `${this.formatTimeToHMS(fileInfo.firstSeenAt)} - ${this.formatTimeToHMS(fileInfo.lastSeenAt)}`;
@@ -5766,24 +5806,24 @@
           }
           
           fileButton.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <div>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <span style="font-weight: bold; color: #1f2937;">${filename}</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px;">
+              <div style="flex: 1; min-width: 0;">
+                <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+                  <span style="font-weight: bold; color: #1f2937; font-size: 0.9em;">${filename}</span>
                   ${statusBadge}
                   ${integrityBadge}
                 </div>
-                <div style="font-size: 12px; color: #6b7280;">
-                  Size: ${fileSize} | Chunks: ${fileInfo.metadata.chunksCount} | Time: ${timeRange}
+                <div style="font-size: 0.65em; color: #6b7280; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                  ${fileSize} | ${fileInfo.metadata.chunksCount} chunks | ${timeRange}
                 </div>
               </div>
-              <div style="display: flex; gap: 5px;">
+              <div style="display: flex; gap: 3px; flex-shrink: 0;">
                 <button onclick="window.qrFileDecoder.setRange('${filename}', ${fileInfo.firstSeenAt}, ${fileInfo.lastSeenAt})"
-                        style="padding: 6px 12px; background: #f59e0b; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        style="padding: 3px 6px; background: #f59e0b; color: white; border: none; border-radius: 2px; cursor: pointer; font-size: 0.7em;">
                   Set Range
                 </button>
-                ${isCompleted ? `<button onclick="window.qrFileDecoder.downloadCompletedFile('${filename}')" 
-                        style="padding: 6px 12px; background: #16a34a; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                ${isCompleted ? `<button onclick="window.qrFileDecoder.downloadCompletedFile('${filename}')"
+                        style="padding: 3px 6px; background: #16a34a; color: white; border: none; border-radius: 2px; cursor: pointer; font-size: 0.7em;">
                   Download
                 </button>` : ''}
               </div>
