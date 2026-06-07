@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QRF — Airgap File Transfer via QR Codes</title>
+<style>
+:root{
+  --paper:#f7f6f3;--surface:#fff;--surface-2:#f1efea;--surface-3:#e9e6df;
+  --ink:#22201d;--ink-soft:#54514b;--ink-mute:#8c887f;
+  --line:#e6e2d9;--line-strong:#d8d3c8;
+  --btn:#2b2825;--btn-hover:#191714;
+  --accent:#bf6442;--accent-hover:#a5532f;--accent-tint:#f4ece6;
+  --radius:14px;--radius-sm:9px;--radius-pill:999px;
+  --shadow-sm:0 1px 2px rgba(34,32,29,.05);
+  --shadow:0 2px 10px rgba(34,32,29,.06),0 1px 2px rgba(34,32,29,.04);
+  --shadow-lg:0 10px 34px rgba(34,32,29,.10);
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);background:var(--paper);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased;padding:32px 20px}
+.wrap{max-width:880px;margin:0 auto}
+header{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+.mark{width:48px;height:48px;border-radius:12px;background:var(--accent-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;flex:0 0 auto;border:1px solid var(--line)}
+.mark svg{width:27px;height:27px}
+h1{font-size:25px;font-weight:650;letter-spacing:-.015em}
+.tag{font-family:var(--mono);font-size:11px;color:var(--accent);background:var(--accent-tint);border:1px solid var(--line);padding:2px 8px;border-radius:var(--radius-pill);margin-left:auto;align-self:center}
+.lede{color:var(--ink-soft);font-size:15.5px;margin:14px 0 30px;max-width:60ch}
+.lede b{color:var(--ink);font-weight:600}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:640px){.grid{grid-template-columns:1fr}body{padding:24px 16px}}
+.card{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:22px;box-shadow:var(--shadow);text-decoration:none;color:inherit;transition:transform .12s,box-shadow .15s,border-color .15s}
+.card:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg);border-color:var(--line-strong)}
+.card .ico{width:40px;height:40px;border-radius:10px;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+.card .ico svg{width:22px;height:22px}
+.card h2{font-size:17px;font-weight:620;margin-bottom:6px}
+.card p{font-size:13.5px;color:var(--ink-soft)}
+.card .go{margin-top:14px;font-weight:600;font-size:13.5px;color:var(--accent);display:flex;align-items:center;gap:6px}
+.section-title{font-size:12px;font-weight:650;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-mute);margin:34px 0 12px}
+.variants{display:flex;gap:10px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-pill);padding:8px 14px;text-decoration:none;color:var(--ink-soft);font-size:13.5px;font-weight:500;box-shadow:var(--shadow-sm);transition:background .15s,border-color .15s}
+.chip:hover{background:var(--accent-tint);border-color:var(--accent);color:var(--accent-hover)}
+.feat{display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;margin-top:6px}
+@media(max-width:640px){.feat{grid-template-columns:1fr}}
+.feat div{font-size:13.5px;color:var(--ink-soft);display:flex;gap:9px;align-items:flex-start}
+.feat svg{color:var(--accent);flex:0 0 auto;margin-top:3px}
+footer{margin-top:38px;padding-top:18px;border-top:1px solid var(--line);font-size:13px;color:var(--ink-mute);display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+footer a{color:var(--ink-soft);text-decoration:none;font-weight:500}
+footer a:hover{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+        <rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 14h3v3M21 14v.01M21 21v-3M14 21h3"/>
+      </svg>
+    </div>
+    <h1>QRF · QR File Transfer</h1>
+    <span class="tag">zstd · airgap</span>
+  </header>
+
+  <p class="lede">Transfer any file between devices using <b>animated QR codes</b> — no network, no cables, no installs. Files are <b>compressed</b> (zstd, gzip fallback) and protected with <b>fountain codes</b> for reliable recovery. Everything runs <b>fully offline</b> in your browser.</p>
+
+  <div class="grid">
+    <a class="card" href="vde-qr-encoder.html">
+      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><rect x="4" y="17" width="16" height="4" rx="1.5"/></svg></div>
+      <h2>Encoder</h2>
+      <p>Pick a file, compress it, and broadcast it as a sequence of QR codes on screen.</p>
+      <span class="go">Open encoder →</span>
+    </a>
+    <a class="card" href="vdf-qr-decoder.html">
+      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M3 12h18"/></svg></div>
+      <h2>Decoder</h2>
+      <p>Scan with a camera or load a screen recording; the file is rebuilt and verified.</p>
+      <span class="go">Open decoder →</span>
+    </a>
+  </div>
+
+  <div class="section-title">Browser-specific decoders</div>
+  <div class="variants">
+    <a class="chip" href="vdf-qr-decoder.html">● Chromium / Edge</a>
+    <a class="chip" href="vdf-qr-decoder-firefox.html">● Firefox</a>
+    <a class="chip" href="vdf-qr-decoder-safari.html">● Safari</a>
+  </div>
+
+  <div class="section-title">Why it works offline</div>
+  <div class="feat">
+    <div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Embedded compression</b> — zstd (WebAssembly) + native gzip, inlined; nothing is fetched.</span></div>
+    <div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Fountain codes</b> — recover the file even if some frames are missed.</span></div>
+    <div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Integrity verified</b> — the original checksum is checked before download.</span></div>
+    <div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Self-contained</b> — single HTML files; open straight from disk if you prefer.</span></div>
+  </div>
+
+  <footer>
+    <a href="https://github.com/qr-transfer/qrf">GitHub repository</a>
+    <a href="README.md">Documentation</a>
+    <a href="encoder.md">Encoder docs</a>
+    <a href="decoder.md">Decoder docs</a>
+  </footer>
+</div>
+</body>
+</html>
