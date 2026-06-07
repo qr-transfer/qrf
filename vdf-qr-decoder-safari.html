@@ -8,15 +8,29 @@
   <style>
     /* Base styles */
     :root {
-      --primary-color: #2563eb;
-      --secondary-color: #1d4ed8;
-      --success-color: #10b981;
-      --warning-color: #f59e0b;
-      --error-color: #ef4444;
-      --text-color: #1f2937;
-      --bg-color: #f9fafb;
+      --primary-color: #2b2825;   /* graphite = primary action */
+      --secondary-color: #191714; /* graphite hover */
+      --accent-color: #bf6442;    /* restrained terracotta accent */
+      --accent-hover: #a5532f;
+      --accent-tint: #f4ece6;
+      --success-color: #4f8a63;
+      --warning-color: #cf983f;
+      --error-color: #b14a42;
+      --text-color: #22201d;
+      --text-soft: #54514b;
+      --text-mute: #8c887f;
+      --bg-color: #f7f6f3;
       --panel-bg: #ffffff;
-      --border-color: #e5e7eb;
+      --surface-2: #f1efea;
+      --surface-3: #e9e6df;
+      --border-color: #e6e2d9;
+      --radius: 10px;
+      --radius-sm: 8px;
+      --radius-pill: 999px;
+      --shadow-sm: 0 1px 2px rgba(34,32,29,.05);
+      --shadow: 0 2px 8px rgba(34,32,29,.06), 0 1px 2px rgba(34,32,29,.04);
+      --mono: ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+      --sans: system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     }
 
     * {
@@ -27,13 +41,14 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: var(--sans);
       line-height: 1.5;
       color: var(--text-color);
       background-color: var(--bg-color);
       padding: 20px;
       max-width: 1200px;
       margin: 0 auto;
+      -webkit-font-smoothing: antialiased;
     }
 
     h1,
@@ -46,18 +61,23 @@
       color: white;
       border: none;
       padding: 8px 16px;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      font-weight: 500;
-      transition: background-color 0.2s;
+      font-weight: 600;
+      box-shadow: var(--shadow-sm);
+      transition: background-color 0.15s, transform 0.05s;
     }
 
     button:hover {
       background-color: var(--secondary-color);
     }
 
+    button:active { transform: translateY(1px); }
+
     button:disabled {
-      background-color: #9ca3af;
+      background-color: var(--surface-3);
+      color: var(--text-mute);
+      box-shadow: none;
       cursor: not-allowed;
     }
 
@@ -73,7 +93,7 @@
       background-color: var(--panel-bg);
       padding: 10px 15px;
       border-radius: 8px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 1px 3px rgba(34,32,29,.06);
       margin-bottom: 20px;
       flex-wrap: wrap;
       gap: 10px;
@@ -92,7 +112,7 @@
       background-color: var(--panel-bg);
       padding: 15px;
       border-radius: 8px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 1px 3px rgba(34,32,29,.06);
       margin-bottom: 20px;
     }
 
@@ -133,7 +153,7 @@
       background-color: var(--panel-bg);
       padding: 15px;
       border-radius: 8px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 1px 3px rgba(34,32,29,.06);
       margin-bottom: 20px;
     }
 
@@ -400,7 +420,7 @@
       background-color: var(--panel-bg);
       padding: 4px;
       border-radius: 4px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 1px 3px rgba(34,32,29,.06);
       margin-bottom: 2px;
     }
 
@@ -421,7 +441,7 @@
       background-color: var(--panel-bg);
       padding: 15px;
       border-radius: 8px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 1px 3px rgba(34,32,29,.06);
     }
 
     .log-controls {
@@ -493,7 +513,7 @@
       padding: 20px;
       border-radius: 8px;
       max-width: 500px;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 4px 6px rgba(34,32,29,.06);
       position: relative;
     }
 
@@ -728,15 +748,23 @@ YmQ2NmZjNWZhYTU3ZWFhYmE5ZWQ5ZTBlNjMzNzlkZDk2MWY1Lm1hcA==
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v2.2.0-Safari</span></h1>
+    <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+      <span style="width:38px;height:38px;border-radius:10px;background:var(--accent-tint);color:var(--accent-color);display:flex;align-items:center;justify-content:center;flex:0 0 auto;border:1px solid var(--border-color);">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+          <rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 14h3v3M21 14v.01M21 21v-3M14 21h3"/>
+        </svg>
+      </span>
+      <h1 style="font-size: 1.4em; margin: 0; letter-spacing:-.01em;">QR File Decoder <span style="font-family:var(--mono);font-size: 0.55em; color: var(--accent-color); background:var(--accent-tint); border:1px solid var(--border-color); padding:2px 7px; border-radius:var(--radius-pill); vertical-align:middle;">v2.2.0-Safari · zstd</span></h1>
+    </div>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
-      <button id="continueBtn" style="background-color: #10b981; padding: 8px 12px; font-size: 0.9em;">Continue</button>
-      <button id="stopScanBtn" style="padding: 8px 12px; font-size: 0.9em;">Stop</button>
+      <button id="continueBtn" style="background-color: var(--success-color); padding: 8px 12px; font-size: 0.9em;">Continue</button>
+      <button id="stopScanBtn" style="background-color: var(--error-color); padding: 8px 12px; font-size: 0.9em;">Stop</button>
       <button id="resetBtn" style="padding: 8px 12px; font-size: 0.9em;">Reset</button>
-      <button id="exportStateBtn" style="background-color: #f59e0b; padding: 8px 12px; font-size: 0.9em;">Export</button>
-      <button id="importStateBtn" style="background-color: #8b5cf6; padding: 8px 12px; font-size: 0.9em;">Import</button>
+      <button id="exportStateBtn" style="padding: 8px 12px; font-size: 0.9em;">Export</button>
+      <button id="importStateBtn" style="padding: 8px 12px; font-size: 0.9em;">Import</button>
       <input type="file" id="stateFileInput" accept=".json" style="display: none;">
       <button id="settingsBtn" style="padding: 8px 12px; font-size: 0.9em;">Settings</button>
     </div>

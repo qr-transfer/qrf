@@ -6,260 +6,150 @@
     <title>QR File Transfer - Encoder v1.2.0 (embedded zstd/gzip compression)</title>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
     <style>
-        *{margin:0;padding:0;box-sizing:border-box}
-        body{font-family:system-ui,-apple-system,sans-serif;line-height:1.5;background:#f5f5f5;color:#333;max-width:1200px;margin:0 auto;padding:20px}
-        h1{margin:20px 0;color:#2563eb}
-        .container{max-width:800px;margin:0 auto}
-        .panel{background:#fff;padding:20px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.1);flex:1;min-width:300px}
-        .control-panel{display:flex;flex-direction:column;gap:15px}
-        .control-group{display:flex;flex-direction:column;gap:8px}
-        .control-label{font-weight:700}
-        button{padding:12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:700;margin-top:10px;transition:background .2s}
-        button:hover{background:#1d4ed8}
-        button:disabled{background:#94a3b8;cursor:not-allowed}
-        .display-container{display:flex;flex-direction:column;align-items:center;justify-content:center}
-        #qrDisplay{position:relative;margin:0 auto 20px;border:1px solid #ddd;padding:20px;border-radius:8px;background:#fff;max-width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center}
-        .progress-container{width:100%;background:#e5e7eb;border-radius:4px;overflow:hidden;height:10px;margin-top:15px}
-        .progress-bar{height:100%;background:#2563eb;width:0;transition:width .3s}
-        .file-info{margin-top:20px;padding:15px;background:#f0f9ff;border-radius:8px;border-left:4px solid #2563eb}
-        .metadata-info{margin-top:10px;padding:10px;background:#f0f9ff;border-radius:8px;border-left:4px solid #1d4ed8}
-        .info-row{display:flex;justify-content:space-between;margin-bottom:8px}
-        .info-label{font-weight:700;color:#1e40af}
-        
-        /* Keep-awake video stays invisible in all modes */
-        #keepAwakeVideo {
-            position: fixed !important;
-            top: -1px !important;
-            left: -1px !important;
-            width: 1px !important;
-            height: 1px !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-            z-index: -1 !important;
+        /* ===== Claude Code design system — warm paper aesthetic, system fonts (airgap-safe) ===== */
+        :root{
+            --paper:#f7f6f3; --surface:#ffffff; --surface-2:#f1efea; --surface-3:#e9e6df;
+            --ink:#22201d; --ink-soft:#54514b; --ink-mute:#8c887f;
+            --line:#e6e2d9; --line-strong:#d8d3c8;
+            /* primary action = graphite/near-black */
+            --btn:#2b2825; --btn-hover:#191714;
+            /* terracotta kept as a restrained accent only */
+            --accent:#bf6442; --accent-hover:#a5532f; --accent-tint:#f4ece6;
+            --success:#4f8a63; --success-hover:#427453; --success-tint:#eef4f0;
+            --danger:#b14a42; --danger-hover:#963e37; --danger-tint:#f6eceb;
+            --info:#5c7186; --info-hover:#4c6072;
+            --neutral:#6f6a62; --neutral-hover:#5a554e;
+            --radius:12px; --radius-sm:8px; --radius-pill:999px;
+            --shadow-sm:0 1px 2px rgba(43,41,38,.05); --shadow:0 2px 8px rgba(43,41,38,.06),0 1px 2px rgba(43,41,38,.04);
+            --shadow-lg:0 8px 28px rgba(43,41,38,.10);
+            --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+            --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
         }
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:var(--sans);line-height:1.55;background:var(--paper);color:var(--ink);max-width:1180px;margin:0 auto;padding:24px;-webkit-font-smoothing:antialiased}
+
+        /* Header */
+        .app-header{display:flex;align-items:center;gap:14px;margin:8px 0 24px}
+        .app-mark{width:42px;height:42px;border-radius:11px;background:var(--accent-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;flex:0 0 auto;border:1px solid var(--line)}
+        .app-mark svg{width:24px;height:24px}
+        .app-title{display:flex;flex-direction:column;gap:2px}
+        .app-title h1{font-size:21px;font-weight:650;color:var(--ink);letter-spacing:-.01em;margin:0}
+        .app-title .sub{font-size:13px;color:var(--ink-mute)}
+        .badge{font-family:var(--mono);font-size:11px;color:var(--accent);background:var(--accent-tint);border:1px solid var(--line);padding:2px 8px;border-radius:var(--radius-pill);margin-left:auto;align-self:center}
+        h1{color:var(--ink)}
+
+        .container{display:flex;gap:20px;flex-wrap:wrap;max-width:100%;margin:0 auto}
+        .panel{background:var(--surface);padding:22px;border-radius:var(--radius);box-shadow:var(--shadow);border:1px solid var(--line);flex:1;min-width:320px}
+        .control-panel{display:flex;flex-direction:column;gap:18px}
+        .control-group{display:flex;flex-direction:column;gap:8px}
+        .control-label{font-weight:600;font-size:14px;color:var(--ink-soft);display:flex;align-items:center}
+
+        /* Buttons */
+        button{font-family:var(--sans);padding:11px 16px;background:var(--btn);color:#fff;border:none;border-radius:var(--radius-sm);cursor:pointer;font-weight:600;font-size:14px;margin-top:8px;transition:background .15s,transform .05s,box-shadow .15s;box-shadow:var(--shadow-sm)}
+        button:hover{background:var(--btn-hover)}
+        button:active{transform:translateY(1px)}
+        button:disabled{background:var(--surface-3);color:var(--ink-mute);cursor:not-allowed;box-shadow:none}
+        .btn-danger{background:var(--danger)} .btn-danger:hover{background:var(--danger-hover)}
+        .btn-success{background:var(--success)} .btn-success:hover{background:var(--success-hover)}
+        .btn-info{background:var(--info)} .btn-info:hover{background:var(--info-hover)}
+        .btn-neutral{background:var(--neutral)} .btn-neutral:hover{background:var(--neutral-hover)}
+
+        .display-container{display:flex;flex-direction:column;align-items:center;justify-content:center}
+        #qrDisplay{position:relative;margin:0 auto 20px;border:1px solid var(--line);padding:20px;border-radius:var(--radius);background:var(--surface);max-width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:var(--shadow-sm)}
+        .progress-container{width:100%;background:var(--surface-3);border-radius:var(--radius-pill);overflow:hidden;height:8px;margin-top:15px}
+        .progress-bar{height:100%;background:var(--btn);width:0;transition:width .3s;border-radius:var(--radius-pill)}
+        .file-info{margin-top:20px;padding:15px 16px;background:var(--accent-tint);border-radius:var(--radius-sm);border-left:3px solid var(--accent)}
+        .metadata-info{margin-top:10px;padding:12px;background:var(--surface-2);border-radius:var(--radius-sm);border-left:3px solid var(--accent)}
+        .info-row{display:flex;justify-content:space-between;margin-bottom:8px;font-size:14px}
+        .info-label{font-weight:600;color:var(--ink-soft)}
+
+        /* Keep-awake video stays invisible in all modes */
+        #keepAwakeVideo{position:fixed!important;top:-1px!important;left:-1px!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important;z-index:-1!important}
 
         /* Fullscreen Mode */
-        .fullscreen{position:fixed;top:0;left:0;width:100vw;height:100vh;background:#000;z-index:1000;display:flex;justify-content:center;align-items:center;flex-direction:column}
-        .fullscreen .qr-container{
-            display:flex;
-            justify-content:center;
-            align-items:center;
-            width:80vmin;
-            height:80vmin;
-            position:relative;
-        }
-        .fullscreen-qr {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            max-width: 95vh;
-            max-height: 95vh;
-        }
+        .fullscreen{position:fixed;top:0;left:0;width:100vw;height:100vh;background:#1f1e1d;z-index:1000;display:flex;justify-content:center;align-items:center;flex-direction:column}
+        .fullscreen .qr-container{display:flex;justify-content:center;align-items:center;width:80vmin;height:80vmin;position:relative}
+        .fullscreen-qr{width:100%;height:100%;object-fit:contain;max-width:95vh;max-height:95vh}
         .fullscreen-progress{position:absolute;bottom:50px;width:80%;max-width:400px}
-        .fullscreen-counter{position:absolute;top:20px;left:20px;background:rgba(0,0,0,.5);color:#fff;padding:10px;border-radius:4px;font-weight:bold;font-size:16px;z-index:10}
-        .exit-button{position:absolute;top:20px;right:20px;background:#ef4444;color:#fff;border:none;width:40px;height:40px;border-radius:20px;font-size:20px;cursor:pointer}
-        
+        .fullscreen-counter{position:absolute;top:20px;left:20px;background:rgba(0,0,0,.5);color:#fff;padding:8px 14px;border-radius:var(--radius-pill);font-family:var(--mono);font-weight:600;font-size:15px;z-index:10}
+        .exit-button{position:absolute;top:20px;right:20px;background:var(--danger);color:#fff;border:none;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+        .exit-button:hover{background:var(--danger-hover)}
+
         /* Countdown Display */
-        .countdown-display{
-            font-size:120px;
-            color:#1890ff;
-            position:absolute;
-            top:50%;
-            left:50%;
-            transform:translate(-50%,-50%);
-            text-shadow:0 0 10px rgba(24,144,255,.5);
-            z-index:100;
-            display:none;
-            background:rgba(0,0,0,.4);
-            width:200px;
-            height:200px;
-            border-radius:50%;
-            line-height:200px;
-            text-align:center;
-            font-weight:bold;
-        }
-        
-        /* Fullscreen Countdown Display */
-        .fullscreen .countdown-display {
-            width: 250px;
-            height: 250px;
-            line-height: 250px;
-            font-size: 150px;
-            background: rgba(0,0,0,.6);
-        }
-        input[type=range]{width:100%;height:8px;background:#e5e7eb;border-radius:4px;appearance:none;outline:0}
-        input[type=range]::-webkit-slider-thumb{appearance:none;width:16px;height:16px;background:#2563eb;border-radius:50%;cursor:pointer}
-        .slider-labels{display:flex;justify-content:space-between;font-size:12px;color:#6b7280;margin-top:5px}
-        .value-display{font-weight:700;color:#2563eb;margin-left:auto}
-        
+        .countdown-display{font-size:120px;color:#fff;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-shadow:0 0 16px rgba(217,119,87,.6);z-index:100;display:none;background:rgba(31,30,29,.55);width:200px;height:200px;border-radius:50%;line-height:200px;text-align:center;font-weight:700;font-family:var(--mono)}
+        .fullscreen .countdown-display{width:250px;height:250px;line-height:250px;font-size:150px;background:rgba(31,30,29,.7)}
+
+        /* Range sliders */
+        input[type=range]{width:100%;height:6px;background:var(--surface-3);border-radius:var(--radius-pill);appearance:none;outline:0;margin:4px 0}
+        input[type=range]::-webkit-slider-thumb{appearance:none;width:18px;height:18px;background:var(--accent);border:3px solid var(--surface);border-radius:50%;cursor:pointer;box-shadow:var(--shadow-sm)}
+        input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--accent);border:3px solid var(--surface);border-radius:50%;cursor:pointer}
+        .slider-labels{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-mute);margin-top:4px}
+        .value-display{font-family:var(--mono);font-weight:600;color:var(--accent);margin-left:auto}
+
         /* File input */
         .file-input-container{position:relative;overflow:hidden;display:inline-block;width:100%}
-        .file-input-label{padding:12px;background:#e5e7eb;color:#333;border-radius:4px;cursor:pointer;display:block;text-align:center;transition:background .2s}
-        .file-input-label:hover{background:#d1d5db}
+        .file-input-label{padding:14px;background:var(--surface-2);color:var(--ink-soft);border:1px dashed var(--line-strong);border-radius:var(--radius-sm);cursor:pointer;display:block;text-align:center;font-weight:500;transition:background .15s,border-color .15s}
+        .file-input-label:hover{background:var(--accent-tint);border-color:var(--accent)}
         .file-input-container input[type=file]{position:absolute;left:0;top:0;opacity:0;width:100%;height:100%;cursor:pointer}
-        
-        /* File list styles */
-        .file-list-container{margin-top:15px;background:#f9fafb;border-radius:8px;padding:15px;display:none}
-        .file-list-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-weight:600}
+
+        /* File list */
+        .file-list-container{margin-top:15px;background:var(--surface-2);border-radius:var(--radius-sm);padding:15px;display:none;border:1px solid var(--line)}
+        .file-list-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-weight:600;font-size:14px}
         .file-list{max-height:300px;overflow-y:auto}
-        .file-item{display:flex;align-items:center;padding:8px;border-bottom:1px solid #e5e7eb;transition:background .2s}
-        .file-item:hover{background:#f3f4f6}
+        .file-item{display:flex;align-items:center;padding:9px 8px;border-bottom:1px solid var(--line);transition:background .15s}
+        .file-item:hover{background:var(--surface)}
         .file-item:last-child{border-bottom:none}
-        .file-checkbox{margin-right:12px;width:18px;height:18px;cursor:pointer}
+        .file-checkbox{margin-right:12px;width:18px;height:18px;cursor:pointer;accent-color:var(--accent)}
         .file-info{flex:1;display:flex;flex-direction:column}
         .file-name{font-weight:500;margin-bottom:2px}
-        .file-size{font-size:12px;color:#6b7280}
-        .file-status{margin-left:auto;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:500;text-transform:uppercase}
-        .status-pending{background:#fef3c7;color:#d97706}
-        .status-inprogress{background:#dbeafe;color:#2563eb}
-        .status-sent{background:#dcfce7;color:#16a34a}
-        .status-error{background:#fee2e2;color:#dc2626}
+        .file-size{font-size:12px;color:var(--ink-mute);font-family:var(--mono)}
+        .file-status{margin-left:auto;padding:3px 10px;border-radius:var(--radius-pill);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.02em}
+        .status-pending{background:#fbf0dc;color:#9a6a16}
+        .status-inprogress{background:var(--accent-tint);color:var(--accent-hover)}
+        .status-sent{background:var(--success-tint);color:var(--success-hover)}
+        .status-error{background:var(--danger-tint);color:var(--danger-hover)}
         .batch-controls{display:flex;gap:10px;margin-top:10px}
-        .select-all-btn,.clear-all-btn{font-size:12px;padding:6px 12px}
-        
-        /* Checkbox style */
-        .control-switch {
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            user-select: none;
-            margin: 10px 0;
-        }
-        
-        .control-switch input[type="checkbox"] {
-            margin-right: 8px;
-            width: 16px;
-            height: 16px;
-        }
-        
-        .switch-label {
-            font-weight: 500;
-        }
-        
-        /* Combined button */
-        .action-button {
-            background-color: #16a34a;
-            width: 100%;
-            padding: 14px;
-            font-size: 16px;
-        }
-        
-        .action-button:hover {
-            background-color: #15803d;
-        }
+        .select-all-btn,.clear-all-btn{font-size:12px;padding:6px 12px;background:var(--surface-3);color:var(--ink-soft)}
+        .select-all-btn:hover,.clear-all-btn:hover{background:var(--line-strong)}
+
+        /* Checkbox switch */
+        .control-switch{display:flex;align-items:center;cursor:pointer;user-select:none;margin:8px 0}
+        .control-switch input[type=checkbox]{margin-right:8px;width:16px;height:16px;accent-color:var(--accent)}
+        .switch-label{font-weight:500;font-size:14px;color:var(--ink-soft)}
+
+        /* Primary action (hero) */
+        .action-button{background:var(--btn);width:100%;padding:14px;font-size:15px}
+        .action-button:hover{background:var(--btn-hover)}
 
         /* Alignment guides */
-        .alignment-guide {
-            position: absolute;
-            border: 3px dashed rgba(59, 130, 246, 0.7);
-            pointer-events: none;
-            display: none;
-        }
-
-        #qrDisplay.show-guides .alignment-guide {
-            display: block;
-        }
-
-        .guide-label {
-            position: absolute;
-            background: rgba(0, 0, 0, 0.6);
-            color: white;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 12px;
-            pointer-events: none;
-        }
-        
-        /* QR Code transition effects */
-        .qr-image {
-            transition: opacity 0.15s ease-out;
-        }
+        .alignment-guide{position:absolute;border:3px dashed rgba(217,119,87,.7);pointer-events:none;display:none}
+        #qrDisplay.show-guides .alignment-guide{display:block}
+        .guide-label{position:absolute;background:rgba(43,41,38,.7);color:#fff;padding:2px 6px;border-radius:4px;font-size:12px;pointer-events:none}
+        .qr-image{transition:opacity .15s ease-out}
 
         /* Performance presets */
-        .preset-selector {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 10px;
-            flex-wrap: wrap;
-        }
-
-        .preset-button {
-            padding: 8px 12px;
-            background: #e5e7eb;
-            color: #333;
-            border: 1px solid #d1d5db;
-            border-radius: 4px;
-            cursor: pointer;
-            flex: 1;
-            min-width: 120px;
-            text-align: center;
-            transition: all 0.2s;
-        }
-
-        .preset-button:hover {
-            background: #d1d5db;
-        }
-
-        .preset-button.active {
-            background: #2563eb;
-            color: white;
-            border-color: #2563eb;
-        }
+        .preset-selector{display:flex;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+        .preset-button{padding:9px 12px;background:var(--surface-2);color:var(--ink-soft);border:1px solid var(--line);border-radius:var(--radius-sm);cursor:pointer;flex:1;min-width:120px;text-align:center;font-weight:500;font-size:13px;margin-top:0;box-shadow:none;transition:all .15s}
+        .preset-button:hover{background:var(--accent-tint);border-color:var(--accent)}
+        .preset-button.active{background:var(--btn);color:#fff;border-color:var(--btn);box-shadow:var(--shadow-sm)}
 
         /* Tooltip */
-        .tooltip {
-            position: relative;
-            display: inline-block;
-            margin-left: 5px;
-            width: 16px;
-            height: 16px;
-            background: #e5e7eb;
-            color: #6b7280;
-            border-radius: 50%;
-            text-align: center;
-            line-height: 16px;
-            font-size: 11px;
-            font-weight: bold;
-            cursor: help;
-        }
+        .tooltip{position:relative;display:inline-block;margin-left:6px;width:16px;height:16px;background:var(--surface-3);color:var(--ink-mute);border-radius:50%;text-align:center;line-height:16px;font-size:11px;font-weight:700;cursor:help}
+        .tooltip:hover::after{content:attr(data-tooltip);position:absolute;top:-5px;left:100%;transform:translateY(-100%);background:rgba(43,41,38,.94);color:#fff;padding:7px 10px;border-radius:var(--radius-sm);width:200px;font-weight:400;font-size:12px;z-index:10;line-height:1.4;box-shadow:var(--shadow-lg)}
 
-        .tooltip:hover::after {
-            content: attr(data-tooltip);
-            position: absolute;
-            top: -5px;
-            left: 100%;
-            transform: translateY(-100%);
-            background: rgba(55, 65, 81, 0.9);
-            color: white;
-            padding: 5px 10px;
-            border-radius: 4px;
-            width: 200px;
-            font-weight: normal;
-            font-size: 12px;
-            z-index: 10;
-            line-height: 1.4;
-        }
+        .handshake-notice{margin-top:20px;padding:11px 14px;background:#fbf3e3;border-left:3px solid #e0a64a;border-radius:var(--radius-sm);font-size:13px;color:#8a5d18}
 
-        .handshake-notice {
-            margin-top: 20px;
-            padding: 10px;
-            background: rgba(245, 158, 11, 0.1);
-            border-left: 3px solid #f59e0b;
-            border-radius: 3px;
-            font-size: 13px;
-            color: #92400e;
-        }
-
-        /* Mobile responsiveness */
+        /* Mobile */
         @media (max-width:768px){
+            body{padding:16px}
             .container{flex-direction:column}
-            .handshake-notice, .preset-selector {font-size: 11px;}
-            .preset-button {padding: 6px 8px; min-width: 90px;}
-            .control-label {font-size: 14px;}
-            h1 {font-size: 20px; margin: 10px 0;}
-            .panel {padding: 15px;}
-            .slider-labels {font-size: 10px;}
-            .countdown-display {width: 150px; height: 150px; line-height: 150px; font-size: 90px;}
+            .handshake-notice,.preset-selector{font-size:11px}
+            .preset-button{padding:8px;min-width:90px}
+            .control-label{font-size:14px}
+            .app-title h1{font-size:18px}
+            .panel{padding:16px}
+            .slider-labels{font-size:10px}
+            .countdown-display{width:150px;height:150px;line-height:150px;font-size:90px}
         }
     </style>
 </head>
@@ -3160,7 +3050,19 @@ AD0AAAA8AAAAPAAAAD0AAAA8AAAAPAAAADwAAAA8AEGA0QALHT0AAAA9AAAAPAAAADwAAAAAAAAAPAAA
         <source src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAr1tZGF0AAACrgYF//+q3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDEyMSByMzA1MSAwMWViMzY0IC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAxOCAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MzoweDExMyBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tMiB0aHJlYWRzPTE3IGxvb2thaGVhZF90aHJlYWRzPTIgc2xpY2VkX3RocmVhZHM9MCBucj0wIGRlY2ltYXRlPTEgaW50ZXJsYWNlZD0wIGJsdXJheV9jb21wYXQ9MCBjb25zdHJhaW5lZF9pbnRyYT0wIGJmcmFtZXM9MyBiX3B5cmFtaWQ9MiBiX2FkYXB0PTEgYl9iaWFzPTAgZGlyZWN0PTEgd2VpZ2h0Yj0xIG9wZW5fZ29wPTAgd2VpZ2h0cD0yIGtleWludD0yNTAga2V5aW50X21pbj0yMyBzY2VuZWN1dD00MCBpbnRyYV9yZWZyZXNoPTAgcmNfbG9va2FoZWFkPTQwIHJjPWNyZiBtYnRyZWU9MSBjcmY9MjMuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0xOjEuMDAAgAAAAJ1liIQAL//+9Qa/8UAqAAADAAA" type="video/mp4">
     </video>
     
-    <h1>QR Code File Encoder</h1>
+    <header class="app-header">
+        <div class="app-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+                <rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 14h3v3M21 14v.01M21 21v-3M14 21h3"/>
+            </svg>
+        </div>
+        <div class="app-title">
+            <h1>QR File Encoder</h1>
+            <span class="sub">Compress &amp; transmit any file as animated QR codes — offline</span>
+        </div>
+        <span class="badge">v1.2.0 · zstd</span>
+    </header>
     <div class="container">
         <div class="panel control-panel">
             <div class="control-group">
@@ -3395,15 +3297,15 @@ AD0AAAA8AAAAPAAAAD0AAAA8AAAAPAAAADwAAAA8AEGA0QALHT0AAAA9AAAAPAAAADwAAAAAAAAAPAAA
                 <button id="generateAndStartBtn" class="action-button" disabled>Generate & Start Display</button>
                 <div style="display: flex; gap: 10px; margin-top: 5px;">
                     <button id="generateBtn" disabled>Generate QR Codes</button>
-                    <button id="stopBtn" disabled style="flex: 1; background: #dc2626;">Stop</button>
+                    <button id="stopBtn" class="btn-danger" disabled style="flex: 1;">Stop</button>
                 </div>
                 <div style="display: flex; gap: 10px; margin-top: 5px;">
-                    <button id="fullscreenBtn" disabled style="flex: 1; background: #4b5563;">Start Fullscreen Display</button>
-                    <button id="previewBtn" disabled style="flex: 1; background: #6b7280;">Preview Fullscreen</button>
+                    <button id="fullscreenBtn" class="btn-neutral" disabled style="flex: 1;">Start Fullscreen Display</button>
+                    <button id="previewBtn" class="btn-neutral" disabled style="flex: 1;">Preview Fullscreen</button>
                 </div>
                 <div style="display: flex; gap: 10px; margin-top: 5px;">
-                    <button id="generateIntegrityBtn" disabled style="flex: 1; background: #059669;">Generate Integrity Report</button>
-                    <button id="downloadReportBtn" disabled style="flex: 1; background: #0891b2;">Download Report</button>
+                    <button id="generateIntegrityBtn" class="btn-success" disabled style="flex: 1;">Generate Integrity Report</button>
+                    <button id="downloadReportBtn" class="btn-info" disabled style="flex: 1;">Download Report</button>
                 </div>
                 
                 <!-- QR Generation Progress -->
@@ -3470,7 +3372,7 @@ AD0AAAA8AAAAPAAAAD0AAAA8AAAAPAAAADwAAAA8AEGA0QALHT0AAAA9AAAAPAAAADwAAAAAAAAAPAAA
             <img id="fullscreenQR" class="fullscreen-qr" src="" alt="QR Code">
             <div id="fsCountdownDisplay" class="countdown-display"></div>
             <!-- Start button in center of screen -->
-            <button id="fullscreenStartBtn" style="position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); padding: 20px 40px; font-size: 28px; background: #16a34a; color: white; border: none; border-radius: 16px; cursor: pointer; z-index: 1001; display: none; box-shadow: 0 8px 32px rgba(0,0,0,0.5);">
+            <button id="fullscreenStartBtn" style="position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); padding: 20px 40px; font-size: 28px; background: #4f9d69; color: white; border: none; border-radius: 16px; cursor: pointer; z-index: 1001; display: none; box-shadow: 0 8px 32px rgba(0,0,0,0.5);">
                 ▶️ START QR SEQUENCE
             </button>
         </div>
