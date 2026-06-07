@@ -37,6 +37,9 @@ h1{font-size:25px;font-weight:650;letter-spacing:-.015em}
 .card h2{font-size:17px;font-weight:620;margin-bottom:6px}
 .card p{font-size:13.5px;color:var(--ink-soft)}
 .card .go{margin-top:14px;font-weight:600;font-size:13.5px;color:var(--accent);display:flex;align-items:center;gap:6px}
+.card h2 .rec{font-family:var(--mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--accent);background:var(--accent-tint);border:1px solid var(--line);padding:2px 7px;border-radius:var(--radius-pill);vertical-align:middle;margin-left:6px}
+.note{font-size:13.5px;color:var(--ink-soft);margin:0 0 14px;max-width:68ch}
+.note b{color:var(--ink);font-weight:600}
 .section-title{font-size:12px;font-weight:650;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-mute);margin:34px 0 12px}
 .variants{display:flex;gap:10px;flex-wrap:wrap}
 .chip{display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-pill);padding:8px 14px;text-decoration:none;color:var(--ink-soft);font-size:13.5px;font-weight:500;box-shadow:var(--shadow-sm);transition:background .15s,border-color .15s}
@@ -74,17 +77,17 @@ footer a:hover{color:var(--accent)}
     </a>
     <a class="card" href="vdf-qr-decoder.html">
       <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M3 12h18"/></svg></div>
-      <h2>Decoder</h2>
-      <p>Scan with a camera or load a screen recording; the file is rebuilt and verified.</p>
+      <h2>Decoder <span class="rec">Recommended · Chrome</span></h2>
+      <p>Scan with a camera or load a screen recording; the file is rebuilt and verified. Best results in <b>Chrome / Chromium</b> (or Edge).</p>
       <span class="go">Open decoder →</span>
     </a>
   </div>
 
-  <div class="section-title">Browser-specific decoders</div>
+  <div class="section-title">Other browsers (experimental)</div>
+  <p class="note">We recommend <b>Chrome / Chromium</b> for both pages — its camera and video-frame handling are the most reliable. The variants below are provided for convenience but were <b>not perfect</b> in testing; prefer Chrome when you can.</p>
   <div class="variants">
-    <a class="chip" href="vdf-qr-decoder.html">● Chromium / Edge</a>
-    <a class="chip" href="vdf-qr-decoder-firefox.html">● Firefox</a>
-    <a class="chip" href="vdf-qr-decoder-safari.html">● Safari</a>
+    <a class="chip" href="vdf-qr-decoder-firefox.html">● Firefox decoder</a>
+    <a class="chip" href="vdf-qr-decoder-safari.html">● Safari decoder</a>
   </div>
 
   <div class="section-title">Why it works offline</div>

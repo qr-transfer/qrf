@@ -153,9 +153,11 @@ QRCoder uses Luby Transform (LT) coding with Robust Soliton Distribution:
 6. The file is decompressed and its **original checksum verified** before the
    automatic download (console shows `✅ Original file integrity verified`)
 
-> **Browser variants:** use `vdf-qr-decoder-firefox.html` on Firefox and
-> `vdf-qr-decoder-safari.html` on Safari — they carry browser-specific
-> frame-callback and sizing tweaks. `vdf-qr-decoder.html` targets Chromium.
+> **Browser support:** **Chrome / Chromium (or Edge) is recommended** for both
+> the encoder and decoder — its camera and video-frame handling are the most
+> reliable, and `vdf-qr-decoder.html` targets it. The `vdf-qr-decoder-firefox.html`
+> and `vdf-qr-decoder-safari.html` variants carry browser-specific tweaks but were
+> **not perfect** in testing; prefer Chrome/Chromium when you can.
 
 ### Other useful tools in this repo
 
