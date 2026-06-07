@@ -197,4 +197,5 @@ For more detailed information about each component:
 
 - [Encoder Documentation](encoder.md): Comprehensive guide to the QR code encoder including encoding strategies and configuration options
 - [Decoder Documentation](decoder.md): Comprehensive guide to the QR code decoder including processing pipeline and recovery mechanisms
+- [Browser & Format Compatibility](COMPATIBILITY.md): Per-browser frame-capture strategy (Chrome rVFC vs Firefox/Safari rAF) and why **mp4** is the recommended input format
 - API Reference (Coming Soon): Detailed API documentation for developers

@@ -36,15 +36,18 @@
         .control-group{display:flex;flex-direction:column;gap:8px}
         .control-label{font-weight:600;font-size:14px;color:var(--ink-soft);display:flex;align-items:center}
 
-        /* Buttons */
-        button{font-family:var(--sans);padding:11px 16px;background:var(--btn);color:#fff;border:none;border-radius:var(--radius-sm);cursor:pointer;font-weight:600;font-size:14px;margin-top:8px;transition:background .15s,transform .05s,box-shadow .15s;box-shadow:var(--shadow-sm)}
-        button:hover{background:var(--btn-hover)}
+        /* Buttons — outline/ghost by default, one solid primary (Linear/Vercel style) */
+        button{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:var(--sans);padding:9px 14px;background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);border-radius:var(--radius-sm);cursor:pointer;font-weight:500;font-size:14px;margin-top:8px;line-height:1;transition:background .12s,border-color .12s,color .12s,transform .05s;box-shadow:var(--shadow-sm)}
+        button:hover{background:var(--surface-2);border-color:var(--ink-mute)}
         button:active{transform:translateY(1px)}
-        button:disabled{background:var(--surface-3);color:var(--ink-mute);cursor:not-allowed;box-shadow:none}
-        .btn-danger{background:var(--danger)} .btn-danger:hover{background:var(--danger-hover)}
-        .btn-success{background:var(--success)} .btn-success:hover{background:var(--success-hover)}
-        .btn-info{background:var(--info)} .btn-info:hover{background:var(--info-hover)}
-        .btn-neutral{background:var(--neutral)} .btn-neutral:hover{background:var(--neutral-hover)}
+        button:disabled{background:var(--surface-2);color:var(--ink-mute);border-color:var(--line);cursor:not-allowed;box-shadow:none}
+        button .cico{width:16px;height:16px;flex:0 0 auto;opacity:.8}
+        /* primary / hero action */
+        .action-button,.btn-primary{background:var(--btn);color:#fff;border-color:var(--btn)}
+        .action-button:hover,.btn-primary:hover{background:var(--btn-hover);border-color:var(--btn-hover)}
+        .action-button .cico,.btn-primary .cico{opacity:1}
+        /* destructive (subtle) */
+        .btn-danger:hover{background:var(--danger-tint);color:var(--danger);border-color:var(--danger)}
 
         .display-container{display:flex;flex-direction:column;align-items:center;justify-content:center}
         #qrDisplay{position:relative;margin:0 auto 20px;border:1px solid var(--line);padding:20px;border-radius:var(--radius);background:var(--surface);max-width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:var(--shadow-sm)}
