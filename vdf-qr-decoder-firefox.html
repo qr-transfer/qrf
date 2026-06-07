@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code File Decoder v2.1.2-Firefox (Browser Optimized)</title>
+  <title>QR Code File Decoder v2.2.0-Firefox (embedded zstd/gzip decompression)</title>
   <style>
     /* Base styles */
     :root {
@@ -622,12 +622,113 @@
 </head>
 
 <body>
+<!-- ===== Embedded zstd decompressor (airgap-safe, no network needed) =====
+     fzstd v0.1.1 (MIT, github.com/101arrowz/fzstd), decoded at runtime from
+     base64 -> ES module via blob URL. gzip uses native DecompressionStream. -->
+<script type="application/octet-stream" id="fzstd-b64">
+LyoqCiAqIEJ1bmRsZWQgYnkganNEZWxpdnIgdXNpbmcgUm9sbHVwIHYyLjc5LjIgYW5kIFRlcnNlciB2NS4zOS4wLgogKiBPcmlnaW5hbCBmaWxlOiAvbnBt
+L2Z6c3RkQDAuMS4xL2VzbS9pbmRleC5tanMKICoKICogRG8gTk9UIHVzZSBTUkkgd2l0aCBkeW5hbWljYWxseSBnZW5lcmF0ZWQgZmlsZXMhIE1vcmUgaW5m
+b3JtYXRpb246IGh0dHBzOi8vd3d3LmpzZGVsaXZyLmNvbS91c2luZy1zcmktd2l0aC1keW5hbWljLWZpbGVzCiAqLwp2YXIgcj1BcnJheUJ1ZmZlcix0PVVp
+bnQ4QXJyYXksZT1VaW50MTZBcnJheSxuPUludDE2QXJyYXksYT1JbnQzMkFycmF5LGk9ZnVuY3Rpb24ocixlLG4pe2lmKHQucHJvdG90eXBlLnNsaWNlKXJl
+dHVybiB0LnByb3RvdHlwZS5zbGljZS5jYWxsKHIsZSxuKTsobnVsbD09ZXx8ZTwwKSYmKGU9MCksKG51bGw9PW58fG4+ci5sZW5ndGgpJiYobj1yLmxlbmd0
+aCk7dmFyIGE9bmV3IHQobi1lKTtyZXR1cm4gYS5zZXQoci5zdWJhcnJheShlLG4pKSxhfSxzPWZ1bmN0aW9uKHIsZSxuLGEpe2lmKHQucHJvdG90eXBlLmZp
+bGwpcmV0dXJuIHQucHJvdG90eXBlLmZpbGwuY2FsbChyLGUsbixhKTtmb3IoKG51bGw9PW58fG48MCkmJihuPTApLChudWxsPT1hfHxhPnIubGVuZ3RoKSYm
+KGE9ci5sZW5ndGgpO248YTsrK24pcltuXT1lO3JldHVybiByfSxvPWZ1bmN0aW9uKHIsZSxuLGEpe2lmKHQucHJvdG90eXBlLmNvcHlXaXRoaW4pcmV0dXJu
+IHQucHJvdG90eXBlLmNvcHlXaXRoaW4uY2FsbChyLGUsbixhKTtmb3IoKG51bGw9PW58fG48MCkmJihuPTApLChudWxsPT1hfHxhPnIubGVuZ3RoKSYmKGE9
+ci5sZW5ndGgpO248YTspcltlKytdPXJbbisrXX0sdT17SW52YWxpZERhdGE6MCxXaW5kb3dTaXplVG9vTGFyZ2U6MSxJbnZhbGlkQmxvY2tUeXBlOjIsRlNF
+QWNjdXJhY3lUb29IaWdoOjMsRGlzdGFuY2VUb29GYXJCYWNrOjQsVW5leHBlY3RlZEVPRjo1fSxoPVsiaW52YWxpZCB6c3RkIGRhdGEiLCJ3aW5kb3cgc2l6
+ZSB0b28gbGFyZ2UgKD4yMDQ2TUIpIiwiaW52YWxpZCBibG9jayB0eXBlIiwiRlNFIGFjY3VyYWN5IHRvbyBoaWdoIiwibWF0Y2ggZGlzdGFuY2UgdG9vIGZh
+ciBiYWNrIiwidW5leHBlY3RlZCBFT0YiXSxmPWZ1bmN0aW9uKHIsdCxlKXt2YXIgbj1uZXcgRXJyb3IodHx8aFtyXSk7aWYobi5jb2RlPXIsRXJyb3IuY2Fw
+dHVyZVN0YWNrVHJhY2UmJkVycm9yLmNhcHR1cmVTdGFja1RyYWNlKG4sZiksIWUpdGhyb3cgbjtyZXR1cm4gbn0sbD1mdW5jdGlvbihyLHQsZSl7Zm9yKHZh
+ciBuPTAsYT0wO248ZTsrK24pYXw9clt0KytdPDwobjw8Myk7cmV0dXJuIGF9LHY9ZnVuY3Rpb24ocixlKXt2YXIgbixpLHM9clswXXxyWzFdPDw4fHJbMl08
+PDE2O2lmKDMxMjY1Njg9PXMmJjI1Mz09clszXSl7dmFyIG89cls0XSx1PW8+PjUmMSxoPW8+PjImMSx2PTMmbyxiPW8+PjY7OCZvJiZmKDApO3ZhciBjPTYt
+dSx5PTM9PXY/NDp2LHc9bChyLGMseSkscD1iPzE8PGI6dSxnPWwocixjKz15LHApKygxPT1iJiYyNTYpLGQ9ZztpZighdSl7dmFyIG09MTw8MTArKHJbNV0+
+PjMpO2Q9bSsobT4+MykqKDcmcls1XSl9ZD4yMTQ1Mzg2NDk2JiZmKDEpO3ZhciB6PW5ldyB0KCgxPT1lP2d8fGQ6ZT8wOmQpKzEyKTtyZXR1cm4gelswXT0x
+LHpbNF09NCx6WzhdPTgse2I6YytwLHk6MCxsOjAsZDp3LHc6ZSYmMSE9ZT9lOnouc3ViYXJyYXkoMTIpLGU6ZCxvOm5ldyBhKHouYnVmZmVyLDAsMyksdTpn
+LGM6aCxtOk1hdGgubWluKDEzMTA3MixkKX19aWYoMjU0ODE4OTM9PShzPj40fHJbM108PDIwKSlyZXR1cm4gOCsoKChuPXIpW2k9NF18bltpKzFdPDw4fG5b
+aSsyXTw8MTZ8bltpKzNdPDwyNCk+Pj4wKTtmKDApfSxiPWZ1bmN0aW9uKHIpe2Zvcih2YXIgdD0wOzE8PHQ8PXI7Kyt0KTtyZXR1cm4gdC0xfSxjPWZ1bmN0
+aW9uKGEsaSxzKXt2YXIgbz00KyhpPDwzKSx1PTUrKDE1JmFbaV0pO3U+cyYmZigzKTtmb3IodmFyIGg9MTw8dSxsPWgsdj0tMSxjPS0xLHk9LTEsdz1oLHA9
+bmV3IHIoNTEyKyhoPDwyKSksZz1uZXcgbihwLDAsMjU2KSxkPW5ldyBlKHAsMCwyNTYpLG09bmV3IGUocCw1MTIsaCksej01MTIrKGg8PDEpLGs9bmV3IHQo
+cCx6LGgpLEU9bmV3IHQocCx6K2gpO3Y8MjU1JiZsPjA7KXt2YXIgQT1iKGwrMSksVD1vPj4zLEY9KDE8PEErMSktMSxTPShhW1RdfGFbVCsxXTw8OHxhW1Qr
+Ml08PDE2KT4+KDcmbykmRix4PSgxPDxBKS0xLEI9Ri1sLTEsST1TJng7aWYoSTxCPyhvKz1BLFM9SSk6KG8rPUErMSxTPngmJihTLT1CKSksZ1srK3ZdPS0t
+UywtMT09Uz8obCs9UyxrWy0td109dik6bC09UywhUylkb3t2YXIgTT1vPj4zO2M9KGFbTV18YVtNKzFdPDw4KT4+KDcmbykmMyxvKz0yLHYrPWN9d2hpbGUo
+Mz09Yyl9KHY+MjU1fHxsKSYmZigwKTtmb3IodmFyIFU9MCxXPShoPj4xKSsoaD4+MykrMyxEPWgtMSxPPTA7Tzw9djsrK08pe3ZhciBqPWdbT107aWYoajwx
+KWRbT109LWo7ZWxzZSBmb3IoeT0wO3k8ajsrK3kpe2tbVV09Tztkb3tVPVUrVyZEfXdoaWxlKFU+PXcpfX1mb3IoVSYmZigwKSx5PTA7eTxoOysreSl7dmFy
+IEg9ZFtrW3ldXSsrLEw9RVt5XT11LWIoSCk7bVt5XT0oSDw8TCktaH1yZXR1cm5bbys3Pj4zLHtiOnUsczprLG46RSx0Om19XX0seT1jKG5ldyB0KFs4MSwx
+Niw5OSwxNDAsNDksMTk4LDI0LDk5LDEyLDMzLDE5NiwyNCw5OSwxMDIsMTAyLDEzNCw3MCwxNDYsNF0pLDAsNilbMV0sdz1jKG5ldyB0KFszMywyMCwxOTYs
+MjQsOTksMTQwLDMzLDEzMiwxNiw2Niw4LDMzLDEzMiwxNiw2Niw4LDMzLDY4LDY4LDY4LDY4LDY4LDY4LDY4LDY4LDM2LDldKSwwLDYpWzFdLHA9YyhuZXcg
+dChbMzIsMTMyLDE2LDY2LDEwMiw3MCw2OCw2OCw2OCw2OCwzNiw3MywyXSksMCw1KVsxXSxnPWZ1bmN0aW9uKHIsdCl7Zm9yKHZhciBlPXIubGVuZ3RoLG49
+bmV3IGEoZSksaT0wO2k8ZTsrK2kpbltpXT10LHQrPTE8PHJbaV07cmV0dXJuIG59LGQ9bmV3IHQobmV3IGEoWzAsMCwwLDAsMTY4NDMwMDksNTA1Mjg3NzAs
+MTM0Njc4MDIwLDIwMjA1MDA1NywyNjk0MjIwOTNdKS5idWZmZXIsMCwzNiksbT1nKGQsMCksej1uZXcgdChuZXcgYShbMCwwLDAsMCwwLDAsMCwwLDE2ODQz
+MDA5LDUwNTI4NzcwLDExNzc2OTIyMCwxODUyMDcwNDgsMjUyNTc5MDg0LDE2XSkuYnVmZmVyLDAsNTMpLGs9Zyh6LDMpLEU9ZnVuY3Rpb24ocix0LGUpe3Zh
+ciBuPXIubGVuZ3RoLGE9dC5sZW5ndGgsaT1yW24tMV0scz0oMTw8ZS5iKS0xLG89LWUuYjtpfHxmKDApO2Zvcih2YXIgdT0wLGg9ZS5iLGw9KG48PDMpLTgr
+YihpKS1oLHY9LTE7bD5vJiZ2PGE7KXt2YXIgYz1sPj4zO3U9KHU8PGh8KHJbY118cltjKzFdPDw4fHJbYysyXTw8MTYpPj4oNyZsKSkmcyx0Wysrdl09ZS5z
+W3VdLGwtPWg9ZS5uW3VdfWw9PW8mJnYrMT09YXx8ZigwKX0sQT1mdW5jdGlvbihyLHQsZSl7dmFyIG49NixhPXQubGVuZ3RoKzM+PjIsaT1hPDwxLHM9YStp
+O0Uoci5zdWJhcnJheShuLG4rPXJbMF18clsxXTw8OCksdC5zdWJhcnJheSgwLGEpLGUpLEUoci5zdWJhcnJheShuLG4rPXJbMl18clszXTw8OCksdC5zdWJh
+cnJheShhLGkpLGUpLEUoci5zdWJhcnJheShuLG4rPXJbNF18cls1XTw8OCksdC5zdWJhcnJheShpLHMpLGUpLEUoci5zdWJhcnJheShuKSx0LnN1YmFycmF5
+KHMpLGUpfSxUPWZ1bmN0aW9uKHIsbixhKXt2YXIgbyx1PW4uYixoPXJbdV0sbD1oPj4xJjM7bi5sPTEmaDt2YXIgdj1oPj4zfHJbdSsxXTw8NXxyW3UrMl08
+PDEzLGc9KHUrPTMpK3Y7aWYoMT09bCl7aWYodT49ci5sZW5ndGgpcmV0dXJuO3JldHVybiBuLmI9dSsxLGE/KHMoYSxyW3VdLG4ueSxuLnkrPXYpLGEpOnMo
+bmV3IHQodiksclt1XSl9aWYoIShnPnIubGVuZ3RoKSl7aWYoMD09bClyZXR1cm4gbi5iPWcsYT8oYS5zZXQoci5zdWJhcnJheSh1LGcpLG4ueSksbi55Kz12
+LGEpOmkocix1LGcpO2lmKDI9PWwpe3ZhciBUPXJbdV0sRj0zJlQsUz1UPj4yJjMseD1UPj40LEI9MCxJPTA7RjwyPzEmUz94fD1yWysrdV08PDR8KDImUyYm
+clsrK3VdPDwxMik6eD1UPj4zOihJPVMsUzwyPyh4fD0oNjMmclsrK3VdKTw8NCxCPXJbdV0+PjZ8clsrK3VdPDwyKToyPT1TPyh4fD1yWysrdV08PDR8KDMm
+clsrK3VdKTw8MTIsQj1yW3VdPj4yfHJbKyt1XTw8Nik6KHh8PXJbKyt1XTw8NHwoNjMmclsrK3VdKTw8MTIsQj1yW3VdPj42fHJbKyt1XTw8MnxyWysrdV08
+PDEwKSksKyt1O3ZhciBNPWE/YS5zdWJhcnJheShuLnksbi55K24ubSk6bmV3IHQobi5tKSxVPU0ubGVuZ3RoLXg7aWYoMD09RilNLnNldChyLnN1YmFycmF5
+KHUsdSs9eCksVSk7ZWxzZSBpZigxPT1GKXMoTSxyW3UrK10sVSk7ZWxzZXt2YXIgVz1uLmg7aWYoMj09Ril7dmFyIEQ9ZnVuY3Rpb24ocixuKXt2YXIgYT0w
+LGk9LTEsbz1uZXcgdCgyOTIpLHU9cltuXSxoPW8uc3ViYXJyYXkoMCwyNTYpLGw9by5zdWJhcnJheSgyNTYsMjY4KSx2PW5ldyBlKG8uYnVmZmVyLDI2OCk7
+aWYodTwxMjgpe3ZhciB5PWMocixuKzEsNiksdz15WzBdLHA9eVsxXSxnPXc8PDMsZD1yW24rPXVdO2R8fGYoMCk7Zm9yKHZhciBtPTAsej0wLGs9cC5iLEU9
+ayxBPSgrK248PDMpLTgrYihkKTshKChBLT1rKTxnKTspe3ZhciBUPUE+PjM7aWYobSs9KHJbVF18cltUKzFdPDw4KT4+KDcmQSkmKDE8PGspLTEsaFsrK2ld
+PXAuc1ttXSwoQS09RSk8ZylicmVhazt6Kz0ocltUPUE+PjNdfHJbVCsxXTw8OCk+Pig3JkEpJigxPDxFKS0xLGhbKytpXT1wLnNbel0saz1wLm5bbV0sbT1w
+LnRbbV0sRT1wLm5bel0sej1wLnRbel19KytpPjI1NSYmZigwKX1lbHNle2ZvcihpPXUtMTI3O2E8aTthKz0yKXt2YXIgRj1yWysrbl07aFthXT1GPj40LGhb
+YSsxXT0xNSZGfSsrbn12YXIgUz0wO2ZvcihhPTA7YTxpOysrYSkoTT1oW2FdKT4xMSYmZigwKSxTKz1NJiYxPDxNLTE7dmFyIHg9YihTKSsxLEI9MTw8eCxJ
+PUItUztmb3IoSSZJLTEmJmYoMCksaFtpKytdPWIoSSkrMSxhPTA7YTxpOysrYSl7dmFyIE09aFthXTsrK2xbaFthXT1NJiZ4KzEtTV19dmFyIFU9bmV3IHQo
+Qjw8MSksVz1VLnN1YmFycmF5KDAsQiksRD1VLnN1YmFycmF5KEIpO2Zvcih2W3hdPTAsYT14O2E+MDstLWEpe3ZhciBPPXZbYV07cyhELGEsTyx2W2EtMV09
+TytsW2FdKigxPDx4LWEpKX1mb3IodlswXSE9QiYmZigwKSxhPTA7YTxpOysrYSl7dmFyIGo9aFthXTtpZihqKXt2YXIgSD12W2pdO3MoVyxhLEgsdltqXT1I
+KygxPDx4LWopKX19cmV0dXJuW24se246RCxiOngsczpXfV19KHIsdSk7Qis9dS0odT1EWzBdKSxuLmg9Vz1EWzFdfWVsc2UgV3x8ZigwKTsoST9BOkUpKHIu
+c3ViYXJyYXkodSx1Kz1CKSxNLnN1YmFycmF5KFUpLFcpfXZhciBPPXJbdSsrXTtpZihPKXsyNTU9PU8/Tz0zMjUxMisoclt1KytdfHJbdSsrXTw8OCk6Tz4x
+MjcmJihPPU8tMTI4PDw4fHJbdSsrXSk7dmFyIGo9clt1KytdOzMmaiYmZigwKTtmb3IodmFyIEg9W3cscCx5XSxMPTI7TD4tMTstLUwpe3ZhciBxPWo+PjIr
+KEw8PDEpJjM7aWYoMT09cSl7dmFyIEM9bmV3IHQoWzAsMCxyW3UrK11dKTtIW0xdPXtzOkMuc3ViYXJyYXkoMiwzKSxuOkMuc3ViYXJyYXkoMCwxKSx0Om5l
+dyBlKEMuYnVmZmVyLDAsMSksYjowfX1lbHNlIDI9PXE/KHU9KG89YyhyLHUsOS0oMSZMKSkpWzBdLEhbTF09b1sxXSk6Mz09cSYmKG4udHx8ZigwKSxIW0xd
+PW4udFtMXSl9dmFyIEc9bi50PUgsSj1HWzBdLEs9R1sxXSxOPUdbMl0sUD1yW2ctMV07UHx8ZigwKTt2YXIgUT0oZzw8MyktOCtiKFApLU4uYixSPVE+PjMs
+Vj0wLFg9KHJbUl18cltSKzFdPDw4KT4+KDcmUSkmKDE8PE4uYiktMSxZPShyW1I9KFEtPUsuYik+PjNdfHJbUisxXTw8OCk+Pig3JlEpJigxPDxLLmIpLTEs
+Wj0ocltSPShRLT1KLmIpPj4zXXxyW1IrMV08PDgpPj4oNyZRKSYoMTw8Si5iKS0xO2ZvcigrK087LS1POyl7dmFyICQ9Ti5zW1hdLF89Ti5uW1hdLHJyPUou
+c1taXSx0cj1KLm5bWl0sZXI9Sy5zW1ldLG5yPUsubltZXSxhcj0xPDxlcixpcj1hcisoKHJbUj0oUS09ZXIpPj4zXXxyW1IrMV08PDh8cltSKzJdPDwxNnxy
+W1IrM108PDI0KT4+Pig3JlEpJmFyLTEpO1I9KFEtPXpbcnJdKT4+Mzt2YXIgc3I9a1tycl0rKChyW1JdfHJbUisxXTw8OHxyW1IrMl08PDE2KT4+KDcmUSkm
+KDE8PHpbcnJdKS0xKTtSPShRLT1kWyRdKT4+Mzt2YXIgb3I9bVskXSsoKHJbUl18cltSKzFdPDw4fHJbUisyXTw8MTYpPj4oNyZRKSYoMTw8ZFskXSktMSk7
+aWYoUj0oUS09Xyk+PjMsWD1OLnRbWF0rKChyW1JdfHJbUisxXTw8OCk+Pig3JlEpJigxPDxfKS0xKSxSPShRLT10cik+PjMsWj1KLnRbWl0rKChyW1JdfHJb
+UisxXTw8OCk+Pig3JlEpJigxPDx0ciktMSksUj0oUS09bnIpPj4zLFk9Sy50W1ldKygocltSXXxyW1IrMV08PDgpPj4oNyZRKSYoMTw8bnIpLTEpLGlyPjMp
+bi5vWzJdPW4ub1sxXSxuLm9bMV09bi5vWzBdLG4ub1swXT1pci09MztlbHNle3ZhciB1cj1pci0oMCE9b3IpO3VyPyhpcj0zPT11cj9uLm9bMF0tMTpuLm9b
+dXJdLHVyPjEmJihuLm9bMl09bi5vWzFdKSxuLm9bMV09bi5vWzBdLG4ub1swXT1pcik6aXI9bi5vWzBdfWZvcihMPTA7TDxvcjsrK0wpTVtWK0xdPU1bVStM
+XTtVKz1vcjt2YXIgaHI9KFYrPW9yKS1pcjtpZihocjwwKXt2YXIgZnI9LWhyLGxyPW4uZStocjtmcj5zciYmKGZyPXNyKTtmb3IoTD0wO0w8ZnI7KytMKU1b
+VitMXT1uLndbbHIrTF07Vis9ZnIsc3ItPWZyLGhyPTB9Zm9yKEw9MDtMPHNyOysrTClNW1YrTF09TVtocitMXTtWKz1zcn1pZihWIT1VKWZvcig7VTxNLmxl
+bmd0aDspTVtWKytdPU1bVSsrXTtlbHNlIFY9TS5sZW5ndGg7YT9uLnkrPVY6TT1pKE0sMCxWKX1lbHNlIGlmKGEpe2lmKG4ueSs9eCxVKWZvcihMPTA7TDx4
+OysrTClNW0xdPU1bVStMXX1lbHNlIFUmJihNPWkoTSxVKSk7cmV0dXJuIG4uYj1nLE19ZigyKX19LEY9ZnVuY3Rpb24ocixlKXtpZigxPT1yLmxlbmd0aCly
+ZXR1cm4gclswXTtmb3IodmFyIG49bmV3IHQoZSksYT0wLGk9MDthPHIubGVuZ3RoOysrYSl7dmFyIHM9clthXTtuLnNldChzLGkpLGkrPXMubGVuZ3RofXJl
+dHVybiBufTtmdW5jdGlvbiBTKHIsdCl7Zm9yKHZhciBlPVtdLG49KyF0LGE9MCxpPTA7ci5sZW5ndGg7KXt2YXIgcz12KHIsbnx8dCk7aWYoIm9iamVjdCI9
+PXR5cGVvZiBzKXtmb3Iobj8odD1udWxsLHMudy5sZW5ndGg9PXMudSYmKGUucHVzaCh0PXMudyksaSs9cy51KSk6KGUucHVzaCh0KSxzLmU9MCk7IXMubDsp
+e3ZhciB1PVQocixzLHQpO3V8fGYoNSksdD9zLmU9cy55OihlLnB1c2godSksaSs9dS5sZW5ndGgsbyhzLncsMCx1Lmxlbmd0aCkscy53LnNldCh1LHMudy5s
+ZW5ndGgtdS5sZW5ndGgpKX1hPXMuYis0KnMuY31lbHNlIGE9cztyPXIuc3ViYXJyYXkoYSl9cmV0dXJuIEYoZSxpKX12YXIgeD1mdW5jdGlvbigpe2Z1bmN0
+aW9uIHIocil7dGhpcy5vbmRhdGE9cix0aGlzLmM9W10sdGhpcy5sPTAsdGhpcy56PTB9cmV0dXJuIHIucHJvdG90eXBlLnB1c2g9ZnVuY3Rpb24ocixlKXtp
+ZigibnVtYmVyIj09dHlwZW9mIHRoaXMucyl7dmFyIG49TWF0aC5taW4oci5sZW5ndGgsdGhpcy5zKTtyPXIuc3ViYXJyYXkobiksdGhpcy5zLT1ufXZhciBh
+PXIubGVuZ3RoK3RoaXMubDtpZighdGhpcy5zKXtpZihlKXtpZighYSlyZXR1cm4gdm9pZCB0aGlzLm9uZGF0YShuZXcgdCgwKSwhMCk7YTw1JiZmKDUpfWVs
+c2UgaWYoYTwxOClyZXR1cm4gdGhpcy5jLnB1c2gociksdm9pZCh0aGlzLmw9YSk7aWYodGhpcy5sJiYodGhpcy5jLnB1c2gocikscj1GKHRoaXMuYyxhKSx0
+aGlzLmM9W10sdGhpcy5sPTApLCJudW1iZXIiPT10eXBlb2YodGhpcy5zPXYocikpKXJldHVybiB0aGlzLnB1c2gocixlKX1pZigibnVtYmVyIiE9dHlwZW9m
+IHRoaXMucyl7aWYoYTwodGhpcy56fHwzKSlyZXR1cm4gZSYmZig1KSx0aGlzLmMucHVzaChyKSx2b2lkKHRoaXMubD1hKTtpZih0aGlzLmwmJih0aGlzLmMu
+cHVzaChyKSxyPUYodGhpcy5jLGEpLHRoaXMuYz1bXSx0aGlzLmw9MCksIXRoaXMueiYmYTwodGhpcy56PTImclt0aGlzLnMuYl0/NDozKyhyW3RoaXMucy5i
+XT4+M3xyW3RoaXMucy5iKzFdPDw1fHJbdGhpcy5zLmIrMl08PDEzKSkpcmV0dXJuIGUmJmYoNSksdGhpcy5jLnB1c2gociksdm9pZCh0aGlzLmw9YSk7Zm9y
+KHRoaXMuej0wOzspe3ZhciBpPVQocix0aGlzLnMpO2lmKCFpKXtlJiZmKDUpO3ZhciBzPXIuc3ViYXJyYXkodGhpcy5zLmIpO3JldHVybiB0aGlzLnMuYj0w
+LHRoaXMuYy5wdXNoKHMpLHZvaWQodGhpcy5sKz1zLmxlbmd0aCl9aWYodGhpcy5vbmRhdGEoaSwhMSksbyh0aGlzLnMudywwLGkubGVuZ3RoKSx0aGlzLnMu
+dy5zZXQoaSx0aGlzLnMudy5sZW5ndGgtaS5sZW5ndGgpLHRoaXMucy5sKXt2YXIgdT1yLnN1YmFycmF5KHRoaXMucy5iKTtyZXR1cm4gdGhpcy5zPTQqdGhp
+cy5zLmMsdm9pZCB0aGlzLnB1c2godSxlKX19fWVsc2UgZSYmZig1KX0scn0oKTtleHBvcnR7eCBhcyBEZWNvbXByZXNzLHUgYXMgWnN0ZEVycm9yQ29kZSxT
+IGFzIGRlY29tcHJlc3N9O2V4cG9ydCBkZWZhdWx0IG51bGw7Ci8vIyBzb3VyY2VNYXBwaW5nVVJMPS9zbS8xODYxM2MxZDYzZDExNTUyYmNhMWIzOTVmOWI5
+YmQ2NmZjNWZhYTU3ZWFhYmE5ZWQ5ZTBlNjMzNzlkZDk2MWY1Lm1hcA==
+</script>
+
   <!-- Error message container -->
   <div id="errorMessage" class="error-message"></div>
 
   <!-- 1. Header with controls -->
   <header class="control-panel">
-    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v2.1.2-Firefox</span></h1>
+    <h1 style="font-size: 1.5em; margin: 0;">QR File Decoder <span style="font-size: 0.6em; color: #666;">v2.2.0-Firefox</span></h1>
     <div class="controls">
       <input type="file" id="videoInput" accept="video/*">
       <button id="startScanBtn" disabled style="padding: 8px 12px; font-size: 0.9em;">Start Scan</button>
@@ -1540,7 +1641,13 @@
           metaChecksum: parts[13] || '',
           fileChecksum: parts[14] || '',
           encoderVersion: parts[15] || '3.0', // Default to 3.0 for legacy files
-          ltParams: parts.slice(16).join(':')
+          ltParams: parts.slice(16, 19).join(':'),
+          // v5 compression negotiation fields (encoder announces the algorithm
+          // applied to the transmitted payload; fileSize/fileChecksum above
+          // describe the transmitted payload, original* the original file)
+          compression: parts[19] || 'none',
+          originalSize: parseInt(parts[20] || '0', 10) || 0,
+          originalChecksum: parts[21] || ''
         };
 
         // Validate metadata
@@ -1812,6 +1919,67 @@
     // =============================================
     // Enhanced Fountain Decoder Implementation
     // =============================================
+    // ===== Decompression layer (decoder protocol v5) =====
+    // The encoder announces the compression algorithm used on the transmitted
+    // payload via the M: metadata packet (compression/originalSize/originalChecksum
+    // fields). After fountain reconstruction + payload checksum verification we
+    // decompress here and verify the ORIGINAL file checksum before delivery.
+    //
+    // AIRGAP-SAFE: the zstd decompressor (fzstd, pure JS) is EMBEDDED in this HTML
+    // as base64 (the <script type="application/octet-stream"> block), so no
+    // network access is ever required. gzip uses the browser-native
+    // DecompressionStream API.
+    //   zstd                          -> fzstd (pure-JS decompressor, embedded)
+    //   gzip / deflate / deflate-raw  -> native DecompressionStream API
+    //   none                          -> passthrough (legacy v3/v4 encoders)
+    function decodeEmbeddedBase64(elementId) {
+      const el = document.getElementById(elementId);
+      if (!el) throw new Error(`Embedded asset '${elementId}' not found`);
+      const b64 = el.textContent.replace(/\s+/g, '');
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes;
+    }
+
+    let _fzstdModulePromise = null;
+    function loadFzstd() {
+      if (!_fzstdModulePromise) {
+        // fzstd is embedded as base64 — decode the glue and import it via a
+        // blob URL (no network access required).
+        _fzstdModulePromise = (async () => {
+          const src = new TextDecoder().decode(decodeEmbeddedBase64('fzstd-b64'));
+          const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+          return import(url);
+        })();
+      }
+      return _fzstdModulePromise;
+    }
+
+    async function decompressTransfer(algo, data) {
+      switch (algo) {
+        case undefined:
+        case '':
+        case 'none':
+          return data;
+        case 'zstd': {
+          const fzstd = await loadFzstd();
+          return fzstd.decompress(data);
+        }
+        case 'gzip':
+        case 'deflate':
+        case 'deflate-raw': {
+          if (typeof DecompressionStream === 'undefined') {
+            throw new Error('DecompressionStream API not supported');
+          }
+          const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream(algo));
+          return new Uint8Array(await new Response(stream).arrayBuffer());
+        }
+        default:
+          throw new Error(`Unknown compression algorithm announced by encoder: ${algo}`);
+      }
+    }
+
     class EnhancedFountainDecoder {
       constructor() {
         this.initialized = false;
@@ -2379,9 +2547,8 @@
           
           if (hasEnoughChunks && checksumPassed) {
             console.log(`✅ ENTERPRISE: File truly complete and verified - all ${this.totalChunks} chunks recovered with valid checksum`);
-            if (this.completeCallback) {
-              this.completeCallback(fileData);
-            }
+            // Decompress (if the encoder announced an algorithm) and deliver
+            this.deliverFile(fileData);
           } else if (hasEnoughChunks && !checksumPassed) {
             console.error(`🚫 ENTERPRISE: File complete but CHECKSUM FAILED - saving as .failed and continuing processing`);
             console.error(`🔄 ENTERPRISE: Will continue processing to get a clean copy of the file`);
@@ -2411,6 +2578,51 @@
           }
         } catch (error) {
           console.error("Error finalizing file:", error);
+        }
+      }
+
+      // Decompress the verified transmitted payload according to the algorithm
+      // negotiated via metadata (v5 encoders), verify the ORIGINAL file
+      // checksum/size, then hand the restored file to the completion callback.
+      async deliverFile(fileData) {
+        const algo = (this.metaData && this.metaData.compression) || 'none';
+        let finalData = fileData;
+
+        if (algo !== 'none') {
+          try {
+            console.log(`🗜️ Decompressing payload with ${algo} (${fileData.length} bytes)...`);
+            const t0 = performance.now();
+            finalData = await decompressTransfer(algo, fileData);
+            console.log(`🗜️ Decompressed: ${fileData.length} → ${finalData.length} bytes (${Math.round(performance.now() - t0)}ms)`);
+
+            if (this.metaData.originalSize > 0 && finalData.length !== this.metaData.originalSize) {
+              console.warn(`⚠️ Decompressed size mismatch: expected ${this.metaData.originalSize}, got ${finalData.length}`);
+            }
+            if (this.metaData.originalChecksum) {
+              const checksum = this.calculateFileChecksum(finalData);
+              if (checksum === this.metaData.originalChecksum) {
+                console.log(`✅ Original file integrity verified after decompression: ${checksum}`);
+              } else {
+                console.error(`❌ Original checksum mismatch after decompression: expected ${this.metaData.originalChecksum}, got ${checksum}`);
+              }
+            }
+          } catch (e) {
+            // The transmitted payload itself was checksum-valid, so don't lose
+            // it: deliver the still-compressed payload with the algorithm's
+            // native extension so it can be decompressed externally.
+            console.error(`❌ Decompression failed (${e.message}) — delivering raw ${algo} payload`);
+            const ext = algo === 'gzip' ? 'gz' : (algo === 'brotli' ? 'br' : 'zst');
+            const rawMetadata = {...this.metaData};
+            rawMetadata.fileName = `${this.metaData.fileName}.${ext}`;
+            if (this.completeCallback) {
+              this.completeCallback(fileData, rawMetadata);
+            }
+            return;
+          }
+        }
+
+        if (this.completeCallback) {
+          this.completeCallback(finalData);
         }
       }
 

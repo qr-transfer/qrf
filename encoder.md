@@ -4,6 +4,8 @@
 
 The QRCoder Encoder is a sophisticated web-based tool for converting files into sequences of QR codes for transmission to receiving devices. It employs a hybrid encoding strategy combining systematic reliability with fountain code redundancy for resilient file transfers, even under challenging conditions.
 
+As of encoder **v1.2.0** the file is **compressed before encoding** — text/code/web assets use `zstd` (embedded WebAssembly, level 19) with a native `gzip` fallback; already-compressed formats (JPG/MP4/ZIP/PDF/…) are stored as-is. The chosen algorithm, plus the original size and checksum, are announced in the metadata frame (encoder protocol version `5.0`) so the decoder can restore and verify the original file. Codecs are embedded inline, so the encoder runs with **no network access**. See the [main README](README.md#compression-negotiated-airgap-safe) for the full algorithm table and metadata format.
+
 This document provides comprehensive details about the encoder's architecture, implementation, and usage.
 
 ## Table of Contents

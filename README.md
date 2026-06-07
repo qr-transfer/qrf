@@ -15,6 +15,7 @@ QRCoder is a robust browser-based system for transferring files between devices 
 - **Adaptive Encoding**: Configurable encoding parameters with presets for different use cases
 - **High Density Mode**: Support for larger QR codes with increased data capacity
 - **Systematic-LT Hybrid**: Two-phase encoding combines systematic reliability with fountain code redundancy
+- **Built-in Compression (airgap-safe)**: Files are compressed before encoding using **zstd** (embedded WebAssembly) with a native **gzip** fallback, so fewer QR frames are needed. The codec is embedded in the HTML — no network access required
 
 ## Components
 
@@ -52,21 +53,54 @@ QRCoder uses a text-based protocol with two types of frames:
 #### Metadata Frame
 
 ```
-M:1.0:filename.ext:image/jpeg:1024000:100:150:8:2:base64:1024
+M:3.0:filename.ext:text%2Fplain:6499:26:40:2:0:10:250:30:M:abcd1234:tr4nsm1t:5.0:0.03:0.5:5:zstd:132347:1u112ny
 ```
 
-Where:
+Where (encoder version `5.0`):
 - `M`: Indicates this is a metadata frame
-- `1.0`: Protocol version
+- `3.0`: Protocol version
 - `filename.ext`: Original filename (URL encoded)
-- `image/jpeg`: File MIME type (URL encoded)
-- `1024000`: File size in bytes
-- `100`: Number of chunks
-- `150`: Maximum number of packets
-- `8`: Maximum degree (for fountain coding)
-- `2`: Density parameter
-- `base64`: Encoding format
-- `1024`: Chunk size in bytes
+- `text/plain`: File MIME type (URL encoded)
+- `6499`: **Transmitted** payload size in bytes (post-compression)
+- `26`: Number of chunks (of the transmitted payload)
+- `40`: Maximum number of packets
+- `2`: Systematic chunks per QR
+- `0`: High-density mode flag
+- `10`: FPS
+- `250`: Chunk size in bytes
+- `30`: Redundancy percent
+- `M`: QR error-correction level
+- `abcd1234`: Metadata checksum
+- `tr4nsm1t`: **Transmitted** payload checksum (post-compression)
+- `5.0`: Encoder version
+- `0.03:0.5`: LT parameters (c, delta)
+- `5`: Fountain max degree
+- `zstd`: **Compression algorithm** (`zstd` | `gzip` | `none`) — appended in v5
+- `132347`: **Original** file size in bytes (pre-compression) — appended in v5
+- `1u112ny`: **Original** file checksum (FNV-1a) — appended in v5
+
+> **Backward compatibility:** decoders default `compression` to `none` when the
+> v5 fields are absent, so videos made with older encoders still decode.
+
+### Compression (negotiated, airgap-safe)
+
+The encoder picks an algorithm per file type and announces it in the metadata
+frame; the decoder reads it, decompresses the reconstructed payload, and verifies
+the **original** file checksum before delivery.
+
+| File type | Algorithm |
+|---|---|
+| Text / logs / source code | `zstd` level 19 (level 12 for large/binary), `gzip` fallback |
+| Web assets (HTML/JS/CSS/JSON/SVG) | `zstd` level 19, `gzip` fallback |
+| Other binaries | `zstd` level 12, `gzip` fallback |
+| Already-compressed (JPG/MP4/ZIP/PDF/…) | `none` (stored as-is — recompression gains ~0) |
+| Incompressible result (no real gain) | `none` (stored as-is) |
+
+Codecs are **embedded inline** as base64 (`zstd` WebAssembly in the encoder,
+`fzstd` pure-JS decompressor in the decoders) so the tool works with **zero
+network access**. `gzip` uses the browser-native `CompressionStream` /
+`DecompressionStream` APIs. The reproducible embed script lives in
+`.build-codecs/build.py`.
 
 #### Data Frame
 
@@ -101,24 +135,45 @@ QRCoder uses Luby Transform (LT) coding with Robust Soliton Distribution:
 
 ### Encoder (vde-qr-encoder.html)
 
-1. Open the encoder page in a browser
-2. Select a file to transfer
-3. Configure transfer settings
-4. Start transmission
-5. Position the receiving device to scan the QR codes
+1. Open the encoder page in a browser (works offline via `file://` — no server needed)
+2. Select a file (or several) to transfer
+3. Configure transfer settings (chunk size, FPS, redundancy, density)
+4. Start transmission — the file is compressed automatically before encoding.
+   Watch the browser console for a line like
+   `🗜️ app.js: zstd 30600 → 84 bytes (99.7% saved)` confirming the algorithm used
+5. Position the receiving device to scan the QR codes (or screen-record for the decoder)
 
 ### Decoder (vdf-qr-decoder.html)
 
-1. Open the decoder page in a browser
-2. Select a video file containing QR codes
+1. Open the decoder page in a browser (also works offline via `file://`)
+2. Select a video file containing QR codes (or use the live camera)
 3. Click "Start Scan" to begin processing
 4. Monitor progress through the visual indicators
 5. Use "Stop Scan" to pause or "Reset Contents" to start over
-6. Download the file when reconstruction is complete
+6. The file is decompressed and its **original checksum verified** before the
+   automatic download (console shows `✅ Original file integrity verified`)
+
+> **Browser variants:** use `vdf-qr-decoder-firefox.html` on Firefox and
+> `vdf-qr-decoder-safari.html` on Safari — they carry browser-specific
+> frame-callback and sizing tweaks. `vdf-qr-decoder.html` targets Chromium.
+
+### Other useful tools in this repo
+
+- **`file_splitter.js` / `smart_file_splitter.js`** — split a large file into
+  parts before encoding (and join them after decoding). Use when a single file is
+  too large for one comfortable QR session.
+- **`hierarchical_integrity_checker.js` / `file_integrity_checker.py`** — verify
+  recovered files against expected checksums; `compare_integrity_reports.py`
+  diffs two integrity runs.
+- **`video-wakekeep.html` / `video-bunnykeep.html`** — keep the transmitting
+  screen awake during long QR playback sessions.
+- **`.build-codecs/build.py`** — reproducible script that re-embeds the zstd/fzstd
+  codecs into the HTML files (run from the repo root after updating a codec).
 
 ## Technical Requirements
 
-- Modern browser with HTML5 support
+- Modern browser with HTML5 support (Chrome 80+, Firefox 113+, Safari 16.4+ for
+  native gzip; zstd uses embedded WebAssembly)
 - JavaScript enabled
 - For optimal performance:
   - Good lighting conditions for camera-based scanning
@@ -127,13 +182,17 @@ QRCoder uses Luby Transform (LT) coding with Robust Soliton Distribution:
 
 ## Dependencies
 
-- HTML5-QRCode: QR code scanning library
+All runtime dependencies are bundled — the tool needs **no network access**:
+
+- HTML5-QRCode: QR code scanning library (decoder)
+- QRCode.js: QR generation library (encoder)
 - LTFountainCodes: Custom implementation of Luby Transform codes
+- zstd-wasm (embedded) + fzstd (embedded): compression codecs
 
 ## Documentation
 
 For more detailed information about each component:
 
 - [Encoder Documentation](encoder.md): Comprehensive guide to the QR code encoder including encoding strategies and configuration options
-- [Decoder Documentation](decoder-documentation.md): Comprehensive guide to the QR code decoder including processing pipeline and recovery mechanisms
+- [Decoder Documentation](decoder.md): Comprehensive guide to the QR code decoder including processing pipeline and recovery mechanisms
 - API Reference (Coming Soon): Detailed API documentation for developers

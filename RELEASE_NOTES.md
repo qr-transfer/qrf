@@ -1,3 +1,36 @@
+# Release Notes
+
+## Compression release — encoder v1.2.0 / decoder v2.2.0
+
+### 🗜️ Built-in compression (airgap-safe)
+
+Files are now compressed **before** QR encoding, so fewer frames are transmitted
+and transfers are faster — with no network access required.
+
+- **Algorithms:** `zstd` (embedded WebAssembly, `@bokuweb/zstd-wasm`) with a
+  native **gzip** fallback (`CompressionStream`). The decoders embed the pure-JS
+  `fzstd` decompressor; gzip uses native `DecompressionStream`.
+- **Per-file-type selection:** text/logs/code/web → zstd-19 (zstd-12 for
+  large/binary) → gzip → store raw; already-compressed formats (JPG/MP4/ZIP/PDF/…)
+  and incompressible results are stored as-is.
+- **Negotiation:** the algorithm, original size, and original checksum are
+  appended to the `M:` metadata frame (encoder version bumped to `5.0`). The
+  decoder decompresses and verifies the **original** file checksum before
+  delivery.
+- **Backward compatible:** videos from older encoders (no compression fields)
+  still decode — `compression` defaults to `none`.
+- **Fully embedded / offline:** codecs are inlined as base64; the HTML files run
+  from `file://` with zero external requests. Reproducible embed via
+  `.build-codecs/build.py`.
+
+### ✅ Verified (Node, deterministic)
+
+Round-trips of the exact embedded codecs pass byte-for-byte (zstd→fzstd and gzip),
+with encoder/decoder FNV-1a checksum parity, incompressible-data handling, and
+metadata field-alignment incl. legacy v4 backward-compat.
+
+---
+
 # Release Notes - v1.0.0
 
 ## 🎉 Initial Release
