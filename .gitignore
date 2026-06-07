@@ -170,3 +170,7 @@ qr_results.json
 *.zip
 *.rar
 *.7z
+# Local self-signed TLS certs (never commit private keys)
+cert.pem
+key.pem
+*.pem
