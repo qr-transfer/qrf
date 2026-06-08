@@ -3222,19 +3222,13 @@ var __Html5QrcodeLibrary__;(()=>{var t={449:function(t,e,r){!function(t){"use st
           this.canvas.height = video.videoHeight || 480;
         }
 
-        // Slow playback so the (real-time) QR decoder never falls behind the
-        // frames being shown. Target an on-screen QR rate a bit below our decode
-        // throughput. Once the encoder fps is known (from metadata) we adapt:
-        // playbackRate = clamp(decodeBudget / encoderFps). Before that, start slow.
-        const DECODE_BUDGET_FPS = 4;
-        const applyRate = () => {
-          const encFps = parseFloat(window.qrFileDecoder?.fileMetadata?.fps) || 0;
-          const target = encFps > 0 ? Math.min(1, Math.max(0.15, DECODE_BUDGET_FPS / encFps)) : 0.5;
-          if (Math.abs((video.playbackRate || 1) - target) > 0.02) {
-            try { video.playbackRate = target; } catch (e) {}
-          }
-        };
-        applyRate();
+        // Play at FULL speed: the QR packets are spread across the whole video,
+        // so one real-time pass must cover the entire timeline. The gate below
+        // decodes as many frames as throughput allows across that pass — fountain
+        // redundancy means we don't need every single frame, just good coverage.
+        // (Slowing playback would cover less of the video per minute and strand
+        // the chunks later in the file — the opposite of what we want.)
+        try { video.playbackRate = 1; } catch (e) {}
 
         const loop = () => {
           if (!this.isProcessing) return;
@@ -3253,7 +3247,6 @@ var __Html5QrcodeLibrary__;(()=>{var t={449:function(t,e,r){!function(t){"use st
           } else if (!this._decoding && video.readyState >= 2) {
             // Gate: only sample the next frame once the previous decode finished,
             // so we always grab the freshest painted frame and never pile up.
-            applyRate();
             this._decoding = true;
             Promise.resolve(this.extractAndDecodeAt(video.currentTime))
               .catch(() => {})
