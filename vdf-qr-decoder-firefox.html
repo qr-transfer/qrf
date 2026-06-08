@@ -3278,7 +3278,7 @@ var __Html5QrcodeLibrary__;(()=>{var t={449:function(t,e,r){!function(t){"use st
           this.canvas.width = v.videoWidth || 640;
           this.canvas.height = v.videoHeight || 480;
         }
-        try { v.playbackRate = 1.0; } catch (e) {}
+        try { v.playbackRate = 0.5; } catch (e) {} // ~3 QR/s so the ~3 fps decoder samples every QR
         console.log('🎬 START PROCESSING: ZXing decode loop (Firefox, promise-driven)');
         while (this.isProcessing) {
           if (v.ended) { this.handleVideoEnd(); return; }
@@ -4300,7 +4300,7 @@ var __Html5QrcodeLibrary__;(()=>{var t={449:function(t,e,r){!function(t){"use st
 
             // Use HTML5QRCode with canvas directly (AVOID BLOB CREATION)
             // Convert to minimal quality JPEG to reduce memory usage
-            const dataUrl = this.canvas.toDataURL('image/jpeg', 0.5); // Low quality to save memory
+            const dataUrl = this.canvas.toDataURL('image/jpeg', 0.95); // high quality -> better QR decode success
             const file = this.dataURLtoFile(dataUrl, 'frame.jpg');
 
             // Debug logging with memory tracking (reduced verbosity)
