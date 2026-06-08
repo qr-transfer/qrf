@@ -12445,6 +12445,14 @@ var __Html5QrcodeLibrary__;(()=>{var t={449:function(t,e,r){!function(t){"use st
 
       // Store a source chunk in our decoded data
       storeSourceChunk(index, data) {
+        // Guard against out-of-range indices: a single mis-parsed packet index
+        // would otherwise inflate recoveredChunkCount to totalChunks while a real
+        // chunk stays missing -> false "complete" -> finalize fails -> endless loop.
+        index = Number(index);
+        if (!Number.isInteger(index) || index < 0 || index >= this.totalChunks) {
+          console.warn(`⚠️ Ignoring out-of-range chunk index ${index} (totalChunks=${this.totalChunks})`);
+          return;
+        }
         if (!this.sourceChunks[index]) {
           // Make sure data is a Uint8Array
           if (!(data instanceof Uint8Array)) {
@@ -13415,10 +13423,14 @@ var __Html5QrcodeLibrary__;(()=>{var t={449:function(t,e,r){!function(t){"use st
           this.canvas.width = v.videoWidth || 640;
           this.canvas.height = v.videoHeight || 480;
         }
-        // Play faster than real time — parallel workers keep up, so we finish a
-        // 10-min clip in a few minutes while still catching every ~6/s QR.
-        try { v.playbackRate = 2.0; } catch (e) {}
-        const CAP_INTERVAL = 40; // ms between captures (~25/s; QR shows ~12/s at 2x)
+        // Adaptive speed: the first pass runs fast (2x) and grabs the bulk of
+        // chunks; each subsequent loop slows down so QRs that only got caught
+        // mid-transition before are now sampled cleanly. The dedup means later
+        // (slower) passes only spend work on the still-missing chunks.
+        const rate = Math.max(2.0 / (this.loopCount || 1), 0.5);
+        try { v.playbackRate = rate; } catch (e) {}
+        console.log(`🧵 Worker pipeline pass ${this.loopCount || 1} @ ${rate}x`);
+        const CAP_INTERVAL = 25; // ms between captures (~40/s) — dense coverage so no QR is missed
         let last = -1e9;
 
         const loop = (ts) => {

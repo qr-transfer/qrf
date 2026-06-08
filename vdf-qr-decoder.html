@@ -2339,6 +2339,14 @@ var __Html5QrcodeLibrary__;(()=>{var t={449:function(t,e,r){!function(t){"use st
 
       // Store a source chunk in our decoded data
       storeSourceChunk(index, data) {
+        // Guard against out-of-range indices: a single mis-parsed packet index
+        // would otherwise inflate recoveredChunkCount to totalChunks while a real
+        // chunk stays missing -> false "complete" -> finalize fails -> endless loop.
+        index = Number(index);
+        if (!Number.isInteger(index) || index < 0 || index >= this.totalChunks) {
+          console.warn(`⚠️ Ignoring out-of-range chunk index ${index} (totalChunks=${this.totalChunks})`);
+          return;
+        }
         if (!this.sourceChunks[index]) {
           // Make sure data is a Uint8Array
           if (!(data instanceof Uint8Array)) {
