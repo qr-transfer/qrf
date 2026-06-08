@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.3.0 (encoder) / v2.3.0 (decoder)
+
+- Fully self-contained / airgap (all libs inlined: QRCode, html5-qrcode, zstd, fzstd, jsQR)
+- Cross-browser capture: Chrome rVFC; Firefox jsQR Web-Worker pipeline; Safari rAF
+- Professional calm UI with IBM Carbon icons
+
 ## Compression release — encoder v1.2.0 / decoder v2.2.0
 
 ### 🗜️ Built-in compression (airgap-safe)
