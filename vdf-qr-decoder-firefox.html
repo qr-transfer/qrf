@@ -15843,6 +15843,8 @@ var __Html5QrcodeLibrary__;(()=>{var t={449:function(t,e,r){!function(t){"use st
           }
           if (v.readyState < 2) { await new Promise(r => setTimeout(r, 20)); continue; }
           try { await this.extractAndDecodeAt(v.currentTime); } catch (e) { /* skip frame */ }
+          // Yield so the browser can repaint the progress UI and stay responsive
+          await new Promise(r => setTimeout(r, 0));
         }
       }
 
@@ -16842,7 +16844,7 @@ var __Html5QrcodeLibrary__;(()=>{var t={449:function(t,e,r){!function(t){"use st
         // Faster (keeps up at 1x) and more robust on dense/blurry QRs.
         const zxing = await loadZXingReader();
         const results = await zxing.readBarcodesFromImageData(imageData, {
-          formats: ['QRCode'], tryHarder: true, tryInvert: false, maxNumberOfSymbols: 1
+          formats: ['QRCode'], tryHarder: false, tryInvert: false, maxNumberOfSymbols: 1
         });
         if (results && results.length && results[0] && results[0].text) {
           const decodedText = results[0].text;
