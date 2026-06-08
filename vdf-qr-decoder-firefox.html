@@ -13987,11 +13987,11 @@ var __Html5QrcodeLibrary__;(()=>{var t={449:function(t,e,r){!function(t){"use st
           this.videoElement.play().then(() => {
             console.log(`✅ Video restarted, resuming processing with ${this.frameInterval}ms interval...`);
             
-            // Continue processing with new frame rate
+            // Continue processing with the SAME path used at start (Firefox = worker pipeline)
             if (!FORCE_RAF && 'requestVideoFrameCallback' in HTMLVideoElement.prototype) {
               this.processWithVideoFrameCallback();
             } else {
-              this.processWithRAF();
+              this.processWithWorkerPipeline();
             }
           }).catch(err => {
             console.error('Failed to restart video:', err);
@@ -14973,11 +14973,11 @@ var __Html5QrcodeLibrary__;(()=>{var t={449:function(t,e,r){!function(t){"use st
             // Resume video processing if it was playing
             if (!wasPaused) {
               videoElement.play().then(() => {
-                // Restart frame processing for the new file
+                // Restart frame processing for the new file (Firefox = worker pipeline)
                 if (!FORCE_RAF && 'requestVideoFrameCallback' in HTMLVideoElement.prototype) {
                   this.videoProcessor.processWithVideoFrameCallback();
                 } else {
-                  this.videoProcessor.processWithRAF();
+                  this.videoProcessor.processWithWorkerPipeline();
                 }
               });
             }
