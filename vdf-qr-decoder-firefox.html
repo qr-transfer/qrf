@@ -13382,25 +13382,53 @@ var __Html5QrcodeLibrary__;(()=>{var t={449:function(t,e,r){!function(t){"use st
       _initQRWorkers() {
         if (this._qrWorkers) return;
         const src = document.getElementById('jsqr-src').textContent;
+        // Worker decodes ImageData and returns the QR's location (for ROI crop)
+        // plus the crop offset (ox,oy) it was given, so the main thread can map
+        // the location back to full-frame coordinates.
         const handler = ';self.onmessage=function(e){var d=e.data;try{var img=new Uint8ClampedArray(d.buf);' +
           'var r=(typeof jsQR===\'function\')?jsQR(img,d.w,d.h,{inversionAttempts:\'dontInvert\'}):null;' +
-          'self.postMessage({id:d.id,data:(r&&r.data)?r.data:null});}catch(err){self.postMessage({id:d.id,data:null});}};';
+          'self.postMessage({id:d.id,data:(r&&r.data)?r.data:null,loc:(r&&r.location)?r.location:null,ox:d.ox,oy:d.oy});}' +
+          'catch(err){self.postMessage({id:d.id,data:null,loc:null,ox:d.ox,oy:d.oy});}};';
         const url = URL.createObjectURL(new Blob([src, handler], { type: 'text/javascript' }));
-        const n = Math.max(1, Math.min((navigator.hardwareConcurrency || 4) - 1, 4));
-        this._qrWorkers = []; this._freeWorkers = [];
+        const n = Math.max(2, Math.min((navigator.hardwareConcurrency || 4) - 1, 6));
+        this._qrWorkers = [];
         this._seenQR = new Set(); this._seenQROrder = [];
+        this._roi = null; this._missStreak = 0;
         for (let i = 0; i < n; i++) {
           let w;
           try { w = new Worker(url); } catch (e) { console.warn('Worker init failed', e); break; }
           w.onmessage = (e) => {
-            const text = e.data && e.data.data;
-            if (text) this._onWorkerQR(text);
+            const m = e.data || {};
+            if (m.data) {
+              this._missStreak = 0;
+              if (m.loc) this._updateROI(m.loc, m.ox || 0, m.oy || 0); // lock crop onto the QR
+              this._onWorkerQR(m.data);
+            } else {
+              // Lost the QR for a while → drop the crop and re-search the full frame
+              if (++this._missStreak > this._qrWorkers.length * 4) { this._roi = null; this._missStreak = 0; }
+            }
             this._pumpWorker(w); // immediately reuse this worker for the next frame
           };
           w.onerror = () => { this._pumpWorker(w); };
           this._qrWorkers.push(w);
         }
         console.log(`🧵 QR worker pool: ${this._qrWorkers.length} threads`);
+      }
+
+      // Map a jsQR location (relative to the cropped region at offset ox,oy) to
+      // full-frame coords and store a padded bounding box as the next crop ROI.
+      _updateROI(loc, ox, oy) {
+        try {
+          const xs = [loc.topLeftCorner.x, loc.topRightCorner.x, loc.bottomLeftCorner.x, loc.bottomRightCorner.x].map(x => x + ox);
+          const ys = [loc.topLeftCorner.y, loc.topRightCorner.y, loc.bottomLeftCorner.y, loc.bottomRightCorner.y].map(y => y + oy);
+          let minx = Math.min.apply(null, xs), maxx = Math.max.apply(null, xs);
+          let miny = Math.min.apply(null, ys), maxy = Math.max.apply(null, ys);
+          const mx = (maxx - minx) * 0.5, my = (maxy - miny) * 0.5; // 50% margin for camera shake
+          minx = Math.max(0, Math.floor(minx - mx)); miny = Math.max(0, Math.floor(miny - my));
+          maxx = Math.min(this.canvas.width, Math.ceil(maxx + mx)); maxy = Math.min(this.canvas.height, Math.ceil(maxy + my));
+          const w = maxx - minx, h = maxy - miny;
+          if (w > 60 && h > 60) this._roi = { x: minx, y: miny, w: w, h: h };
+        } catch (e) { /* keep previous ROI */ }
       }
 
       _onWorkerQR(text) {
@@ -13459,13 +13487,17 @@ var __Html5QrcodeLibrary__;(()=>{var t={449:function(t,e,r){!function(t){"use st
         if (v.readyState < 2) { setTimeout(() => this._pumpWorker(w), 30); return; }
         try {
           this.ctx.drawImage(v, 0, 0, this.canvas.width, this.canvas.height);
-          const img = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+          // Crop to the QR region once located — jsQR on a small ROI is several
+          // times faster than the full 1080p frame, so we decode many more frames.
+          let ox = 0, oy = 0, sw = this.canvas.width, sh = this.canvas.height;
+          if (this._roi) { ox = this._roi.x; oy = this._roi.y; sw = this._roi.w; sh = this._roi.h; }
+          const img = this.ctx.getImageData(ox, oy, sw, sh);
           this.processedFrames++; this.frameStats.processed++;
           if (window.performanceStats) window.performanceStats.frameCount++;
           const dur = v.duration || 0, progress = dur ? Math.min(v.currentTime / dur, 1) : 0;
           if (this.progressCallback) this.progressCallback(progress, this.processedFrames, this.totalFrames, 0);
           const buf = img.data.buffer; // transfer ownership (zero-copy) to the worker
-          w.postMessage({ id: this.processedFrames, buf: buf, w: img.width, h: img.height }, [buf]);
+          w.postMessage({ id: this.processedFrames, buf: buf, w: img.width, h: img.height, ox: ox, oy: oy }, [buf]);
         } catch (e) {
           setTimeout(() => this._pumpWorker(w), 30); // transient draw error — retry
         }
