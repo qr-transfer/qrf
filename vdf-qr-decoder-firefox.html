@@ -1296,7 +1296,7 @@ function scan(matrix) {
     return null;
 }
 var defaultOptions = {
-    inversionAttempts: "attemptBoth",
+    inversionAttempts: "dontInvert",
 };
 function jsQR(data, width, height, providedOptions) {
     if (providedOptions === void 0) { providedOptions = {}; }
@@ -13383,7 +13383,7 @@ var __Html5QrcodeLibrary__;(()=>{var t={449:function(t,e,r){!function(t){"use st
         if (this._qrWorkers) return;
         const src = document.getElementById('jsqr-src').textContent;
         const handler = ';self.onmessage=function(e){var d=e.data;try{var img=new Uint8ClampedArray(d.buf);' +
-          'var r=(typeof jsQR===\'function\')?jsQR(img,d.w,d.h,{inversionAttempts:\'attemptBoth\'}):null;' +
+          'var r=(typeof jsQR===\'function\')?jsQR(img,d.w,d.h,{inversionAttempts:\'dontInvert\'}):null;' +
           'self.postMessage({id:d.id,data:(r&&r.data)?r.data:null});}catch(err){self.postMessage({id:d.id,data:null});}};';
         const url = URL.createObjectURL(new Blob([src, handler], { type: 'text/javascript' }));
         const n = Math.max(1, Math.min((navigator.hardwareConcurrency || 4) - 1, 4));
@@ -13393,12 +13393,12 @@ var __Html5QrcodeLibrary__;(()=>{var t={449:function(t,e,r){!function(t){"use st
           let w;
           try { w = new Worker(url); } catch (e) { console.warn('Worker init failed', e); break; }
           w.onmessage = (e) => {
-            this._freeWorkers.push(w);
             const text = e.data && e.data.data;
             if (text) this._onWorkerQR(text);
+            this._pumpWorker(w); // immediately reuse this worker for the next frame
           };
-          w.onerror = () => { this._freeWorkers.push(w); };
-          this._qrWorkers.push(w); this._freeWorkers.push(w);
+          w.onerror = () => { this._pumpWorker(w); };
+          this._qrWorkers.push(w);
         }
         console.log(`🧵 QR worker pool: ${this._qrWorkers.length} threads`);
       }
@@ -13423,41 +13423,52 @@ var __Html5QrcodeLibrary__;(()=>{var t={449:function(t,e,r){!function(t){"use st
           this.canvas.width = v.videoWidth || 640;
           this.canvas.height = v.videoHeight || 480;
         }
-        // Adaptive speed: the first pass runs fast (2x) and grabs the bulk of
-        // chunks; each subsequent loop slows down so QRs that only got caught
-        // mid-transition before are now sampled cleanly. The dedup means later
-        // (slower) passes only spend work on the still-missing chunks.
-        const rate = Math.max(2.0 / (this.loopCount || 1), 0.5);
+        // Adaptive speed: first pass fast (1.5x) for the bulk; each loop slows
+        // down so QRs caught only mid-transition before are now sampled cleanly.
+        const rate = Math.max(1.5 / (this.loopCount || 1), 0.5);
         try { v.playbackRate = rate; } catch (e) {}
         console.log(`🧵 Worker pipeline pass ${this.loopCount || 1} @ ${rate}x`);
-        const CAP_INTERVAL = 25; // ms between captures (~40/s) — dense coverage so no QR is missed
-        let last = -1e9;
 
-        const loop = (ts) => {
-          if (!this.isProcessing) return;
-          if (v.ended) { this.handleVideoEnd(); return; }
-          if (this.rangeMode && this.endTime && v.currentTime >= this.endTime) {
-            this.rangeMode = false; this.endTime = null; v.pause(); this.isProcessing = false; return;
-          }
-          if (v.paused && !this.isVideoPausedForQueue) {
-            const pp = v.play(); if (pp && pp.catch) pp.catch(() => {});
-          } else if (v.readyState >= 2 && (ts - last) >= CAP_INTERVAL && this._freeWorkers.length) {
-            last = ts;
-            try {
-              this.ctx.drawImage(v, 0, 0, this.canvas.width, this.canvas.height);
-              const img = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-              this.processedFrames++; this.frameStats.processed++;
-              if (window.performanceStats) window.performanceStats.frameCount++;
-              const dur = v.duration || 0, progress = dur ? Math.min(v.currentTime / dur, 1) : 0;
-              if (this.progressCallback) this.progressCallback(progress, this.processedFrames, this.totalFrames, 0);
-              const w = this._freeWorkers.pop();
-              const buf = img.data.buffer; // transfer ownership (zero-copy) to the worker
-              w.postMessage({ id: this.processedFrames, buf: buf, w: img.width, h: img.height }, [buf]);
-            } catch (e) { /* ignore a bad frame */ }
-          }
-          this._rafId = requestAnimationFrame(loop);
-        };
-        this._rafId = requestAnimationFrame(loop);
+        // Capture is driven by worker COMPLETIONS, not requestAnimationFrame —
+        // worker messages and muted video playback both keep running in a
+        // backgrounded tab, where rAF is throttled to ~0. Each worker, when it
+        // finishes a frame, immediately grabs the next one (self-pacing to decode
+        // throughput, no pile-up, no dropped frames from background throttling).
+        this._pipelineActive = true;
+        this._endHandledThisPass = false;
+        for (const w of this._qrWorkers) this._pumpWorker(w);
+      }
+
+      // Grab the current painted frame and hand it to worker `w` (then `w` will
+      // call back here when done). Retries briefly while paused/not-ready.
+      _pumpWorker(w) {
+        if (!this.isProcessing || !this._pipelineActive) return;
+        const v = this.videoElement;
+        if (v.ended) {
+          if (!this._endHandledThisPass) { this._endHandledThisPass = true; this._pipelineActive = false; this.handleVideoEnd(); }
+          return;
+        }
+        if (this.rangeMode && this.endTime && v.currentTime >= this.endTime) {
+          this._pipelineActive = false; this.rangeMode = false; this.endTime = null;
+          try { v.pause(); } catch (e) {} this.isProcessing = false; return;
+        }
+        if (v.paused && !this.isVideoPausedForQueue) {
+          const pp = v.play(); if (pp && pp.catch) pp.catch(() => {});
+          setTimeout(() => this._pumpWorker(w), 60); return;
+        }
+        if (v.readyState < 2) { setTimeout(() => this._pumpWorker(w), 30); return; }
+        try {
+          this.ctx.drawImage(v, 0, 0, this.canvas.width, this.canvas.height);
+          const img = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+          this.processedFrames++; this.frameStats.processed++;
+          if (window.performanceStats) window.performanceStats.frameCount++;
+          const dur = v.duration || 0, progress = dur ? Math.min(v.currentTime / dur, 1) : 0;
+          if (this.progressCallback) this.progressCallback(progress, this.processedFrames, this.totalFrames, 0);
+          const buf = img.data.buffer; // transfer ownership (zero-copy) to the worker
+          w.postMessage({ id: this.processedFrames, buf: buf, w: img.width, h: img.height }, [buf]);
+        } catch (e) {
+          setTimeout(() => this._pumpWorker(w), 30); // transient draw error — retry
+        }
       }
 
       // Draw the current video frame and hand it to the decode pipeline
@@ -14454,7 +14465,7 @@ var __Html5QrcodeLibrary__;(()=>{var t={449:function(t,e,r){!function(t){"use st
       async scanImageDataDirectly(imageData) {
         // Firefox fallback (workers unavailable): decode ImageData with jsQR.
         const r = (typeof jsQR === "function")
-          ? jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" })
+          ? jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" })
           : null;
         if (r && r.data) return r.data;
         throw new Error("No QR code found");
